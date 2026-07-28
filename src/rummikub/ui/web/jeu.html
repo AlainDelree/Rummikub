@@ -24,13 +24,37 @@
       </details>
     </div>
 
-    <!-- Colonne droite : plateau -->
+    <!-- Colonne droite : plateau + zone de travail -->
     <div id="colonne-droite">
       <div id="zone-plateau">
-        <!-- combinaisons générées dynamiquement -->
+        <!-- combinaisons du tapis générées dynamiquement -->
       </div>
+
+      <div id="zone-travail">
+        <div class="travail-label">Zone de pose</div>
+        <div class="rangee-travail" data-rangee="0">
+          <div class="rangee-indicateur actif" data-rangee="0">1</div>
+          <div class="rangee-tuiles" data-rangee="0"></div>
+          <button class="btn-vider-rangee" data-rangee="0" title="Vider">✕</button>
+        </div>
+        <div class="rangee-travail" data-rangee="1">
+          <div class="rangee-indicateur" data-rangee="1">2</div>
+          <div class="rangee-tuiles" data-rangee="1"></div>
+          <button class="btn-vider-rangee" data-rangee="1" title="Vider">✕</button>
+        </div>
+        <div class="rangee-travail" data-rangee="2">
+          <div class="rangee-indicateur" data-rangee="2">3</div>
+          <div class="rangee-tuiles" data-rangee="2"></div>
+          <button class="btn-vider-rangee" data-rangee="2" title="Vider">✕</button>
+        </div>
+        <div class="rangee-travail" data-rangee="3">
+          <div class="rangee-indicateur" data-rangee="3">4</div>
+          <div class="rangee-tuiles" data-rangee="3"></div>
+          <button class="btn-vider-rangee" data-rangee="3" title="Vider">✕</button>
+        </div>
+      </div>
+
       <div id="resultat-calcul"></div>
-      <button id="btn-nouvelle-combi">＋ Nouvelle combinaison</button>
     </div>
 
   </div>

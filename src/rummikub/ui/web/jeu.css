@@ -43,26 +43,106 @@ body { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
 #colonne-droite { flex: 1; display: flex; flex-direction: column;
   overflow: hidden; background: var(--tapis-vert-clair); }
 
-#zone-plateau { flex: 1; overflow-y: auto; padding: 12px;
+#zone-plateau { flex: 0 1 auto; max-height: 220px; overflow-y: auto; padding: 12px;
   display: flex; flex-wrap: wrap; align-content: flex-start; gap: 10px; }
+#zone-plateau:empty::before {
+  content: "Le tapis est vide — posez vos premières tuiles ci-dessous";
+  color: rgba(255,255,255,0.3);
+  font-style: italic;
+  font-size: 0.85rem;
+  display: block;
+  text-align: center;
+  padding: 20px;
+  width: 100%;
+}
 
 .groupe-combinaison { display: flex; flex-wrap: wrap; gap: 4px;
   padding: 8px; border: 1px dashed rgba(255,255,255,0.3);
   border-radius: 6px; background: rgba(0,0,0,0.15); align-items: center; }
 
-.zone-insertion { width: 44px; height: 44px;
-  border: 2px dashed rgba(255,255,255,0.4); border-radius: 4px;
-  cursor: pointer; opacity: 0.4; transition: opacity 0.15s; }
-.zone-insertion:hover { opacity: 1; background: rgba(255,255,255,0.1); }
+/* Zones d'extension aux extrémités des combinaisons du tapis */
+.zone-ext {
+  width: 36px; height: 44px;
+  border: 2px dashed rgba(255,255,255,0.3);
+  border-radius: 4px;
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  color: rgba(255,255,255,0.4);
+  font-size: 1.2rem;
+  transition: opacity 0.15s, border-color 0.15s, color 0.15s;
+}
+.zone-ext::before { content: "+"; }
+.zone-ext.masquee { opacity: 0; pointer-events: none; }
+.zone-ext:hover:not(.masquee) {
+  border-color: #22c55e;
+  color: #22c55e;
+}
 
-#resultat-calcul { padding: 0 12px; min-height: 1.4em; color: #fff;
+/* Zone de travail (4 rangées de pose) */
+#zone-travail {
+  background: rgba(0,0,0,0.2);
+  border-top: 1px solid rgba(255,255,255,0.15);
+  border-bottom: 1px solid rgba(255,255,255,0.15);
+  padding: 8px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex-shrink: 0;
+}
+.travail-label {
+  color: rgba(255,255,255,0.6);
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.rangee-travail {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+.rangee-travail:hover { border-color: rgba(255,255,255,0.2); }
+.rangee-travail.active {
+  border-color: #22c55e;
+  background: rgba(34,197,94,0.1);
+}
+.rangee-indicateur {
+  width: 20px; height: 20px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.15);
+  color: #fff;
+  font-size: 0.75rem;
+  font-weight: 700;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+.rangee-indicateur.actif { background: #22c55e; }
+.rangee-tuiles {
+  display: flex; gap: 4px; flex-wrap: wrap; flex: 1; min-height: 48px;
+  align-items: center;
+}
+.rangee-tuiles:empty::before {
+  content: "— vide —";
+  color: rgba(255,255,255,0.25);
+  font-size: 0.8rem;
+  font-style: italic;
+}
+.btn-vider-rangee {
+  background: none; border: none; color: rgba(255,255,255,0.3);
+  cursor: pointer; font-size: 0.9rem; padding: 2px 6px;
+  visibility: hidden;
+}
+.rangee-travail.non-vide .btn-vider-rangee { visibility: visible; }
+
+#resultat-calcul { padding: 4px 12px; min-height: 1.4em; color: #fff;
   font-size: 0.9rem; }
 #resultat-calcul.ok { color: #bbf7d0; }
 #resultat-calcul.ko { color: #fecaca; }
-
-#btn-nouvelle-combi { margin: 8px 12px; padding: 8px 14px; align-self: flex-start;
-  border: none; border-radius: 6px; cursor: pointer;
-  background: rgba(255,255,255,0.2); color: #fff; font-weight: 600; }
 
 #zone-chevalet { background: var(--tapis-vert-fonce); padding: 8px 12px; }
 #mes-tuiles-label { color: #fff; font-size: 0.85rem; opacity: 0.85; }

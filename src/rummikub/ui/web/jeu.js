@@ -9,7 +9,9 @@ const COULEURS_ORDRE = { rouge: 0, bleu: 1, jaune: 2, noir: 3 };
 let etat = null;              // état complet de la partie (dict serveur)
 let tuileSelectionnee = null; // id de tuile sélectionnée sur le chevalet
 let tuilesCeTour = [];        // ids des tuiles posées ce tour
-let plateauLocal = [];        // copie manipulable du plateau ce tour
+let plateauLocal = [];        // tapis existant, potentiellement étendu ce tour
+let travail = [[], [], [], []]; // 4 rangées de pose, chacune = [dict_tuile, ...]
+let rangeeActive = 0;         // index 0-3 de la rangée de travail active
 let modeReorg = false;        // mode réorganisation du chevalet actif ?
 let reorgSource = null;       // id de la tuile source d'un échange en cours
 
@@ -54,6 +56,7 @@ function rafraichirTout() {
   if (!etat) return;
   rafraichirFichesJoueurs();
   rafraichirPlateau();
+  rafraichirZoneTravail();
   rafraichirChevalet();
   rafraichirBoutons();
   rafraichirHistorique();
@@ -119,9 +122,18 @@ function rafraichirFichesJoueurs() {
 function rafraichirPlateau() {
   const zone = document.getElementById("zone-plateau");
   zone.innerHTML = "";
+  const tuileSel = tuileSelectionnee !== null;
   plateauLocal.forEach((combo, idxCombo) => {
     const groupe = document.createElement("div");
     groupe.className = "groupe-combinaison";
+
+    // Zone d'extension en début de combinaison
+    const extDebut = document.createElement("div");
+    extDebut.className = "zone-ext zone-ext-debut" + (tuileSel ? "" : " masquee");
+    extDebut.title = "Ajouter la tuile sélectionnée en début";
+    extDebut.addEventListener("click", () => etendreTapis(idxCombo, "debut"));
+    groupe.appendChild(extDebut);
+
     combo.forEach((d) => {
       const el = tuileDepuisDict(d);
       if (tuilesCeTour.includes(d.id)) {
@@ -130,12 +142,38 @@ function rafraichirPlateau() {
       }
       groupe.appendChild(el);
     });
-    const insert = document.createElement("div");
-    insert.className = "zone-insertion";
-    insert.title = "Placer la tuile sélectionnée ici";
-    insert.addEventListener("click", () => placerDansCombo(idxCombo));
-    groupe.appendChild(insert);
+
+    // Zone d'extension en fin de combinaison
+    const extFin = document.createElement("div");
+    extFin.className = "zone-ext zone-ext-fin" + (tuileSel ? "" : " masquee");
+    extFin.title = "Ajouter la tuile sélectionnée en fin";
+    extFin.addEventListener("click", () => etendreTapis(idxCombo, "fin"));
+    groupe.appendChild(extFin);
+
     zone.appendChild(groupe);
+  });
+}
+
+// Rendu de la zone de travail (4 rangées)
+function rafraichirZoneTravail() {
+  travail.forEach((rangee, i) => {
+    const cont = document.querySelector(`.rangee-tuiles[data-rangee="${i}"]`);
+    const wrap = document.querySelector(`.rangee-travail[data-rangee="${i}"]`);
+    const ind  = document.querySelector(`.rangee-indicateur[data-rangee="${i}"]`);
+    if (!cont || !wrap) return;
+    cont.innerHTML = "";
+    wrap.classList.toggle("active", i === rangeeActive);
+    wrap.classList.toggle("non-vide", rangee.length > 0);
+    if (ind) ind.classList.toggle("actif", i === rangeeActive);
+    rangee.forEach((d) => {
+      const el = tuileDepuisDict(d);
+      el.classList.add("ce-tour");
+      el.addEventListener("click", (e) => {
+        e.stopPropagation();
+        reprendreTuileRangee(d.id, i);
+      });
+      cont.appendChild(el);
+    });
   });
 }
 
@@ -192,6 +230,7 @@ function rafraichirHistorique() {
 function selectionnerTuile(id) {
   tuileSelectionnee = (tuileSelectionnee === id) ? null : id;
   rafraichirChevalet();
+  rafraichirPlateau(); // afficher/masquer les zones d'extension du tapis
 }
 
 // Bascule le mode réorganisation du chevalet (échange de tuiles sans jouer)
@@ -233,28 +272,68 @@ function retirerDuChevalet(id) {
   return chev.splice(i, 1)[0];
 }
 
-function placerDansCombo(idxCombo) {
-  if (!tuileSelectionnee) { toast("Sélectionnez d'abord une tuile"); return; }
-  const d = retirerDuChevalet(tuileSelectionnee);
-  if (!d) return;
-  plateauLocal[idxCombo].push(d);
-  tuilesCeTour.push(d.id);
-  tuileSelectionnee = null;
-  rafraichirPlateau(); rafraichirChevalet(); rafraichirBoutons();
+// ------------------------------------------------------------ zone de travail
+// Rendre une rangée active
+function activerRangee(index) {
+  rangeeActive = index;
+  rafraichirZoneTravail();
 }
 
-function nouvelleCombinaison() {
-  if (!tuileSelectionnee) { toast("Sélectionnez d'abord une tuile"); return; }
+// Placer la tuile sélectionnée du chevalet dans la rangée active
+function placerTuileDansRangee() {
+  if (tuileSelectionnee === null) return;
   const d = retirerDuChevalet(tuileSelectionnee);
   if (!d) return;
-  plateauLocal.push([d]);
+  travail[rangeeActive].push(d);
   tuilesCeTour.push(d.id);
   tuileSelectionnee = null;
-  rafraichirPlateau(); rafraichirChevalet(); rafraichirBoutons();
+  rafraichirZoneTravail();
+  rafraichirPlateau(); // masquer les zones d'extension
+  rafraichirChevalet();
+  rafraichirBoutons();
 }
 
+// Clic sur une tuile d'une rangée → retour au chevalet
+function reprendreTuileRangee(id, indexRangee) {
+  const i = travail[indexRangee].findIndex((t) => t.id === id);
+  if (i < 0) return;
+  const d = travail[indexRangee].splice(i, 1)[0];
+  etat.joueurs[indexHumain()].chevalet.push(d);
+  tuilesCeTour = tuilesCeTour.filter((x) => x !== id);
+  rafraichirZoneTravail();
+  rafraichirChevalet();
+  rafraichirBoutons();
+}
+
+// Vider toute une rangée → retour des tuiles au chevalet
+function viderRangee(index) {
+  const chev = etat.joueurs[indexHumain()].chevalet;
+  const ids = travail[index].map((d) => d.id);
+  travail[index].forEach((d) => { chev.push(d); });
+  tuilesCeTour = tuilesCeTour.filter((id) => !ids.includes(id));
+  travail[index] = [];
+  rafraichirZoneTravail();
+  rafraichirChevalet();
+  rafraichirBoutons();
+}
+
+// ------------------------------------------------------------ extension du tapis
+// Ajouter la tuile sélectionnée à l'extrémité d'une combinaison du tapis
+function etendreTapis(idxCombo, position) {
+  if (tuileSelectionnee === null) return;
+  const d = retirerDuChevalet(tuileSelectionnee);
+  if (!d) return;
+  if (position === "fin") plateauLocal[idxCombo].push(d);
+  else plateauLocal[idxCombo].unshift(d);
+  tuilesCeTour.push(d.id);
+  tuileSelectionnee = null;
+  rafraichirPlateau();
+  rafraichirChevalet();
+  rafraichirBoutons();
+}
+
+// Reprendre une tuile ajoutée ce tour sur le tapis → retour au chevalet
 function reprendreTuile(id) {
-  // Retire la tuile de plateauLocal et la remet sur le chevalet.
   for (const combo of plateauLocal) {
     const i = combo.findIndex((t) => t.id === id);
     if (i >= 0) {
@@ -264,8 +343,6 @@ function reprendreTuile(id) {
     }
   }
   tuilesCeTour = tuilesCeTour.filter((x) => x !== id);
-  // Supprime les combinaisons vides créées ce tour.
-  plateauLocal = plateauLocal.filter((c) => c.length > 0);
   rafraichirPlateau(); rafraichirChevalet(); rafraichirBoutons();
 }
 
@@ -273,8 +350,10 @@ function reinitTour() {
   tuilesCeTour = [];
   tuileSelectionnee = null;
   plateauLocal = clone(etat.plateau || []);
-  document.getElementById("resultat-calcul").textContent = "";
-  document.getElementById("resultat-calcul").className = "";
+  travail = [[], [], [], []];
+  rangeeActive = 0;
+  const rc = document.getElementById("resultat-calcul");
+  if (rc) { rc.textContent = ""; rc.className = ""; }
 }
 
 // ------------------------------------------------------------ actions serveur
@@ -289,8 +368,10 @@ async function onAnnuler() {
 
 async function onVerifierCalc() {
   const zone = document.getElementById("resultat-calcul");
+  const rangeesPosees = travail.filter((r) => r.length > 0);
+  const plateauComplet = [...plateauLocal, ...rangeesPosees];
   try {
-    const res = await window.pywebview.api.jeu_verifier_plateau(plateauLocal);
+    const res = await window.pywebview.api.jeu_verifier_plateau(plateauComplet);
     if (res.valide) {
       zone.className = "ok";
       zone.textContent = "✓ Plateau valide — " + res.points_total + " points";
@@ -305,10 +386,12 @@ async function onVerifierCalc() {
 }
 
 async function onJouer() {
+  const rangeesPosees = travail.filter((r) => r.length > 0);
+  const nouveauPlateau = [...plateauLocal, ...rangeesPosees];
   try {
     const res = await window.pywebview.api.jeu_jouer_coup({
       ids_tuiles: tuilesCeTour,
-      nouveau_plateau: plateauLocal,
+      nouveau_plateau: nouveauPlateau,
     });
     if (res && res.ok) {
       etat = res.etat;
@@ -438,7 +521,6 @@ function brancherEvenements() {
   document.getElementById("btn-recommencer").addEventListener("click", () => {
     if (confirm("Recommencer la partie ?")) onNouvelleManche();
   });
-  document.getElementById("btn-nouvelle-combi").addEventListener("click", nouvelleCombinaison);
   document.getElementById("btn-trier").addEventListener("click", trierChevalet);
   document.getElementById("btn-reorg").addEventListener("click", basculerReorg);
   document.getElementById("btn-annuler").addEventListener("click", onAnnuler);
@@ -448,6 +530,29 @@ function brancherEvenements() {
   document.getElementById("btn-passer").addEventListener("click", onPasser);
   document.getElementById("btn-nouvelle-manche").addEventListener("click", onNouvelleManche);
   document.getElementById("btn-fin-retour").addEventListener("click", onRetourAccueil);
+
+  // Zone de travail : clic sur une rangée (fond ou numéro) = placer / activer
+  document.querySelectorAll(".rangee-travail").forEach((rangeeEl) => {
+    const i = parseInt(rangeeEl.dataset.rangee, 10);
+    rangeeEl.addEventListener("click", (e) => {
+      // Ignorer les clics sur une tuile ou sur le bouton vider
+      if (e.target.classList.contains("btn-vider-rangee")) return;
+      if (e.target.closest(".tuile-jeu")) return;
+      if (tuileSelectionnee !== null) {
+        rangeeActive = i;
+        placerTuileDansRangee();
+      } else {
+        activerRangee(i);
+      }
+    });
+  });
+  document.querySelectorAll(".btn-vider-rangee").forEach((btn) => {
+    const i = parseInt(btn.dataset.rangee, 10);
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      viderRangee(i);
+    });
+  });
 }
 
 // ------------------------------------------------------------ init
