@@ -91,12 +91,34 @@ class Api:
         return valider_combinaison(combo)
 
     def jeu_nouvelle_manche(self):
-        # Stub — la relance de manche multi-manches sera traitée ultérieurement.
-        return {"ok": False, "erreur": "Nouvelle manche non encore implémentée"}
+        from rummikub.moteur.partie import nouvelle_manche
+        self._app.etat_jeu = nouvelle_manche(self._app.etat_jeu)
+        from rummikub.persistance.stockage import sauvegarder_partie
+        sauvegarder_partie(self._app.etat_jeu)
+        return {"ok": True, "etat": self._app.etat_jeu}
 
     def jeu_ia_jouer(self):
-        # Appelé par JS pour déclencher un tour IA (issue 4)
-        return {"ok": False, "erreur": "IA non encore implémentée"}
+        from rummikub.moteur.ia import jouer_ia
+        from rummikub.moteur.partie import (jouer_tour, piocher, passer_tour,
+                                            backup_debut_tour)
+        from rummikub.persistance.stockage import sauvegarder_partie
+        etat = self._app.etat_jeu
+        idx = etat["index_joueur_actuel"]
+        if not etat["joueurs"][idx]["est_ia"]:
+            return {"ok": False, "erreur": "Pas le tour d'une IA"}
+        res_ia = jouer_ia(etat, idx)
+        if res_ia["action"] == "jouer":
+            res = jouer_tour(etat, res_ia["ids_tuiles"],
+                             res_ia["nouveau_plateau"])
+        elif res_ia["action"] == "piocher":
+            res = piocher(etat)
+        else:
+            res = passer_tour(etat)
+        if res.get("ok"):
+            self._app.etat_jeu = res["etat"]
+            backup_debut_tour(self._app.etat_jeu)
+            sauvegarder_partie(self._app.etat_jeu)
+        return {"ok": True, "etat": self._app.etat_jeu}
 
     def jeu_retour_accueil(self):
         self._app.naviguer_vers_accueil(); return {"ok": True}

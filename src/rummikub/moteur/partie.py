@@ -235,6 +235,7 @@ def _terminer_tour(etat: dict) -> None:
         etat["gagnant_manche_index"] = trouver_gagnant_manche(etat["joueurs"])
         if est_fin_partie(etat):
             etat["phase"] = "fin"
+            etat["terminee"] = True
         return
 
     nb = len(etat["joueurs"])
@@ -250,6 +251,37 @@ def _ajouter_historique(etat: dict, joueur_index: int,
         "points": points,
         "tour": etat["tour_numero"],
     })
+
+
+def nouvelle_manche(etat: dict) -> dict:
+    """
+    Réinitialise pour une nouvelle manche en conservant score_cumul.
+    Redistribue 106 tuiles, reset plateau, chevalets, mise_initiale_faite.
+    """
+    nb_joueurs = len(etat["joueurs"])
+    distribution = distribuer(creer_sac(), nb_joueurs)
+
+    for i, joueur in enumerate(etat["joueurs"]):
+        joueur["chevalet"] = [t.as_dict()
+                              for t in distribution["chevalets"][i]]
+        joueur["mise_initiale_faite"] = False
+        joueur["score_manche"] = 0
+        # score_cumul est volontairement conservé.
+
+    etat["pioche"] = [t.as_dict() for t in distribution["pioche"]]
+    etat["plateau"] = []
+    etat["plateau_debut_tour"] = None
+    etat["chevalet_debut_tour"] = []
+    etat["historique"] = []
+    etat["manche_terminee"] = False
+    etat["gagnant_manche_index"] = None
+    etat["index_joueur_actuel"] = 0
+    etat["tour_numero"] = 1
+    etat["phase"] = "jeu"
+    etat["terminee"] = False
+
+    backup_debut_tour(etat)
+    return etat
 
 
 def est_fin_partie(etat: dict) -> bool:
