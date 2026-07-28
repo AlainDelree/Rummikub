@@ -88,6 +88,9 @@ body { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
   flex-direction: column;
   gap: 6px;
   flex-shrink: 0;
+  /* Colle la zone de pose (et le résultat) au bas de la colonne, donc
+     juste au-dessus du chevalet, plutôt que de laisser un grand vide. */
+  margin-top: auto;
 }
 .travail-label {
   color: rgba(255,255,255,0.6);

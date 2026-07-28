@@ -7,6 +7,7 @@ const COULEURS_ORDRE = { rouge: 0, bleu: 1, jaune: 2, noir: 3 };
 
 // ------------------------------------------------------------ état local
 let etat = null;              // état complet de la partie (dict serveur)
+let chevaletLocal = [];       // ordre local du chevalet, conservé entre les tours
 let tuileSelectionnee = null; // id de tuile sélectionnée sur le chevalet
 let tuilesCeTour = [];        // ids des tuiles posées ce tour
 let plateauLocal = [];        // tapis existant, potentiellement étendu ce tour
@@ -182,10 +183,29 @@ function rafraichirZoneTravail() {
   });
 }
 
+// Réconcilie l'ordre local avec le contenu serveur après une action :
+// conserve l'ordre local des tuiles encore présentes, retire celles jouées,
+// et ajoute en fin les tuiles nouvellement piochées.
+function reconcilierChevalet() {
+  const serveur = (etat.joueurs[indexHumain()].chevalet) || [];
+  const parId = new Map(serveur.map((d) => [d.id, d]));
+  const nouveau = [];
+  chevaletLocal.forEach((d) => {
+    if (parId.has(d.id)) { nouveau.push(parId.get(d.id)); parId.delete(d.id); }
+  });
+  parId.forEach((d) => nouveau.push(d)); // tuiles piochées → en fin
+  chevaletLocal = nouveau;
+}
+
+// Repart de l'ordre serveur (init, annulation, nouvelle manche).
+function reinitChevaletLocal() {
+  chevaletLocal = clone(etat.joueurs[indexHumain()].chevalet || []);
+}
+
 function rafraichirChevalet() {
   const chev = document.getElementById("chevalet");
   chev.innerHTML = "";
-  const tuiles = (etat.joueurs[indexHumain()].chevalet) || [];
+  const tuiles = chevaletLocal;
   tuiles.forEach((d) => {
     const el = tuileDepuisDict(d);
     if (d.id === tuileSelectionnee) el.classList.add("selectionnee");
@@ -252,7 +272,7 @@ function onClickTuileChevalet(d) {
     // mode réorganisation : deuxième clic
     if (d.id === reorgSource) { reorgSource = null; rafraichirChevalet(); return; }
     // Échanger les deux tuiles dans le chevalet
-    const chev = etat.joueurs[indexHumain()].chevalet;
+    const chev = chevaletLocal;
     const iA = chev.findIndex((t) => t.id === reorgSource);
     const iB = chev.findIndex((t) => t.id === d.id);
     if (iA >= 0 && iB >= 0) [chev[iA], chev[iB]] = [chev[iB], chev[iA]];
@@ -271,7 +291,7 @@ function onClickTuileChevalet(d) {
 }
 
 function retirerDuChevalet(id) {
-  const chev = etat.joueurs[indexHumain()].chevalet;
+  const chev = chevaletLocal;
   const i = chev.findIndex((t) => t.id === id);
   if (i < 0) return null;
   return chev.splice(i, 1)[0];
@@ -303,7 +323,7 @@ function reprendreTuileRangee(id, indexRangee) {
   const i = travail[indexRangee].findIndex((t) => t.id === id);
   if (i < 0) return;
   const d = travail[indexRangee].splice(i, 1)[0];
-  etat.joueurs[indexHumain()].chevalet.push(d);
+  chevaletLocal.push(d);
   tuilesCeTour = tuilesCeTour.filter((x) => x !== id);
   rafraichirZoneTravail();
   rafraichirChevalet();
@@ -312,7 +332,7 @@ function reprendreTuileRangee(id, indexRangee) {
 
 // Vider toute une rangée → retour des tuiles au chevalet
 function viderRangee(index) {
-  const chev = etat.joueurs[indexHumain()].chevalet;
+  const chev = chevaletLocal;
   const ids = travail[index].map((d) => d.id);
   travail[index].forEach((d) => { chev.push(d); });
   tuilesCeTour = tuilesCeTour.filter((id) => !ids.includes(id));
@@ -343,7 +363,7 @@ function reprendreTuile(id) {
     const i = combo.findIndex((t) => t.id === id);
     if (i >= 0) {
       const d = combo.splice(i, 1)[0];
-      etat.joueurs[indexHumain()].chevalet.push(d);
+      chevaletLocal.push(d);
       break;
     }
   }
@@ -400,7 +420,7 @@ function peutRemplacerJoker(tuileSel, infoJoker) {
 function tenterRecupererJoker(idxCombo, idxTuile, dictJoker) {
   if (!tuileSelectionnee) return;
 
-  const chev = etat.joueurs[indexHumain()].chevalet;
+  const chev = chevaletLocal;
   const idxSel = chev.findIndex((t) => t.id === tuileSelectionnee);
   if (idxSel < 0) return;
   const tuileSel = chev[idxSel];
@@ -452,6 +472,7 @@ async function onAnnuler() {
     const res = await window.pywebview.api.jeu_annuler();
     if (res && res.etat) etat = res.etat;
   } catch (e) { /* annulation purement locale en repli */ }
+  reinitChevaletLocal(); // seul cas où on repart de l'ordre serveur
   reinitTour();
   rafraichirTout();
 }
@@ -485,6 +506,7 @@ async function onJouer() {
     });
     if (res && res.ok) {
       etat = res.etat;
+      reconcilierChevalet();
       reinitTour();
       rafraichirTout();
       toast("Coup joué", "succes");
@@ -503,6 +525,7 @@ async function onPiocher() {
       etat = res.etat;
       const t = (res.tuiles_piochees || [])[0];
       toast("Vous piochez : " + decrireTuile(t));
+      reconcilierChevalet();
       reinitTour();
       rafraichirTout();
     } else {
@@ -518,6 +541,7 @@ async function onPasser() {
     const res = await window.pywebview.api.jeu_passer();
     if (res && res.ok) {
       etat = res.etat;
+      reconcilierChevalet();
       reinitTour();
       rafraichirTout();
     } else {
@@ -600,6 +624,7 @@ async function jouerIA() {
 
     // Mettre à jour l'état (mais on reconstruit le plateau visible à la main)
     etat = nouvelEtat;
+    reconcilierChevalet(); // le tour d'une IA ne change pas l'ordre du chevalet humain
     reinitTour();
 
     // Cas « pioche » ou « passe » : aucune tuile ajoutée
@@ -706,6 +731,7 @@ async function onNouvelleManche() {
     const res = await window.pywebview.api.jeu_nouvelle_manche();
     if (res && res.ok) {
       etat = res.etat;
+      reinitChevaletLocal(); // nouvelle donne → ordre serveur
       reinitTour();
       document.getElementById("overlay-fin").className = "overlay-cache";
       rafraichirTout();
@@ -724,7 +750,7 @@ async function onRetourAccueil() {
 
 // ------------------------------------------------------------ tri du chevalet
 function trierChevalet() {
-  const chev = etat.joueurs[indexHumain()].chevalet;
+  const chev = chevaletLocal;
   chev.sort((a, b) => {
     if (a.est_joker) return 1;
     if (b.est_joker) return -1;
@@ -789,6 +815,7 @@ async function init() {
     toast("Aucune partie en cours", "erreur");
     return;
   }
+  reinitChevaletLocal();
   reinitTour();
   rafraichirTout();
 }

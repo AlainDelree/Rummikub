@@ -15,6 +15,11 @@ class Api:
     def sauvegarder_reglages(self, data):
         return Reglages.sauvegarder(data)
 
+    def nom_ia_aleatoire(self, exclure=None):
+        # exclure = liste de prénoms déjà pris (humain + IA existantes)
+        from rummikub.ui.noms_ordinateur import choisir
+        return {"nom": choisir(exclure or [])}
+
     def supprimer_partie(self, pid):
         Stockage.supprimer_partie(pid); return {"ok": True}
 

@@ -11,14 +11,7 @@ function creerTuileJeu(valeur, couleur) {
   const d = document.createElement("div");
   d.className = "tuile-jeu" + (couleur ? " " + couleur : " joker");
   d.dataset.valeur = valeur; d.dataset.couleur = couleur || "joker";
-  if (couleur) {
-    d.textContent = valeur;
-    const mini = document.createElement("span");
-    mini.className = "tuile-valeur-mini";
-    mini.textContent = valeur; d.appendChild(mini);
-  } else {
-    d.textContent = "★";
-  }
+  d.textContent = couleur ? valeur : "★";
   return d;
 }
 

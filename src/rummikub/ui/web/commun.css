@@ -69,10 +69,6 @@ body {
   user-select: none;
   transition: transform 0.1s, box-shadow 0.1s;
 }
-.tuile-jeu .tuile-valeur-mini {
-  position: absolute; top: 2px; right: 3px;
-  font-size: 0.5rem; font-weight: 400; opacity: 0.7;
-}
 .tuile-jeu.rouge  { color: var(--tuile-rouge); }
 .tuile-jeu.bleu   { color: var(--tuile-bleu); }
 .tuile-jeu.jaune  { color: var(--tuile-jaune); }
@@ -130,7 +126,8 @@ body {
   font-size: 1.05rem; font-weight: 700; cursor: pointer;
   transition: background 0.15s;
 }
-.btn-primaire:hover { background: var(--couleur-primaire-hover); }
+.btn-primaire:hover:not(:disabled) { background: var(--couleur-primaire-hover); }
+.btn-primaire:disabled { opacity: 0.45; cursor: not-allowed; }
 
 /* --- Toast --- */
 #toast {

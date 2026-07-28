@@ -36,10 +36,7 @@ async function init() {
   etat.reglages = data.reglages || {};
   etat.avatarIndex = etat.reglages.avatar_index || 0;
 
-  // Un adversaire par défaut
-  if (etat.adversaires.length === 0) {
-    etat.adversaires.push(nouvelAdversaire(0));
-  }
+  // Aucun adversaire par défaut : l'utilisateur en ajoute au moins un.
   afficherJoueurs();
   afficherParties(data.parties || []);
 
@@ -114,6 +111,7 @@ function afficherJoueurs() {
   });
 
   majBoutonsAjout();
+  majBoutonLancer();
 }
 
 function majBoutonsAjout() {
@@ -124,13 +122,37 @@ function majBoutonsAjout() {
   });
 }
 
-function ajouterAdversaire(niveau) {
+// Griser « Lancer la partie » tant qu'aucun adversaire n'est présent.
+function majBoutonLancer() {
+  const btn = document.getElementById("btn-lancer");
+  if (!btn) return;
+  const aucun = etat.adversaires.length === 0;
+  btn.disabled = aucun;
+  btn.title = aucun ? "Ajoutez au moins un adversaire" : "";
+}
+
+// Prénom aléatoire non dupliqué pour une nouvelle IA (via l'API Python).
+async function nomIAAleatoire() {
+  const nomHumain =
+    (document.getElementById("nom-humain")?.textContent || "").trim() ||
+    (etat.reglages && etat.reglages.prenom) || "";
+  const exclure = [nomHumain, ...etat.adversaires.map((a) => a.nom)]
+    .filter(Boolean);
+  try {
+    const r = await window.pywebview.api.nom_ia_aleatoire(exclure);
+    if (r && r.nom) return r.nom;
+  } catch (e) { /* repli ci-dessous */ }
+  return "Ordinateur " + (etat.adversaires.length + 1);
+}
+
+async function ajouterAdversaire(niveau) {
   if (etat.adversaires.length >= MAX_ADVERSAIRES) {
     toast("Maximum " + MAX_ADVERSAIRES + " adversaires", "erreur");
     return;
   }
   const adv = nouvelAdversaire(etat.adversaires.length);
   adv.niveau = niveau;
+  adv.nom = await nomIAAleatoire();
   etat.adversaires.push(adv);
   afficherJoueurs();
 }
@@ -264,6 +286,10 @@ function ouvrirOnglet(nom) {
 
 // ---------------------------------------------------------------- lancement
 async function lancerPartie() {
+  if (etat.adversaires.length === 0) {
+    toast("Ajoutez au moins un adversaire", "erreur");
+    return;
+  }
   const nomHumain = document.getElementById("nom-humain").textContent.trim() || "Joueur";
   const joueurs = [
     { nom: nomHumain, est_ia: false, niveau: null, avatar_index: etat.avatarIndex },
