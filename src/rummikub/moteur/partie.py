@@ -66,6 +66,8 @@ def creer_partie(config_joueurs: list[dict], config_regles: dict) -> dict:
         "plateau": [],
         "plateau_debut_tour": None,
         "chevalet_debut_tour": [],
+        "index_debut_tour": 0,
+        "tour_debut_tour": 1,
         "historique": [],
         "manche_terminee": False,
         "gagnant_manche_index": None,
@@ -85,18 +87,27 @@ def creer_partie(config_joueurs: list[dict], config_regles: dict) -> dict:
 # --------------------------------------------------------------------------- #
 
 def backup_debut_tour(etat: dict) -> None:
-    """Deep-copy de plateau + chevalet du joueur actuel dans les champs backup."""
+    """Deep-copy de plateau + chevalet du joueur actuel dans les champs backup.
+
+    Mémorise aussi l'index du joueur et le numéro de tour au début du tour, afin
+    que ``annuler_tour`` restaure le bon joueur même si le tour a déjà avancé
+    (ex. après une pioche qui appelle ``_terminer_tour``).
+    """
+    idx = etat["index_joueur_actuel"]
     etat["plateau_debut_tour"] = copy.deepcopy(etat["plateau"])
-    joueur = etat["joueurs"][etat["index_joueur_actuel"]]
-    etat["chevalet_debut_tour"] = copy.deepcopy(joueur["chevalet"])
+    etat["index_debut_tour"] = idx
+    etat["tour_debut_tour"] = etat["tour_numero"]
+    etat["chevalet_debut_tour"] = copy.deepcopy(etat["joueurs"][idx]["chevalet"])
 
 
 def annuler_tour(etat: dict) -> None:
-    """Restaure plateau et chevalet depuis backup."""
+    """Restaure plateau, chevalet, joueur actif et numéro de tour depuis backup."""
     if etat["plateau_debut_tour"] is not None:
         etat["plateau"] = copy.deepcopy(etat["plateau_debut_tour"])
-    joueur = etat["joueurs"][etat["index_joueur_actuel"]]
-    joueur["chevalet"] = copy.deepcopy(etat["chevalet_debut_tour"])
+    idx = etat.get("index_debut_tour", etat["index_joueur_actuel"])
+    etat["index_joueur_actuel"] = idx
+    etat["tour_numero"] = etat.get("tour_debut_tour", etat["tour_numero"])
+    etat["joueurs"][idx]["chevalet"] = copy.deepcopy(etat["chevalet_debut_tour"])
 
 
 # --------------------------------------------------------------------------- #

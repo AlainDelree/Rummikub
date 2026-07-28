@@ -8,7 +8,15 @@ _WEB = Path(__file__).parent / "web"
 class ApplicationRummikub:
     def __init__(self):
         self._window = None
-        self.etat_jeu = None   # dict JSON-sérialisable de la partie en cours
+        self._etat_jeu = None   # dict JSON-sérialisable de la partie en cours
+
+    @property
+    def etat_jeu(self):
+        return self._etat_jeu
+
+    @etat_jeu.setter
+    def etat_jeu(self, val):
+        self._etat_jeu = val
 
     def naviguer_vers_jeu(self, config):
         from rummikub.moteur.partie import creer_partie, backup_debut_tour
