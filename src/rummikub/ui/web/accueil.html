@@ -1,0 +1,79 @@
+<!DOCTYPE html><html lang="fr"><head>
+  <meta charset="UTF-8">
+  <title>Rummikub</title>
+  <link rel="stylesheet" href="commun.css">
+  <link rel="stylesheet" href="accueil.css">
+</head>
+<body>
+  <div class="carte" id="carte-principale">
+    <button id="btn-reglages" title="Réglages">⚙</button>
+
+    <div id="titre-container" class="titre-tuiles"></div>
+    <div id="sous-titre-container" class="titre-tuiles" style="font-size:0.7rem"></div>
+
+    <!-- Section joueur humain -->
+    <section id="section-joueur">
+      <div class="section-label titre-tuiles" id="label-joueur"></div>
+      <div id="carte-humain" class="carte-joueur humain">
+        <span id="avatar-humain" class="avatar-joueur"></span>
+        <span id="nom-humain" class="nom-joueur" contenteditable="true"></span>
+      </div>
+    </section>
+
+    <!-- Section adversaires -->
+    <section id="section-adversaires">
+      <div class="section-label titre-tuiles" id="label-adversaires"></div>
+      <div id="liste-adversaires"></div>
+      <button id="btn-ajouter-adv" class="btn-ajouter">＋ Ajouter un adversaire</button>
+    </section>
+
+    <!-- Section parties sauvegardées -->
+    <section id="section-parties">
+      <div class="section-label titre-tuiles" id="label-parties"></div>
+      <div id="liste-parties"></div>
+    </section>
+
+    <button id="btn-lancer" class="btn-primaire">Lancer la partie</button>
+  </div>
+
+  <!-- Overlay réglages (masqué par défaut) -->
+  <div id="overlay-reglages" class="overlay-cache">
+    <div class="carte">
+      <h2>Réglages</h2>
+      <div class="onglets">
+        <button class="onglet actif" data-onglet="general">Général</button>
+        <button class="onglet" data-onglet="regles">Règles du jeu</button>
+      </div>
+      <div id="panneau-general" class="panneau-onglet">
+        <label>Prénom principal<br>
+          <input type="text" id="rgl-prenom" maxlength="20"></label>
+        <div>Votre avatar</div>
+        <div id="grille-avatars"></div>
+        <label>Thème du plateau<br>
+          <select id="rgl-theme">
+            <option>Classique</option><option>Sombre</option><option>Bois</option>
+          </select></label>
+      </div>
+      <div id="panneau-regles" class="panneau-onglet cache">
+        <label><input type="checkbox" id="rgl-mise30" checked>
+          Mise initiale 30 pts minimum</label>
+        <label>Nombre de manches<br>
+          <input type="number" id="rgl-manches" min="1" max="99" value="1"></label>
+        <div>Valeur joker en pénalité<br>
+          <label><input type="radio" name="joker-val" value="25"> 25 pts</label>
+          <label><input type="radio" name="joker-val" value="30" checked> 30 pts</label>
+        </div>
+        <label>Vitesse de l'IA<br>
+          <select id="rgl-vitesse">
+            <option>Instantanée</option><option>Rapide</option>
+            <option selected>Normale</option><option>Lente</option>
+          </select></label>
+      </div>
+      <button id="btn-fermer-rgl" class="btn-primaire" style="margin-top:16px">Fermer</button>
+    </div>
+  </div>
+
+  <div id="toast"></div>
+  <script src="commun.js"></script>
+  <script src="accueil.js"></script>
+</body></html>

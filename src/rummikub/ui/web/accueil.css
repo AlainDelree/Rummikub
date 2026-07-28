@@ -1,0 +1,52 @@
+.carte { position: relative; }
+#btn-reglages { position: absolute; top: 16px; right: 16px; background: none;
+  border: none; font-size: 1.4rem; cursor: pointer; opacity: 0.7; }
+#btn-reglages:hover { opacity: 1; }
+
+.section-label { margin-bottom: 8px; }
+
+.carte-joueur { display: flex; align-items: center; gap: 10px;
+  padding: 10px 14px; border-radius: 6px; margin-bottom: 6px; }
+.carte-joueur.humain { background: var(--couleur-humain-fond); }
+.carte-joueur.ia     { background: var(--couleur-ordinateur-fond); }
+
+.avatar-joueur { font-size: 1.6rem; width: 36px; text-align: center; }
+.nom-joueur    { font-weight: 600; flex: 1; }
+[contenteditable="true"] { outline: none; border-bottom: 1px dashed #aaa; }
+
+.btn-niveaux-ia { display: flex; gap: 4px; flex-wrap: wrap; }
+
+.btn-suppr-adv { background: none; border: none; color: #c00;
+  font-size: 1.1rem; cursor: pointer; padding: 2px 6px; }
+
+.btn-ajouter { display: block; margin: 6px auto;
+  background: none; border: 2px solid var(--couleur-primaire);
+  color: var(--couleur-primaire); border-radius: 6px;
+  padding: 6px 18px; cursor: pointer; font-weight: 600; }
+
+.carte-partie { display: flex; align-items: center; justify-content: space-between;
+  padding: 8px 12px; border: 1px solid var(--couleur-bordure);
+  border-radius: 6px; margin-bottom: 6px; font-size: 0.88rem; }
+.badge-terminee { background: #555; color: #fff; border-radius: 4px;
+  padding: 1px 7px; font-size: 0.75rem; }
+
+.overlay-cache { display: none; }
+.overlay-visible { display: block; position: fixed; inset: 0;
+  background: rgba(0,0,0,0.55); z-index: 100; overflow-y: auto; }
+
+.onglets { display: flex; gap: 0; margin-bottom: 16px; }
+.onglet { flex: 1; padding: 8px; background: #f0f0f0; border: none;
+  cursor: pointer; font-weight: 600; }
+.onglet.actif { background: #fff; border-bottom: 2px solid var(--couleur-primaire); }
+
+.panneau-onglet label { display: block; margin-bottom: 12px; }
+.panneau-onglet input[type=text],
+.panneau-onglet input[type=number],
+.panneau-onglet select { width: 100%; padding: 6px; margin-top: 4px;
+  border: 1px solid #ccc; border-radius: 4px; }
+.cache { display: none; }
+
+#grille-avatars { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0; }
+.btn-avatar { font-size: 1.6rem; background: none; border: 2px solid transparent;
+  border-radius: 6px; cursor: pointer; padding: 4px; }
+.btn-avatar.selectionne { border-color: var(--couleur-primaire); }
