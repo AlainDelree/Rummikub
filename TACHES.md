@@ -9,8 +9,6 @@
 ## À faire
 
 - Polish UI général après tests visuels (couleurs, espacements, lisibilité)
-- Mode manipulation avancé du tapis : basculer toutes les tuiles du tapis
-  en mode libre pour redistribuer entre combinaisons existantes
 - Icône application (assets/rummikub.ico) pour le build Windows
 - Build Windows via CCW (pyinstaller rummikub.spec)
 - Tests visuels avec pywebview sur Linux puis Windows
@@ -29,6 +27,17 @@
 - Variante multi-manches avec score cumulé et élimination
 - Son/animation quand un joueur crie "Rummikub !"
 - Thème visuel alternatif pour le plateau et les tuiles
+
+## Fonctionnalités implémentées (notes)
+
+- Récupération de joker du tapis (Issue #12) : le cas le plus courant de
+  manipulation du tapis est désormais géré. Le joueur sélectionne une tuile
+  du chevalet puis clique sur un joker posé (hors tuiles jouées ce tour) ;
+  la tuile remplace le joker à sa position exacte et le joker atterrit dans
+  la rangée active de la zone de travail (il doit être rejoué). Le mode
+  manipulation avancé complet du tapis (basculer toutes les tuiles en mode
+  libre pour tout redistribuer entre combinaisons existantes) reste une
+  idée future non implémentée.
 
 ## Décisions d'architecture prises
 

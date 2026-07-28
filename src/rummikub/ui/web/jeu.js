@@ -134,11 +134,16 @@ function rafraichirPlateau() {
     extDebut.addEventListener("click", () => etendreTapis(idxCombo, "debut"));
     groupe.appendChild(extDebut);
 
-    combo.forEach((d) => {
+    combo.forEach((d, idxTuile) => {
       const el = tuileDepuisDict(d);
       if (tuilesCeTour.includes(d.id)) {
         el.classList.add("ce-tour");
         el.addEventListener("click", () => reprendreTuile(d.id));
+      } else if (d.est_joker && tuileSelectionnee !== null &&
+                 etat.joueurs[indexHumain()].mise_initiale_faite) {
+        el.classList.add("joker-recuperable");
+        el.addEventListener("click", () =>
+          tenterRecupererJoker(idxCombo, idxTuile, d));
       }
       groupe.appendChild(el);
     });
@@ -344,6 +349,91 @@ function reprendreTuile(id) {
   }
   tuilesCeTour = tuilesCeTour.filter((x) => x !== id);
   rafraichirPlateau(); rafraichirChevalet(); rafraichirBoutons();
+}
+
+// ------------------------------------------------------------ récupération de joker
+// Détermine la valeur/couleur que le joker représente dans sa combinaison.
+// Retourne { valeur, couleur, type } ou null si indéterminable.
+function valeurJokerDansCombo(combo, idxJoker) {
+  const reelles = combo.filter((d) => !d.est_joker);
+  if (reelles.length === 0) return null;
+
+  const couleursUniques = [...new Set(reelles.map((d) => d.couleur))];
+
+  if (couleursUniques.length === 1) {
+    // Suite : même couleur, valeurs consécutives.
+    // La valeur du joker = sa position dans la séquence depuis le 1er réel.
+    const premiereReelle = combo.find((d) => !d.est_joker);
+    const idxPremiere = combo.indexOf(premiereReelle);
+    const base = premiereReelle.valeur - idxPremiere;
+    return {
+      valeur: base + idxJoker,
+      couleur: couleursUniques[0],
+      type: "suite",
+    };
+  } else {
+    // Groupe : même valeur, couleurs différentes.
+    const valeur = reelles[0].valeur;
+    const couleursPresentes = reelles.map((d) => d.couleur);
+    const toutesColors = ["rouge", "bleu", "jaune", "noir"];
+    const couleurManquante = toutesColors.find(
+      (c) => !couleursPresentes.includes(c)) || null;
+    return {
+      valeur: valeur,
+      couleur: couleurManquante,
+      type: "groupe",
+    };
+  }
+}
+
+function peutRemplacerJoker(tuileSel, infoJoker) {
+  if (!infoJoker) return false;
+  if (tuileSel.valeur !== infoJoker.valeur) return false;
+  if (infoJoker.type === "suite" && tuileSel.couleur !== infoJoker.couleur)
+    return false;
+  if (infoJoker.type === "groupe" && tuileSel.couleur === null)
+    return false;
+  return true;
+}
+
+// Tenter de récupérer un joker du tapis en le remplaçant par la tuile sélectionnée.
+function tenterRecupererJoker(idxCombo, idxTuile, dictJoker) {
+  if (!tuileSelectionnee) return;
+
+  const chev = etat.joueurs[indexHumain()].chevalet;
+  const idxSel = chev.findIndex((t) => t.id === tuileSelectionnee);
+  if (idxSel < 0) return;
+  const tuileSel = chev[idxSel];
+
+  const infoJoker = valeurJokerDansCombo(plateauLocal[idxCombo], idxTuile);
+  if (!peutRemplacerJoker(tuileSel, infoJoker)) {
+    toast("Cette tuile ne peut pas remplacer ce joker", "erreur");
+    return;
+  }
+
+  // 1. Retirer la tuile du chevalet
+  chev.splice(idxSel, 1);
+
+  // 2. Remplacer le joker par la tuile dans plateauLocal
+  plateauLocal[idxCombo][idxTuile] = tuileSel;
+
+  // 3. La tuile compte comme jouée ce tour
+  tuilesCeTour.push(tuileSel.id);
+
+  // 4. Le joker atterrit dans la rangée active
+  travail[rangeeActive].push(dictJoker);
+
+  // 5. Le joker aussi compte comme joué (il DOIT être rejoué)
+  tuilesCeTour.push(dictJoker.id);
+
+  // 6. Désélectionner
+  tuileSelectionnee = null;
+
+  rafraichirPlateau();
+  rafraichirZoneTravail();
+  rafraichirChevalet();
+  rafraichirBoutons();
+  toast("Joker récupéré — placez-le dans votre zone de pose");
 }
 
 function reinitTour() {

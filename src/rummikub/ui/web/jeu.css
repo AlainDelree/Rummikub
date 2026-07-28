@@ -159,6 +159,17 @@ body { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
 .tuile-jeu.mode-reorg { cursor: move; }
 #btn-reorg.actif { background: rgba(34,197,94,0.3); }
 
+/* Récupération d'un joker du tapis (une tuile est sélectionnée) */
+.tuile-jeu.joker-recuperable {
+  outline: 2px solid #f59e0b;
+  cursor: pointer;
+  animation: pulse-joker 1s infinite alternate;
+}
+@keyframes pulse-joker {
+  from { box-shadow: 0 0 4px rgba(245,158,11,0.4); }
+  to   { box-shadow: 0 0 10px rgba(245,158,11,0.9); }
+}
+
 #barre-actions { display: flex; gap: 8px; padding: 8px 12px;
   background: var(--tapis-vert-fonce); justify-content: center; }
 #barre-actions button { padding: 8px 16px; border: none; border-radius: 6px;
