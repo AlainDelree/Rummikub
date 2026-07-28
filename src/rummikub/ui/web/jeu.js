@@ -529,22 +529,153 @@ async function onPasser() {
 }
 
 // ------------------------------------------------------------ IA (déclenchée par l'humain)
+// Compare l'ancien et le nouveau plateau et retourne les tuiles nouvellement
+// posées par l'IA, dans l'ordre de pose (pour l'animation une par une).
+function trouverTuilesAjoutees(ancienPlateau, nouveauPlateau) {
+  const idsAncien = new Set(
+    (ancienPlateau || []).flatMap(combo => combo.map(d => d.id))
+  );
+  const ajoutees = [];
+  (nouveauPlateau || []).forEach((combo, idxCombo) => {
+    combo.forEach((d, idxTuile) => {
+      if (!idsAncien.has(d.id)) {
+        ajoutees.push({ dict: d, idxCombo, idxTuile });
+      }
+    });
+  });
+  return ajoutees;
+}
+
 // L'humain clique « Jouer » sur la fiche de l'IA active pour déclencher son coup.
+// Les tuiles posées par l'IA apparaissent une par une avec une animation lente
+// et visible (jeu destiné à des personnes âgées).
 async function jouerIA() {
   const btnIA = document.querySelector(".btn-jouer-ia");
   if (btnIA) btnIA.disabled = true;
+
+  // Vitesse d'animation selon le réglage « Vitesse de l'IA »
+  const VITESSES = {
+    "Instantanée": { reflexion: 0,    tuile: 100 },
+    "Rapide":      { reflexion: 400,  tuile: 400 },
+    "Normale":     { reflexion: 800,  tuile: 700 },
+    "Lente":       { reflexion: 1500, tuile: 1200 },
+  };
+  const vitesse = VITESSES[
+    (etat.config && etat.config.vitesse_ia) || "Normale"
+  ] || VITESSES["Normale"];
+  const delaiReflexion     = vitesse.reflexion;
+  const DELAI_ENTRE_TUILES = vitesse.tuile;
+
+  // Index de l'IA qui joue (avant que l'état ne soit écrasé)
+  const idxIA = etat.index_joueur_actuel;
+
+  // Mettre la fiche IA en mode « réfléchit… »
+  const ficheActive = document.querySelectorAll(".fiche-joueur")[idxIA];
+  if (ficheActive) {
+    ficheActive.classList.add("ia-reflechit", "ia-joue");
+    const meta = ficheActive.querySelector(".meta-fiche");
+    if (meta) meta.textContent = "réfléchit";
+  }
+
   try {
-    const res = await window.pywebview.api.jeu_ia_jouer();
-    if (res && res.ok && res.etat) {
-      etat = res.etat;
-      reinitTour();
-      rafraichirTout();
-      // Si le joueur suivant est aussi une IA : rafraichirTout() affichera
-      // son bouton « Jouer » automatiquement via rafraichirFichesJoueurs.
-    } else {
+    // Lancer la requête ET le délai de « réflexion » en parallèle : le jeu
+    // paraît plus naturel même si le serveur répond instantanément.
+    const [res] = await Promise.all([
+      window.pywebview.api.jeu_ia_jouer(),
+      new Promise(r => setTimeout(r, delaiReflexion))
+    ]);
+
+    if (!res || !res.ok || !res.etat) {
       toast((res && res.erreur) || "Tour IA impossible", "erreur");
+      if (ficheActive) ficheActive.classList.remove("ia-reflechit", "ia-joue");
       rafraichirTout();
+      return;
     }
+
+    // Calculer les tuiles ajoutées AVANT de mettre à jour l'état
+    const ancienPlateau = clone(etat.plateau || []);
+    const nouvelEtat    = res.etat;
+    const tuiAjoutees   = trouverTuilesAjoutees(
+      ancienPlateau, nouvelEtat.plateau || []);
+
+    // Mettre à jour l'état (mais on reconstruit le plateau visible à la main)
+    etat = nouvelEtat;
+    reinitTour();
+
+    // Cas « pioche » ou « passe » : aucune tuile ajoutée
+    if (tuiAjoutees.length === 0) {
+      rafraichirFichesJoueurs();
+      const h = nouvelEtat.historique || [];
+      const action = (h.length ? h[h.length - 1].description : "") || "";
+      const nomIA = (nouvelEtat.joueurs[idxIA] || {}).nom || "L'IA";
+      toast(nomIA + " " +
+        (action.includes("pioch") ? "pioche" : "passe son tour"));
+      await new Promise(r => setTimeout(r, 800));
+      rafraichirTout();
+      return;
+    }
+
+    // Afficher d'abord le tapis SANS les nouvelles tuiles
+    const idsAjoutees = new Set(tuiAjoutees.map(t => t.dict.id));
+    plateauLocal = (etat.plateau || []).map(combo =>
+      combo.filter(d => !idsAjoutees.has(d.id))
+    ).filter(c => c.length > 0);
+
+    rafraichirFichesJoueurs();
+    rafraichirPlateau();
+    rafraichirChevalet();
+    rafraichirBoutons();
+    rafraichirHistorique();
+    document.getElementById("nb-pioche").textContent =
+      (etat.pioche || []).length;
+
+    // Poser les tuiles une par une avec animation
+    for (let i = 0; i < tuiAjoutees.length; i++) {
+      await new Promise(r =>
+        setTimeout(r, i === 0 ? 200 : DELAI_ENTRE_TUILES));
+      const { dict } = tuiAjoutees[i];
+
+      // Reconstruire progressivement le plateau visible :
+      // tuiles originales + tuiles déjà animées jusqu'à i inclus
+      plateauLocal = clone(etat.plateau || []).map(combo =>
+        combo.filter(d => {
+          const dejaPosee = tuiAjoutees.slice(0, i + 1)
+            .some(t => t.dict.id === d.id);
+          return !idsAjoutees.has(d.id) || dejaPosee;
+        })
+      ).filter(c => c.length > 0);
+
+      rafraichirPlateau();
+
+      // Appliquer l'animation sur la tuile qui vient d'apparaître
+      setTimeout(() => {
+        document.querySelectorAll("#zone-plateau .tuile-jeu").forEach(el => {
+          if (el.dataset.id === dict.id) {
+            el.classList.add("tuile-ia-posee");
+            setTimeout(() => {
+              el.classList.remove("tuile-ia-posee");
+              el.classList.add("tuile-ia-highlight");
+            }, 700);
+          }
+        });
+      }, 50);
+    }
+
+    // Attendre la fin de la dernière animation
+    await new Promise(r => setTimeout(r, 800));
+
+    // Finaliser : plateau complet + rafraîchissement normal
+    plateauLocal = clone(etat.plateau || []);
+    rafraichirPlateau();
+    rafraichirTout();
+
+    // Effacer les surbrillances dorées après 2 secondes
+    setTimeout(() => {
+      document.querySelectorAll(".tuile-ia-highlight").forEach(el => {
+        el.classList.remove("tuile-ia-highlight");
+      });
+    }, 2000);
+
   } catch (e) {
     toast("Erreur IA : " + e, "erreur");
     rafraichirTout();

@@ -170,6 +170,51 @@ body { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
   to   { box-shadow: 0 0 10px rgba(245,158,11,0.9); }
 }
 
+/* ---------------------------------------------- Animation des coups de l'IA */
+/* Apparition d'une tuile posée par l'IA */
+@keyframes tuile-pose {
+  0%   { transform: scale(0) rotate(-15deg);
+         opacity: 0;
+         box-shadow: 0 0 0 rgba(255,255,255,0); }
+  50%  { transform: scale(1.25) rotate(3deg);
+         opacity: 1;
+         box-shadow: 0 0 20px rgba(255,220,50,0.9); }
+  75%  { transform: scale(0.95) rotate(-1deg); }
+  100% { transform: scale(1) rotate(0deg);
+         opacity: 1;
+         box-shadow: 0 0 8px rgba(255,220,50,0.4); }
+}
+
+.tuile-jeu.tuile-ia-posee {
+  animation: tuile-pose 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+  box-shadow: 0 0 8px rgba(255,220,50,0.4);
+}
+
+/* Surbrillance persistante sur les tuiles posées par l'IA ce tour */
+.tuile-jeu.tuile-ia-highlight {
+  box-shadow: 0 0 6px rgba(255,220,50,0.5);
+  border-color: #f59e0b;
+}
+
+/* Indicateur « L'IA réfléchit… » sur la fiche active */
+.fiche-joueur.ia-reflechit .meta-fiche::after {
+  content: " …";
+  animation: ellipsis 1.2s infinite;
+}
+@keyframes ellipsis {
+  0%   { content: " ."; }
+  33%  { content: " .."; }
+  66%  { content: " ..."; }
+  100% { content: " ."; }
+}
+
+/* Mise en évidence de la fiche IA pendant son tour */
+.fiche-joueur.ia-joue {
+  background: rgba(245,158,11,0.15) !important;
+  border: 1px solid rgba(245,158,11,0.4);
+  transition: background 0.3s;
+}
+
 #barre-actions { display: flex; gap: 8px; padding: 8px 12px;
   background: var(--tapis-vert-fonce); justify-content: center; }
 #barre-actions button { padding: 8px 16px; border: none; border-radius: 6px;

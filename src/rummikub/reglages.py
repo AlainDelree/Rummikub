@@ -7,7 +7,7 @@ DEFAUTS = {
     "mise_initiale_min": 30,
     "nb_manches": 1,
     "valeur_joker_penalite": 30,
-    "vitesse_ia": "Normale",
+    "vitesse_ia": "Lente",
 }
 
 def charger():
