@@ -5,9 +5,12 @@ body { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
 #barre-top button { background: rgba(255,255,255,0.15); border: none;
   color: #fff; padding: 4px 10px; border-radius: 4px; cursor: pointer; }
 
-/* Compteur de pioche : déplacé dans le panneau gauche, sous l'historique */
-#compteur-pioche { font-size: 0.85rem; color: #fff;
-  padding-top: 8px; border-top: 1px solid rgba(255,255,255,0.15); }
+/* Compteur de pioche : icône « sac » sous l'historique (panneau gauche) */
+#compteur-pioche {
+  display: flex; flex-direction: column; align-items: center;
+  padding-top: 8px;
+  border-top: 1px solid rgba(255,255,255,0.15);
+}
 
 #corps-jeu { display: flex; flex: 1; overflow: hidden; gap: 0; }
 

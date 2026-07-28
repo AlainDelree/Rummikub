@@ -48,7 +48,11 @@ class ApplicationRummikub:
             width=1100, height=750,
             min_size=(900, 600),
         )
-        webview.start(debug=False)
+
+        def apres_demarrage():
+            self._window.maximize()
+
+        webview.start(apres_demarrage, debug=False)
 
 
 def main():
