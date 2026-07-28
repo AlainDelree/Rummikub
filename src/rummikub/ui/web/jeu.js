@@ -10,6 +10,8 @@ let etat = null;              // état complet de la partie (dict serveur)
 let tuileSelectionnee = null; // id de tuile sélectionnée sur le chevalet
 let tuilesCeTour = [];        // ids des tuiles posées ce tour
 let plateauLocal = [];        // copie manipulable du plateau ce tour
+let modeReorg = false;        // mode réorganisation du chevalet actif ?
+let reorgSource = null;       // id de la tuile source d'un échange en cours
 
 // ------------------------------------------------------------ utilitaires
 function clone(x) { return JSON.parse(JSON.stringify(x)); }
@@ -102,6 +104,14 @@ function rafraichirFichesJoueurs() {
       badge.textContent = "▶ À vous";
       fiche.appendChild(badge);
     }
+    // Tour d'une IA : bouton « Jouer » pour déclencher son coup manuellement
+    if (j.est_ia && i === etat.index_joueur_actuel && !etat.manche_terminee) {
+      const btnIA = document.createElement("button");
+      btnIA.className = "btn-jouer-ia";
+      btnIA.textContent = "Jouer";
+      btnIA.addEventListener("click", jouerIA);
+      fiche.appendChild(btnIA);
+    }
     cont.appendChild(fiche);
   });
 }
@@ -136,7 +146,14 @@ function rafraichirChevalet() {
   tuiles.forEach((d) => {
     const el = tuileDepuisDict(d);
     if (d.id === tuileSelectionnee) el.classList.add("selectionnee");
-    el.addEventListener("click", () => selectionnerTuile(d.id));
+    if (reorgSource !== null) {
+      // Un échange est en cours : la source est surlignée, les autres sont cibles
+      if (d.id === reorgSource) el.classList.add("source-reorg");
+      else el.classList.add("cible-reorg");
+    } else if (modeReorg) {
+      el.classList.add("mode-reorg");
+    }
+    el.addEventListener("click", () => onClickTuileChevalet(d));
     chev.appendChild(el);
   });
   for (let i = tuiles.length; i < 14; i++) {
@@ -175,6 +192,38 @@ function rafraichirHistorique() {
 function selectionnerTuile(id) {
   tuileSelectionnee = (tuileSelectionnee === id) ? null : id;
   rafraichirChevalet();
+}
+
+// Bascule le mode réorganisation du chevalet (échange de tuiles sans jouer)
+function basculerReorg() {
+  modeReorg = !modeReorg;
+  reorgSource = null;
+  document.getElementById("btn-reorg").classList.toggle("actif", modeReorg);
+  rafraichirChevalet();
+}
+
+// Clic sur une tuile du chevalet : réorganisation OU sélection pour pose
+function onClickTuileChevalet(d) {
+  if (reorgSource !== null) {
+    // mode réorganisation : deuxième clic
+    if (d.id === reorgSource) { reorgSource = null; rafraichirChevalet(); return; }
+    // Échanger les deux tuiles dans le chevalet
+    const chev = etat.joueurs[indexHumain()].chevalet;
+    const iA = chev.findIndex((t) => t.id === reorgSource);
+    const iB = chev.findIndex((t) => t.id === d.id);
+    if (iA >= 0 && iB >= 0) [chev[iA], chev[iB]] = [chev[iB], chev[iA]];
+    reorgSource = null;
+    rafraichirChevalet();
+    return;
+  }
+  if (modeReorg) {
+    // premier clic en mode réorg : sélectionner la source
+    reorgSource = d.id;
+    rafraichirChevalet();
+    return;
+  }
+  // comportement normal : sélection pour pose
+  selectionnerTuile(d.id);
 }
 
 function retirerDuChevalet(id) {
@@ -266,7 +315,6 @@ async function onJouer() {
       reinitTour();
       rafraichirTout();
       toast("Coup joué", "succes");
-      if (joueurCourantEstIA()) demarrerTourIA();
     } else {
       toast((res && res.erreur) || "Coup invalide", "erreur");
     }
@@ -284,7 +332,6 @@ async function onPiocher() {
       toast("Vous piochez : " + decrireTuile(t));
       reinitTour();
       rafraichirTout();
-      if (joueurCourantEstIA()) demarrerTourIA();
     } else {
       toast((res && res.erreur) || "Impossible de piocher", "erreur");
     }
@@ -300,7 +347,6 @@ async function onPasser() {
       etat = res.etat;
       reinitTour();
       rafraichirTout();
-      if (joueurCourantEstIA()) demarrerTourIA();
     } else {
       toast((res && res.erreur) || "Impossible de passer", "erreur");
     }
@@ -309,43 +355,27 @@ async function onPasser() {
   }
 }
 
-// ------------------------------------------------------------ IA (stub issue 4)
-function delaiIA() {
-  const base = 700;
-  const v = (etat && etat.config && etat.config.vitesse_ia) || "Normale";
-  const mult = { "Instantanée": 0, "Rapide": 0.3, "Normale": 1, "Lente": 2 };
-  return base * (mult[v] != null ? mult[v] : 1);
-}
-
-function demarrerTourIA() {
-  if (!joueurCourantEstIA() || etat.manche_terminee) return;
-  // Indication visuelle « réfléchit »
-  const fiches = document.querySelectorAll(".fiche-joueur");
-  const active = fiches[etat.index_joueur_actuel];
-  if (active) {
-    const meta = active.querySelector(".meta-fiche");
-    if (meta) meta.textContent = "… réfléchit";
-  }
-  ["btn-jouer", "btn-annuler", "btn-piocher", "btn-passer"].forEach((id) => {
-    document.getElementById(id).disabled = true;
-  });
-  setTimeout(async () => {
-    try {
-      const res = await window.pywebview.api.jeu_ia_jouer();
-      if (res && res.ok && res.etat) {
-        etat = res.etat;
-        reinitTour();
-        rafraichirTout();
-        if (joueurCourantEstIA()) demarrerTourIA();
-      } else {
-        toast((res && res.erreur) || "Tour IA impossible", "erreur");
-        rafraichirTout();   // restaure l'affichage / réactive les boutons
-      }
-    } catch (e) {
-      toast("Erreur IA : " + e, "erreur");
+// ------------------------------------------------------------ IA (déclenchée par l'humain)
+// L'humain clique « Jouer » sur la fiche de l'IA active pour déclencher son coup.
+async function jouerIA() {
+  const btnIA = document.querySelector(".btn-jouer-ia");
+  if (btnIA) btnIA.disabled = true;
+  try {
+    const res = await window.pywebview.api.jeu_ia_jouer();
+    if (res && res.ok && res.etat) {
+      etat = res.etat;
+      reinitTour();
+      rafraichirTout();
+      // Si le joueur suivant est aussi une IA : rafraichirTout() affichera
+      // son bouton « Jouer » automatiquement via rafraichirFichesJoueurs.
+    } else {
+      toast((res && res.erreur) || "Tour IA impossible", "erreur");
       rafraichirTout();
     }
-  }, delaiIA());
+  } catch (e) {
+    toast("Erreur IA : " + e, "erreur");
+    rafraichirTout();
+  }
 }
 
 // ------------------------------------------------------------ fin de manche
@@ -388,46 +418,6 @@ async function onRetourAccueil() {
   catch (e) { toast("Erreur : " + e, "erreur"); }
 }
 
-// ------------------------------------------------------------ vérificateur
-function parserTuilesTexte(txt) {
-  // "rouge_7,rouge_8,rouge_9" -> [dict tuile, ...]
-  const tuiles = [];
-  txt.split(",").map((s) => s.trim()).filter(Boolean).forEach((tok, i) => {
-    const bas = tok.toLowerCase();
-    if (bas === "joker" || bas === "j" || bas === "★") {
-      tuiles.push({ id: "verif_joker_" + i, valeur: null, couleur: null,
-                    est_joker: true });
-      return;
-    }
-    const parts = tok.split("_");
-    const couleur = parts[0];
-    const valeur = parseInt(parts[1], 10);
-    tuiles.push({ id: "verif_" + tok + "_" + i, valeur: valeur,
-                  couleur: couleur, est_joker: false });
-  });
-  return tuiles;
-}
-
-async function onVerifier() {
-  const zone = document.getElementById("resultat-verif");
-  const txt = document.getElementById("input-verif").value;
-  const tuiles = parserTuilesTexte(txt);
-  if (tuiles.length === 0) { zone.className = ""; zone.textContent = ""; return; }
-  try {
-    const res = await window.pywebview.api.jeu_verifier_combinaison(tuiles);
-    if (res.valide) {
-      zone.className = "ok";
-      zone.textContent = "✓ " + res.type + " — " + res.points + " points";
-    } else {
-      zone.className = "ko";
-      zone.textContent = "✗ Ni suite ni groupe valide";
-    }
-  } catch (e) {
-    zone.className = "ko";
-    zone.textContent = "Erreur : " + e;
-  }
-}
-
 // ------------------------------------------------------------ tri du chevalet
 function trierChevalet() {
   const chev = etat.joueurs[indexHumain()].chevalet;
@@ -450,15 +440,12 @@ function brancherEvenements() {
   });
   document.getElementById("btn-nouvelle-combi").addEventListener("click", nouvelleCombinaison);
   document.getElementById("btn-trier").addEventListener("click", trierChevalet);
+  document.getElementById("btn-reorg").addEventListener("click", basculerReorg);
   document.getElementById("btn-annuler").addEventListener("click", onAnnuler);
   document.getElementById("btn-verifier-calc").addEventListener("click", onVerifierCalc);
   document.getElementById("btn-jouer").addEventListener("click", onJouer);
   document.getElementById("btn-piocher").addEventListener("click", onPiocher);
   document.getElementById("btn-passer").addEventListener("click", onPasser);
-  document.getElementById("btn-verif").addEventListener("click", onVerifier);
-  document.getElementById("input-verif").addEventListener("keydown", (e) => {
-    if (e.key === "Enter") onVerifier();
-  });
   document.getElementById("btn-nouvelle-manche").addEventListener("click", onNouvelleManche);
   document.getElementById("btn-fin-retour").addEventListener("click", onRetourAccueil);
 }
@@ -478,7 +465,6 @@ async function init() {
   }
   reinitTour();
   rafraichirTout();
-  if (joueurCourantEstIA()) demarrerTourIA();
 }
 
 let _initFait = false;

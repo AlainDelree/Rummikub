@@ -4,7 +4,6 @@ from rummikub.config import FICHIER_CFG
 DEFAUTS = {
     "prenom": "Joueur",
     "avatar_index": 0,
-    "theme": "Classique",
     "mise_initiale_min": 30,
     "nb_manches": 1,
     "valeur_joker_penalite": 30,

@@ -9,22 +9,22 @@
     <button id="btn-reglages" title="Réglages">⚙</button>
 
     <div id="titre-container" class="titre-tuiles"></div>
-    <div id="sous-titre-container" class="titre-tuiles" style="font-size:0.7rem"></div>
 
-    <!-- Section joueur humain -->
-    <section id="section-joueur">
-      <div class="section-label titre-tuiles" id="label-joueur"></div>
-      <div id="carte-humain" class="carte-joueur humain">
-        <span id="avatar-humain" class="avatar-joueur"></span>
-        <span id="nom-humain" class="nom-joueur" contenteditable="true"></span>
+    <!-- Section joueurs : humain + IA ensemble -->
+    <section id="section-joueurs">
+      <div id="label-joueurs" class="section-label titre-tuiles"></div>
+      <div id="liste-joueurs">
+        <!-- carte humain en premier, puis cartes IA -->
       </div>
-    </section>
-
-    <!-- Section adversaires -->
-    <section id="section-adversaires">
-      <div class="section-label titre-tuiles" id="label-adversaires"></div>
-      <div id="liste-adversaires"></div>
-      <button id="btn-ajouter-adv" class="btn-ajouter">＋ Ajouter un adversaire</button>
+      <!-- Boutons de niveau : cliquer ajoute un adversaire de ce niveau -->
+      <div id="boutons-ajout-niveau">
+        <span id="label-ajout">Ajouter un adversaire :</span>
+        <button class="btn-niveau btn-ajout-niveau" data-niveau="Débutant">Débutant</button>
+        <button class="btn-niveau btn-ajout-niveau" data-niveau="Facile">Facile</button>
+        <button class="btn-niveau btn-ajout-niveau" data-niveau="Intermédiaire">Intermédiaire</button>
+        <button class="btn-niveau btn-ajout-niveau" data-niveau="Avancé">Avancé</button>
+        <button class="btn-niveau btn-ajout-niveau" data-niveau="Expert">Expert</button>
+      </div>
     </section>
 
     <!-- Section parties sauvegardées -->
@@ -49,10 +49,6 @@
           <input type="text" id="rgl-prenom" maxlength="20"></label>
         <div>Votre avatar</div>
         <div id="grille-avatars"></div>
-        <label>Thème du plateau<br>
-          <select id="rgl-theme">
-            <option>Classique</option><option>Sombre</option><option>Bois</option>
-          </select></label>
       </div>
       <div id="panneau-regles" class="panneau-onglet cache">
         <label><input type="checkbox" id="rgl-mise30" checked>

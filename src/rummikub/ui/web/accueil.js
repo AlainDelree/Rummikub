@@ -21,9 +21,7 @@ function avatarPour(i) {
 async function init() {
   // Titres en tuiles
   afficherTitreEnTuiles("RUMMIKUB", document.getElementById("titre-container"));
-  afficherTitreEnTuiles("MODE SOLO", document.getElementById("sous-titre-container"));
-  afficherTitreEnTuiles("VOUS", document.getElementById("label-joueur"));
-  afficherTitreEnTuiles("ADVERSAIRES", document.getElementById("label-adversaires"));
+  afficherTitreEnTuiles("JOUEURS", document.getElementById("label-joueurs"));
   afficherTitreEnTuiles("PARTIES", document.getElementById("label-parties"));
 
   brancherEvenements();
@@ -38,14 +36,11 @@ async function init() {
   etat.reglages = data.reglages || {};
   etat.avatarIndex = etat.reglages.avatar_index || 0;
 
-  document.getElementById("nom-humain").textContent = etat.reglages.prenom || "Joueur";
-  document.getElementById("avatar-humain").textContent = avatarPour(etat.avatarIndex);
-
   // Un adversaire par défaut
   if (etat.adversaires.length === 0) {
     etat.adversaires.push(nouvelAdversaire(0));
   }
-  afficherAdversaires();
+  afficherJoueurs();
   afficherParties(data.parties || []);
 
   // Pré-remplir les champs de réglages
@@ -60,10 +55,32 @@ function nouvelAdversaire(index) {
   };
 }
 
-// ---------------------------------------------------------------- adversaires
-function afficherAdversaires() {
-  const cont = document.getElementById("liste-adversaires");
+// ---------------------------------------------------------------- joueurs (humain + IA)
+function slugNiveau(niv) {
+  return (niv || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+}
+
+function afficherJoueurs() {
+  const cont = document.getElementById("liste-joueurs");
   cont.innerHTML = "";
+
+  // Carte humain (en premier, fond bleu clair, pas de bouton ✕)
+  const carteH = document.createElement("div");
+  carteH.className = "carte-joueur humain";
+  const avH = document.createElement("span");
+  avH.className = "avatar-joueur";
+  avH.id = "avatar-humain";
+  avH.textContent = avatarPour(etat.avatarIndex);
+  carteH.appendChild(avH);
+  const nomH = document.createElement("span");
+  nomH.className = "nom-joueur";
+  nomH.id = "nom-humain";
+  nomH.contentEditable = "true";
+  nomH.textContent = (etat.reglages && etat.reglages.prenom) || "Joueur";
+  carteH.appendChild(nomH);
+  cont.appendChild(carteH);
+
+  // Cartes IA (fond violet clair, badge niveau, bouton ✕)
   etat.adversaires.forEach((adv, index) => {
     const carte = document.createElement("div");
     carte.className = "carte-joueur ia";
@@ -79,68 +96,65 @@ function afficherAdversaires() {
     const nom = document.createElement("div");
     nom.className = "nom-joueur";
     nom.textContent = adv.nom;
+    const badge = document.createElement("span");
+    badge.className = "badge-niveau-ia niveau-" + slugNiveau(adv.niveau);
+    badge.textContent = adv.niveau;
+    nom.appendChild(badge);
     bloc.appendChild(nom);
-
-    const niveaux = document.createElement("div");
-    niveaux.className = "btn-niveaux-ia";
-    NIVEAUX.forEach((niv) => {
-      const b = document.createElement("button");
-      b.className = "btn-niveau" + (niv === adv.niveau ? " actif" : "");
-      b.dataset.niveau = niv;
-      b.textContent = niv;
-      b.addEventListener("click", () => definirNiveauAdversaire(index, niv));
-      niveaux.appendChild(b);
-    });
-    bloc.appendChild(niveaux);
     carte.appendChild(bloc);
 
-    // Bouton suppression (sauf si c'est le seul adversaire)
-    if (etat.adversaires.length > 1) {
-      const suppr = document.createElement("button");
-      suppr.className = "btn-suppr-adv";
-      suppr.textContent = "✕";
-      suppr.title = "Retirer";
-      suppr.addEventListener("click", () => supprimerAdversaire(index));
-      carte.appendChild(suppr);
-    }
+    const suppr = document.createElement("button");
+    suppr.className = "btn-suppr-adv";
+    suppr.textContent = "✕";
+    suppr.title = "Retirer";
+    suppr.addEventListener("click", () => supprimerAdversaire(index));
+    carte.appendChild(suppr);
 
     cont.appendChild(carte);
   });
 
-  document.getElementById("btn-ajouter-adv").style.display =
-    etat.adversaires.length >= MAX_ADVERSAIRES ? "none" : "block";
+  majBoutonsAjout();
 }
 
-function ajouterAdversaire() {
+function majBoutonsAjout() {
+  const max = etat.adversaires.length >= MAX_ADVERSAIRES;
+  document.querySelectorAll(".btn-ajout-niveau").forEach((b) => {
+    b.disabled = max;
+    b.title = max ? "Maximum " + MAX_ADVERSAIRES + " adversaires" : "";
+  });
+}
+
+function ajouterAdversaire(niveau) {
   if (etat.adversaires.length >= MAX_ADVERSAIRES) {
     toast("Maximum " + MAX_ADVERSAIRES + " adversaires", "erreur");
     return;
   }
-  etat.adversaires.push(nouvelAdversaire(etat.adversaires.length));
-  afficherAdversaires();
+  const adv = nouvelAdversaire(etat.adversaires.length);
+  adv.niveau = niveau;
+  etat.adversaires.push(adv);
+  afficherJoueurs();
 }
 
 function supprimerAdversaire(index) {
-  if (etat.adversaires.length <= 1) return;
   etat.adversaires.splice(index, 1);
-  afficherAdversaires();
-}
-
-function definirNiveauAdversaire(index, niveau) {
-  if (!etat.adversaires[index]) return;
-  etat.adversaires[index].niveau = niveau;
-  afficherAdversaires();
+  afficherJoueurs();
 }
 
 // ---------------------------------------------------------------- parties
 function afficherParties(liste) {
   const cont = document.getElementById("liste-parties");
   cont.innerHTML = "";
-  if (!liste || liste.length === 0) {
+  const src = liste || [];
+  const nonTerminees = src.filter((p) => !p.terminee);
+  const terminees    = src.filter((p) => p.terminee);
+  const aAfficher = [];
+  if (nonTerminees.length > 0) aAfficher.push(nonTerminees[0]);
+  if (terminees.length > 0)    aAfficher.push(terminees[0]);
+  if (aAfficher.length === 0) {
     cont.innerHTML = "<p>Aucune partie sauvegardée</p>";
     return;
   }
-  liste.forEach((p) => {
+  aAfficher.forEach((p) => {
     const carte = document.createElement("div");
     carte.className = "carte-partie";
 
@@ -195,7 +209,6 @@ function fermerReglages() {
 function remplirChampsReglages() {
   const r = etat.reglages || {};
   document.getElementById("rgl-prenom").value = r.prenom || "Joueur";
-  document.getElementById("rgl-theme").value = r.theme || "Classique";
   document.getElementById("rgl-mise30").checked = (r.mise_initiale_min || 30) >= 30;
   document.getElementById("rgl-manches").value = r.nb_manches || 1;
   document.getElementById("rgl-vitesse").value = r.vitesse_ia || "Normale";
@@ -227,7 +240,6 @@ async function sauvegarderReglages() {
   const data = {
     prenom: document.getElementById("rgl-prenom").value.trim() || "Joueur",
     avatar_index: etat.avatarIndex,
-    theme: document.getElementById("rgl-theme").value,
     mise_initiale_min: document.getElementById("rgl-mise30").checked ? 30 : 0,
     nb_manches: parseInt(document.getElementById("rgl-manches").value, 10) || 1,
     valeur_joker_penalite: jokerEl ? parseInt(jokerEl.value, 10) : 30,
@@ -266,7 +278,6 @@ async function lancerPartie() {
     nb_manches: parseInt(document.getElementById("rgl-manches").value, 10) || 1,
     valeur_joker_penalite: jokerEl ? parseInt(jokerEl.value, 10) : 30,
     vitesse_ia: document.getElementById("rgl-vitesse").value,
-    theme: document.getElementById("rgl-theme").value,
   };
 
   try {
@@ -281,7 +292,9 @@ async function lancerPartie() {
 function brancherEvenements() {
   document.getElementById("btn-reglages").addEventListener("click", afficherReglages);
   document.getElementById("btn-fermer-rgl").addEventListener("click", fermerReglages);
-  document.getElementById("btn-ajouter-adv").addEventListener("click", ajouterAdversaire);
+  document.querySelectorAll(".btn-ajout-niveau").forEach((b) => {
+    b.addEventListener("click", () => ajouterAdversaire(b.dataset.niveau));
+  });
   document.getElementById("btn-lancer").addEventListener("click", lancerPartie);
   document.querySelectorAll(".onglet").forEach((o) => {
     o.addEventListener("click", () => ouvrirOnglet(o.dataset.onglet));
