@@ -148,13 +148,22 @@ body { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
 #resultat-calcul.ko { color: #fecaca; }
 
 #zone-chevalet { background: var(--tapis-vert-fonce); padding: 8px 12px; }
+#chevalet-entete { display: flex; align-items: center; gap: 12px;
+  flex-wrap: wrap; }
 #mes-tuiles-label { color: #fff; font-size: 0.85rem; opacity: 0.85; }
-#chevalet { display: flex; flex-wrap: wrap; gap: 6px;
-  justify-content: center; padding: 8px 0; min-height: 58px; }
+#actions-chevalet { display: flex; gap: 8px; margin-left: auto; }
+#chevalet { display: flex; flex-wrap: wrap; gap: 8px;
+  justify-content: center; padding: 8px 0; min-height: 72px; }
+/* Tuiles du chevalet du joueur humain : plus grandes et lisibles
+   (public senior). Ne cible QUE #chevalet, pas le tapis ni la zone de travail. */
+#chevalet .tuile-jeu { width: 58px; height: 58px; font-size: 1.6rem; }
+#chevalet .tuile-jeu.joker { font-size: 1.8rem; }
+#chevalet .emplacement-vide { width: 58px; height: 58px; }
 .emplacement-vide { width: 44px; height: 44px;
   border: 1px dashed rgba(255,255,255,0.2); border-radius: 4px; }
-#btn-trier, #btn-reorg { padding: 5px 14px; border: none; border-radius: 6px;
-  cursor: pointer; background: rgba(255,255,255,0.2); color: #fff; font-weight: 600; }
+#btn-trier, #btn-reorg { padding: 10px 18px; border: none; border-radius: 6px;
+  cursor: pointer; background: rgba(255,255,255,0.2); color: #fff;
+  font-weight: 600; font-size: 1rem; min-height: 44px; }
 
 /* Réorganisation du chevalet (échange de tuiles sans jouer) */
 .tuile-jeu.cible-reorg { outline: 2px solid #22c55e; cursor: crosshair; }
@@ -220,8 +229,8 @@ body { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
 
 #barre-actions { display: flex; gap: 8px; padding: 8px 12px;
   background: var(--tapis-vert-fonce); justify-content: center; }
-#barre-actions button { padding: 8px 16px; border: none; border-radius: 6px;
-  cursor: pointer; font-weight: 600; }
+#barre-actions button { padding: 12px 22px; border: none; border-radius: 6px;
+  cursor: pointer; font-weight: 600; font-size: 1.05rem; min-height: 44px; }
 #btn-annuler   { background: #555; color: #fff; }
 #btn-verifier-calc { background: #1565c0; color: #fff; }
 #btn-jouer     { background: #2e7d32; color: #fff; }
@@ -238,4 +247,5 @@ button:disabled { opacity: 0.4; cursor: not-allowed; }
 #tableau-scores th, #tableau-scores td { padding: 6px 8px; text-align: left;
   border-bottom: 1px solid var(--couleur-bordure); }
 #tableau-scores tr.gagnant { font-weight: 700; color: var(--couleur-primaire); }
-#overlay-fin .carte button { margin-top: 8px; }
+#overlay-fin .carte button { margin-top: 10px; padding: 14px 22px;
+  font-size: 1.1rem; min-height: 44px; }

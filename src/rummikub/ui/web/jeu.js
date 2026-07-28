@@ -97,8 +97,9 @@ function rafraichirFichesJoueurs() {
     const meta = document.createElement("div");
     meta.className = "meta-fiche";
     const nbT = (j.chevalet || []).length;
-    meta.textContent = "🁢 " + nbT + " tuiles · " +
-      (j.score_manche >= 0 ? "+" : "") + (j.score_manche || 0) + " pts";
+    const sm = j.score_manche || 0;
+    meta.textContent = "🁢 " + nbT + " tuiles" +
+      (sm !== 0 ? " · " + (sm >= 0 ? "+" : "") + sm + " pts" : "");
     info.appendChild(meta);
     fiche.appendChild(info);
 
