@@ -298,6 +298,26 @@ function retirerDuChevalet(id) {
   return chev.splice(i, 1)[0];
 }
 
+// Depuis l'issue #14, chevaletLocal est un clone distinct du chevalet serveur
+// (etat.joueurs[indexHumain()].chevalet). Les deux doivent rester synchronisés
+// pendant le tour : sinon le compteur de tuiles de la fiche joueur (qui lit le
+// chevalet serveur) se désynchronise. Ces helpers gardent le chevalet serveur
+// en phase quand une tuile est déplacée vers/depuis le tapis.
+function retirerDuChevaletServeur(id) {
+  const chev = etat && etat.joueurs[indexHumain()] &&
+    etat.joueurs[indexHumain()].chevalet;
+  if (!chev) return;
+  const i = chev.findIndex((t) => t.id === id);
+  if (i >= 0) chev.splice(i, 1);
+}
+
+function rendreAuChevaletServeur(d) {
+  const chev = etat && etat.joueurs[indexHumain()] &&
+    etat.joueurs[indexHumain()].chevalet;
+  if (!chev || !d) return;
+  if (!chev.some((t) => t.id === d.id)) chev.push(d);
+}
+
 // ------------------------------------------------------------ zone de travail
 // Rendre une rangée active
 function activerRangee(index) {
@@ -349,6 +369,9 @@ function etendreTapis(idxCombo, position) {
   if (tuileSelectionnee === null) return;
   const d = retirerDuChevalet(tuileSelectionnee);
   if (!d) return;
+  // Retirer la tuile des DEUX vues du chevalet (locale + serveur) pour éviter
+  // la désynchronisation introduite à l'issue #14.
+  retirerDuChevaletServeur(d.id);
   if (position === "fin") plateauLocal[idxCombo].push(d);
   else plateauLocal[idxCombo].unshift(d);
   tuilesCeTour.push(d.id);
@@ -365,6 +388,8 @@ function reprendreTuile(id) {
     if (i >= 0) {
       const d = combo.splice(i, 1)[0];
       chevaletLocal.push(d);
+      // Restituer aussi la tuile au chevalet serveur (symétrie avec etendreTapis)
+      rendreAuChevaletServeur(d);
       break;
     }
   }
@@ -766,9 +791,6 @@ function trierChevalet() {
 // ------------------------------------------------------------ événements
 function brancherEvenements() {
   document.getElementById("btn-retour").addEventListener("click", onRetourAccueil);
-  document.getElementById("btn-recommencer").addEventListener("click", () => {
-    if (confirm("Recommencer la partie ?")) onNouvelleManche();
-  });
   document.getElementById("btn-trier").addEventListener("click", trierChevalet);
   document.getElementById("btn-reorg").addEventListener("click", basculerReorg);
   document.getElementById("btn-annuler").addEventListener("click", onAnnuler);

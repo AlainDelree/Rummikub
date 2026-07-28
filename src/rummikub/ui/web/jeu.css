@@ -4,7 +4,10 @@ body { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
   padding: 6px 12px; background: var(--tapis-vert-fonce); color: #fff; }
 #barre-top button { background: rgba(255,255,255,0.15); border: none;
   color: #fff; padding: 4px 10px; border-radius: 4px; cursor: pointer; }
-#compteur-pioche { margin-left: auto; font-size: 0.9rem; }
+
+/* Compteur de pioche : déplacé dans le panneau gauche, sous l'historique */
+#compteur-pioche { font-size: 0.85rem; color: #fff;
+  padding-top: 8px; border-top: 1px solid rgba(255,255,255,0.15); }
 
 #corps-jeu { display: flex; flex: 1; overflow: hidden; gap: 0; }
 
