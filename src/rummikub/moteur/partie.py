@@ -4,7 +4,9 @@ import copy
 import uuid
 
 from rummikub import config
-from rummikub.moteur.tuiles import Tuile, creer_sac, distribuer
+from rummikub.moteur.tuiles import (
+    Tuile, creer_sac, distribuer, tuile_depuis_dict,
+)
 from rummikub.moteur.validation import valider_plateau, valider_combinaison
 from rummikub.moteur.score import calculer_scores_manche, trouver_gagnant_manche
 
@@ -12,15 +14,8 @@ from rummikub.moteur.score import calculer_scores_manche, trouver_gagnant_manche
 # --------------------------------------------------------------------------- #
 # Sérialisation Tuile <-> dict
 # --------------------------------------------------------------------------- #
-
-def tuile_depuis_dict(d: dict) -> Tuile:
-    """Reconstitue une Tuile depuis son as_dict()."""
-    return Tuile(
-        d["id"],
-        d.get("valeur"),
-        d.get("couleur"),
-        d.get("est_joker", False),
-    )
+# ``tuile_depuis_dict`` est défini dans ``tuiles`` (foyer naturel de ``Tuile``)
+# et ré-exporté ici pour compatibilité avec les imports existants.
 
 
 def plateau_depuis_dict(plateau_dict: list) -> list[list[Tuile]]:

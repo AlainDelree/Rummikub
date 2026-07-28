@@ -33,6 +33,16 @@ class Tuile:
         }
 
 
+def tuile_depuis_dict(d: dict) -> Tuile:
+    """Reconstitue une Tuile depuis son ``as_dict()``."""
+    return Tuile(
+        d["id"],
+        d.get("valeur"),
+        d.get("couleur"),
+        d.get("est_joker", False),
+    )
+
+
 def creer_sac() -> list[Tuile]:
     """2 séries × 4 couleurs × 13 valeurs + 2 jokers = 106 tuiles.
 

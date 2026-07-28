@@ -100,24 +100,30 @@ class Api:
     def jeu_ia_jouer(self):
         from rummikub.moteur.ia import jouer_ia
         from rummikub.moteur.partie import (jouer_tour, piocher, passer_tour,
-                                            backup_debut_tour)
+                                            backup_debut_tour, annuler_tour)
         from rummikub.persistance.stockage import sauvegarder_partie
         etat = self._app.etat_jeu
+        if not etat:
+            return {"ok": False, "erreur": "Aucune partie en cours"}
         idx = etat["index_joueur_actuel"]
         if not etat["joueurs"][idx]["est_ia"]:
             return {"ok": False, "erreur": "Pas le tour d'une IA"}
+        backup_debut_tour(etat)
         res_ia = jouer_ia(etat, idx)
         if res_ia["action"] == "jouer":
             res = jouer_tour(etat, res_ia["ids_tuiles"],
                              res_ia["nouveau_plateau"])
+            if not res["ok"]:
+                # L'IA a proposé un coup invalide → pioche de secours.
+                annuler_tour(etat)
+                res = piocher(etat)
         elif res_ia["action"] == "piocher":
             res = piocher(etat)
         else:
             res = passer_tour(etat)
-        if res.get("ok"):
-            self._app.etat_jeu = res["etat"]
-            backup_debut_tour(self._app.etat_jeu)
-            sauvegarder_partie(self._app.etat_jeu)
+        self._app.etat_jeu = res["etat"]
+        backup_debut_tour(self._app.etat_jeu)
+        sauvegarder_partie(self._app.etat_jeu)
         return {"ok": True, "etat": self._app.etat_jeu}
 
     def jeu_retour_accueil(self):
