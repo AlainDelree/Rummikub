@@ -1,6 +1,74 @@
-<!DOCTYPE html><html lang="fr"><head><meta charset="UTF-8">
-  <title>Rummikub - Jeu</title>
+<!DOCTYPE html><html lang="fr"><head>
+  <meta charset="UTF-8"><title>Rummikub</title>
   <link rel="stylesheet" href="commun.css">
-  <link rel="stylesheet" href="jeu.css"></head>
-  <body><p style="color:#fff;padding:40px">Écran de jeu — à venir</p>
-  <script src="commun.js"></script><script src="jeu.js"></script></body></html>
+  <link rel="stylesheet" href="jeu.css">
+</head>
+<body>
+
+  <!-- Barre supérieure -->
+  <div id="barre-top">
+    <button id="btn-retour">← Retour au menu</button>
+    <button id="btn-recommencer">↺</button>
+    <span id="compteur-pioche">🎲 <span id="nb-pioche">?</span> tuiles</span>
+  </div>
+
+  <!-- Corps : 2 colonnes -->
+  <div id="corps-jeu">
+
+    <!-- Colonne gauche -->
+    <div id="colonne-gauche">
+      <div id="fiches-joueurs"></div>
+      <details id="details-historique">
+        <summary>Derniers coups (<span id="nb-coups">0</span>)</summary>
+        <div id="liste-historique"></div>
+      </details>
+      <div id="zone-verificateur">
+        <div>Vérificateur</div>
+        <input type="text" id="input-verif"
+          placeholder="ex: rouge_7,rouge_8,rouge_9">
+        <button id="btn-verif">Vérifier</button>
+        <div id="resultat-verif"></div>
+      </div>
+    </div>
+
+    <!-- Colonne droite : plateau -->
+    <div id="colonne-droite">
+      <div id="zone-plateau">
+        <!-- combinaisons générées dynamiquement -->
+      </div>
+      <div id="resultat-calcul"></div>
+      <button id="btn-nouvelle-combi">＋ Nouvelle combinaison</button>
+    </div>
+
+  </div>
+
+  <!-- Chevalet -->
+  <div id="zone-chevalet">
+    <div id="mes-tuiles-label">Mes tuiles — cliquez, réarrangez</div>
+    <div id="chevalet"></div>
+    <button id="btn-trier">Trier</button>
+  </div>
+
+  <!-- Barre d'actions -->
+  <div id="barre-actions">
+    <button id="btn-annuler" disabled>✕ Annuler</button>
+    <button id="btn-verifier-calc">🔍 Vérifier et calculer</button>
+    <button id="btn-jouer" disabled>✓ Jouer</button>
+    <button id="btn-piocher">⬇ Piocher</button>
+    <button id="btn-passer" disabled>⏭ Passer</button>
+  </div>
+
+  <!-- Overlay fin de manche -->
+  <div id="overlay-fin" class="overlay-cache">
+    <div class="carte">
+      <h2 id="titre-fin"></h2>
+      <table id="tableau-scores"></table>
+      <button id="btn-nouvelle-manche" class="btn-primaire">Nouvelle manche</button>
+      <button id="btn-fin-retour" class="btn-primaire">Retour au menu</button>
+    </div>
+  </div>
+
+  <div id="toast"></div>
+  <script src="commun.js"></script>
+  <script src="jeu.js"></script>
+</body></html>

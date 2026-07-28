@@ -3,6 +3,7 @@ import json
 from rummikub import reglages as Reglages
 from rummikub.persistance import stockage as Stockage
 
+
 class Api:
     def __init__(self, app):
         self._app = app   # référence à ApplicationRummikub
@@ -19,8 +20,6 @@ class Api:
 
     def lancer_nouvelle_partie(self, config):
         # config = {joueurs:[{nom,est_ia,niveau},...], regles:{...}}
-        # Crée la partie, navigue vers jeu.html
-        # Sera complété issue 2 quand le moteur sera dispo
         self._app.naviguer_vers_jeu(config)
         return {"ok": True}
 
@@ -31,11 +30,73 @@ class Api:
         self._app.reprendre_jeu(etat)
         return {"ok": True}
 
-    # --- Jeu (stubs, complétés issues 2 et 3) ---
-    def jeu_get_etat(self):            return {}
-    def jeu_jouer_coup(self, data):    return {"ok": False, "erreur": "non implémenté"}
-    def jeu_piocher(self):             return {"ok": False}
-    def jeu_passer(self):              return {"ok": False}
-    def jeu_annuler(self):             return {"ok": False}
+    # --- Jeu ---
+    def jeu_get_etat(self):
+        return self._app.etat_jeu_serialise()   # dict JSON
+
+    def jeu_jouer_coup(self, data):
+        # data = {"ids_tuiles": [...], "nouveau_plateau": [[dict_tuile,...], ...]}
+        from rummikub.moteur.partie import jouer_tour, backup_debut_tour
+        etat = self._app.etat_jeu
+        res = jouer_tour(etat, data["ids_tuiles"], data["nouveau_plateau"])
+        if res["ok"]:
+            self._app.etat_jeu = res["etat"]
+            backup_debut_tour(self._app.etat_jeu)
+            from rummikub.persistance.stockage import sauvegarder_partie
+            sauvegarder_partie(self._app.etat_jeu)
+        return res
+
+    def jeu_piocher(self):
+        from rummikub.moteur.partie import piocher, backup_debut_tour
+        res = piocher(self._app.etat_jeu)
+        self._app.etat_jeu = res["etat"]
+        backup_debut_tour(self._app.etat_jeu)
+        from rummikub.persistance.stockage import sauvegarder_partie
+        sauvegarder_partie(self._app.etat_jeu)
+        return res
+
+    def jeu_passer(self):
+        from rummikub.moteur.partie import passer_tour, backup_debut_tour
+        res = passer_tour(self._app.etat_jeu)
+        self._app.etat_jeu = res["etat"]
+        backup_debut_tour(self._app.etat_jeu)
+        from rummikub.persistance.stockage import sauvegarder_partie
+        sauvegarder_partie(self._app.etat_jeu)
+        return res
+
+    def jeu_annuler(self):
+        from rummikub.moteur.partie import annuler_tour
+        annuler_tour(self._app.etat_jeu)
+        return {"ok": True, "etat": self._app.etat_jeu}
+
+    def jeu_verifier_plateau(self, plateau):
+        # plateau = [[dict_tuile, ...], ...] — valide chaque combinaison.
+        from rummikub.moteur.partie import plateau_depuis_dict
+        from rummikub.moteur.validation import valider_plateau, valider_combinaison
+        combos = plateau_depuis_dict(plateau or [])
+        res = valider_plateau(combos)
+        points_total = 0
+        for combo in combos:
+            r = valider_combinaison(combo)
+            if r["valide"]:
+                points_total += r["points"]
+        return {"valide": res["valide"], "erreurs": res["erreurs"],
+                "points_total": points_total}
+
+    def jeu_verifier_combinaison(self, tuiles):
+        # tuiles = [dict_tuile, ...]
+        from rummikub.moteur.partie import tuile_depuis_dict
+        from rummikub.moteur.validation import valider_combinaison
+        combo = [tuile_depuis_dict(t) for t in (tuiles or [])]
+        return valider_combinaison(combo)
+
+    def jeu_nouvelle_manche(self):
+        # Stub — la relance de manche multi-manches sera traitée ultérieurement.
+        return {"ok": False, "erreur": "Nouvelle manche non encore implémentée"}
+
+    def jeu_ia_jouer(self):
+        # Appelé par JS pour déclencher un tour IA (issue 4)
+        return {"ok": False, "erreur": "IA non encore implémentée"}
+
     def jeu_retour_accueil(self):
         self._app.naviguer_vers_accueil(); return {"ok": True}

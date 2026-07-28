@@ -1,1 +1,98 @@
-/* À implémenter — issue 3 */
+body { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+
+#barre-top { display: flex; align-items: center; gap: 12px;
+  padding: 6px 12px; background: var(--tapis-vert-fonce); color: #fff; }
+#barre-top button { background: rgba(255,255,255,0.15); border: none;
+  color: #fff; padding: 4px 10px; border-radius: 4px; cursor: pointer; }
+#compteur-pioche { margin-left: auto; font-size: 0.9rem; }
+
+#corps-jeu { display: flex; flex: 1; overflow: hidden; gap: 0; }
+
+#colonne-gauche { width: 240px; min-width: 200px;
+  background: var(--tapis-vert-fonce); color: #fff;
+  display: flex; flex-direction: column; gap: 8px;
+  padding: 10px; overflow-y: auto; }
+
+.fiche-joueur { background: rgba(255,255,255,0.1); border-radius: 6px;
+  padding: 8px; display: flex; align-items: center; gap: 8px; }
+.fiche-joueur.actif { background: var(--couleur-humain-fond);
+  color: var(--couleur-texte); }
+.fiche-joueur .avatar-fiche { font-size: 1.6rem; }
+.fiche-joueur .info-fiche { flex: 1; min-width: 0; }
+.fiche-joueur .nom-fiche { font-weight: 600; }
+.fiche-joueur .meta-fiche { font-size: 0.75rem; opacity: 0.85; }
+.fiche-joueur .badge-niveau { font-size: 0.65rem; background: rgba(0,0,0,0.25);
+  border-radius: 3px; padding: 1px 5px; margin-left: 4px; }
+.fiche-joueur .badge-actif { font-size: 0.7rem; background: #22c55e;
+  color: #fff; border-radius: 3px; padding: 1px 5px; }
+
+#details-historique { font-size: 0.8rem; }
+#details-historique summary { cursor: pointer; padding: 4px 0; }
+#liste-historique { display: flex; flex-direction: column; gap: 2px; }
+.entree-historique { font-size: 0.72rem; opacity: 0.85;
+  border-left: 2px solid rgba(255,255,255,0.2); padding-left: 6px; }
+
+#zone-verificateur { margin-top: auto; background: rgba(0,0,0,0.15);
+  border-radius: 6px; padding: 8px; display: flex; flex-direction: column;
+  gap: 6px; font-size: 0.8rem; }
+#input-verif { padding: 5px; border-radius: 4px; border: none; font-size: 0.8rem; }
+#btn-verif { padding: 5px; border: none; border-radius: 4px; cursor: pointer;
+  background: #1565c0; color: #fff; }
+#resultat-verif { font-size: 0.75rem; min-height: 1em; }
+#resultat-verif.ok  { color: #86efac; }
+#resultat-verif.ko  { color: #fca5a5; }
+
+#colonne-droite { flex: 1; display: flex; flex-direction: column;
+  overflow: hidden; background: var(--tapis-vert-clair); }
+
+#zone-plateau { flex: 1; overflow-y: auto; padding: 12px;
+  display: flex; flex-wrap: wrap; align-content: flex-start; gap: 10px; }
+
+.groupe-combinaison { display: flex; flex-wrap: wrap; gap: 4px;
+  padding: 8px; border: 1px dashed rgba(255,255,255,0.3);
+  border-radius: 6px; background: rgba(0,0,0,0.15); align-items: center; }
+
+.zone-insertion { width: 44px; height: 44px;
+  border: 2px dashed rgba(255,255,255,0.4); border-radius: 4px;
+  cursor: pointer; opacity: 0.4; transition: opacity 0.15s; }
+.zone-insertion:hover { opacity: 1; background: rgba(255,255,255,0.1); }
+
+#resultat-calcul { padding: 0 12px; min-height: 1.4em; color: #fff;
+  font-size: 0.9rem; }
+#resultat-calcul.ok { color: #bbf7d0; }
+#resultat-calcul.ko { color: #fecaca; }
+
+#btn-nouvelle-combi { margin: 8px 12px; padding: 8px 14px; align-self: flex-start;
+  border: none; border-radius: 6px; cursor: pointer;
+  background: rgba(255,255,255,0.2); color: #fff; font-weight: 600; }
+
+#zone-chevalet { background: var(--tapis-vert-fonce); padding: 8px 12px; }
+#mes-tuiles-label { color: #fff; font-size: 0.85rem; opacity: 0.85; }
+#chevalet { display: flex; flex-wrap: wrap; gap: 6px;
+  justify-content: center; padding: 8px 0; min-height: 58px; }
+.emplacement-vide { width: 44px; height: 44px;
+  border: 1px dashed rgba(255,255,255,0.2); border-radius: 4px; }
+#btn-trier { padding: 5px 14px; border: none; border-radius: 6px; cursor: pointer;
+  background: rgba(255,255,255,0.2); color: #fff; font-weight: 600; }
+
+#barre-actions { display: flex; gap: 8px; padding: 8px 12px;
+  background: var(--tapis-vert-fonce); justify-content: center; }
+#barre-actions button { padding: 8px 16px; border: none; border-radius: 6px;
+  cursor: pointer; font-weight: 600; }
+#btn-annuler   { background: #555; color: #fff; }
+#btn-verifier-calc { background: #1565c0; color: #fff; }
+#btn-jouer     { background: #2e7d32; color: #fff; }
+#btn-piocher   { background: #5d4037; color: #fff; }
+#btn-passer    { background: #444; color: #fff; }
+button:disabled { opacity: 0.4; cursor: not-allowed; }
+
+.overlay-cache   { display: none; }
+.overlay-visible { display: flex; position: fixed; inset: 0;
+  background: rgba(0,0,0,0.7); z-index: 100;
+  align-items: center; justify-content: center; }
+
+#tableau-scores { width: 100%; border-collapse: collapse; margin: 12px 0; }
+#tableau-scores th, #tableau-scores td { padding: 6px 8px; text-align: left;
+  border-bottom: 1px solid var(--couleur-bordure); }
+#tableau-scores tr.gagnant { font-weight: 700; color: var(--couleur-primaire); }
+#overlay-fin .carte button { margin-top: 8px; }
