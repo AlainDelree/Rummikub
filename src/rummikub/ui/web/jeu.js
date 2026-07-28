@@ -445,7 +445,9 @@ function trierChevalet() {
 // ------------------------------------------------------------ événements
 function brancherEvenements() {
   document.getElementById("btn-retour").addEventListener("click", onRetourAccueil);
-  document.getElementById("btn-recommencer").addEventListener("click", onAnnuler);
+  document.getElementById("btn-recommencer").addEventListener("click", () => {
+    if (confirm("Recommencer la partie ?")) onNouvelleManche();
+  });
   document.getElementById("btn-nouvelle-combi").addEventListener("click", nouvelleCombinaison);
   document.getElementById("btn-trier").addEventListener("click", trierChevalet);
   document.getElementById("btn-annuler").addEventListener("click", onAnnuler);
