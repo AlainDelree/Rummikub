@@ -8,6 +8,7 @@ DEFAUTS = {
     "nb_manches": 1,
     "valeur_joker_penalite": 30,
     "vitesse_ia": "Lente",
+    "mode_reorg": "clic",   # "clic" (appui long + clic) ou "drag" (glisser-déposer)
 }
 
 def charger():

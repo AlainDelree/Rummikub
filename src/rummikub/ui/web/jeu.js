@@ -13,11 +13,13 @@ let tuilesCeTour = [];        // ids des tuiles posées ce tour
 let plateauLocal = [];        // tapis existant, potentiellement étendu ce tour
 let travail = [[], [], [], []]; // 4 rangées de pose, chacune = [dict_tuile, ...]
 let rangeeActive = 0;         // index 0-3 de la rangée de travail active
-let modeReorg = false;        // mode réorganisation du chevalet actif ?
-let reorgSource = null;       // id de la tuile source d'un échange en cours
+let reorgSource = null;       // id de la tuile source d'un échange (réorg clic-long)
 let modeTapis = false;        // mode manipulation du tapis actif ?
 let tuilesOrigineTapis = [];  // ids des tuiles PRISES sur le tapis ce tour
 let dernierClicChevalet = { id: null, temps: 0 }; // détection du double-clic
+// Détection de l'appui long (500 ms) sur une tuile du chevalet → active la réorg
+let appuiLong = { timer: null, id: null, declenche: false };
+let dragSourceId = null;      // id de la tuile en cours de glisser-déposer
 
 // ------------------------------------------------------------ utilitaires
 function clone(x) { return JSON.parse(JSON.stringify(x)); }
@@ -258,6 +260,7 @@ function rafraichirChevalet() {
   const chev = document.getElementById("chevalet");
   chev.innerHTML = "";
   const tuiles = chevaletLocal;
+  const drag = modeReorgReglage() === "drag";
   tuiles.forEach((d) => {
     const el = tuileDepuisDict(d);
     if (d.id === tuileSelectionnee) el.classList.add("selectionnee");
@@ -265,17 +268,24 @@ function rafraichirChevalet() {
       // Un échange est en cours : la source est surlignée, les autres sont cibles
       if (d.id === reorgSource) el.classList.add("source-reorg");
       else el.classList.add("cible-reorg");
-    } else if (modeReorg) {
-      el.classList.add("mode-reorg");
     }
-    el.addEventListener("click", () => onClickTuileChevalet(d));
+    if (drag) brancherDragChevalet(el, d);
+    else brancherAppuiLongChevalet(el, d);
     chev.appendChild(el);
   });
   for (let i = tuiles.length; i < 14; i++) {
     const vide = document.createElement("div");
     vide.className = "emplacement-vide";
+    // En mode glisser-déposer, un emplacement vide accepte une tuile → fin de rangée
+    if (drag) brancherDropFin(vide);
     chev.appendChild(vide);
   }
+}
+
+// Mode de réorganisation choisi dans les réglages : "clic" (appui long + clic)
+// ou "drag" (glisser-déposer). Repli sur "clic" si non défini.
+function modeReorgReglage() {
+  return (etat && etat.config && etat.config.mode_reorg) || "clic";
 }
 
 function rafraichirBoutons() {
@@ -320,18 +330,105 @@ function selectionnerTuile(id) {
   rafraichirPlateau(); // afficher/masquer les zones d'extension du tapis
 }
 
-// Bascule le mode réorganisation du chevalet (échange de tuiles sans jouer)
-function basculerReorg() {
-  modeReorg = !modeReorg;
-  reorgSource = null;
-  document.getElementById("btn-reorg").classList.toggle("actif", modeReorg);
+// -------------------------------------------- réorganisation par appui long
+// Un appui maintenu 500 ms sur une tuile du chevalet active le mode réorg pour
+// cette tuile (reorgSource) ; un appui court reste une sélection normale.
+function brancherAppuiLongChevalet(el, d) {
+  el.addEventListener("pointerdown", () => demarrerAppuiLong(d));
+  el.addEventListener("pointerup", () => finAppuiLong(d));
+  el.addEventListener("pointerleave", annulerAppuiLong);
+  el.addEventListener("pointercancel", annulerAppuiLong);
+}
+
+function demarrerAppuiLong(d) {
+  annulerAppuiLong();
+  appuiLong.id = d.id;
+  appuiLong.declenche = false;
+  appuiLong.timer = setTimeout(() => {
+    appuiLong.declenche = true;
+    // Active (ou désactive si déjà source) la réorg pour cette tuile.
+    reorgSource = (reorgSource === d.id) ? null : d.id;
+    rafraichirChevalet();
+  }, 500);
+}
+
+function annulerAppuiLong() {
+  if (appuiLong.timer) { clearTimeout(appuiLong.timer); appuiLong.timer = null; }
+}
+
+function finAppuiLong(d) {
+  const declenche = appuiLong.declenche;
+  annulerAppuiLong();
+  appuiLong.declenche = false;
+  // Appui long déjà traité (réorg activée) : ne pas déclencher le clic normal.
+  if (declenche) return;
+  onClickTuileChevalet(d);
+}
+
+// -------------------------------------------- réorganisation par glisser-déposer
+function brancherDragChevalet(el, d) {
+  el.draggable = true;
+  el.addEventListener("dragstart", (e) => {
+    dragSourceId = d.id;
+    if (e.dataTransfer) {
+      e.dataTransfer.effectAllowed = "move";
+      try { e.dataTransfer.setData("text/plain", d.id); } catch (_) {}
+    }
+    el.classList.add("drag-en-cours");
+  });
+  el.addEventListener("dragend", () => {
+    dragSourceId = null;
+    el.classList.remove("drag-en-cours");
+  });
+  el.addEventListener("dragover", (e) => {
+    e.preventDefault();
+    if (e.dataTransfer) e.dataTransfer.dropEffect = "move";
+    el.classList.add("drag-survol");
+  });
+  el.addEventListener("dragleave", () => el.classList.remove("drag-survol"));
+  el.addEventListener("drop", (e) => {
+    e.preventDefault();
+    el.classList.remove("drag-survol");
+    const src = dragSourceId ||
+      (e.dataTransfer ? e.dataTransfer.getData("text/plain") : null);
+    deplacerTuileChevalet(src, d.id);
+  });
+  // Un clic simple (sans glisser) conserve la sélection normale.
+  el.addEventListener("click", () => onClickTuileChevalet(d));
+}
+
+// Emplacement vide : cible de dépôt qui envoie la tuile glissée en fin de chevalet.
+function brancherDropFin(el) {
+  el.addEventListener("dragover", (e) => { e.preventDefault(); });
+  el.addEventListener("drop", (e) => {
+    e.preventDefault();
+    const src = dragSourceId ||
+      (e.dataTransfer ? e.dataTransfer.getData("text/plain") : null);
+    deplacerTuileChevalet(src, null);
+  });
+}
+
+// Déplace la tuile `idSource` juste avant `idCible` dans chevaletLocal.
+// Si `idCible` est null, la tuile est placée en fin de chevalet.
+function deplacerTuileChevalet(idSource, idCible) {
+  if (!idSource || idSource === idCible) return;
+  const iS = chevaletLocal.findIndex((t) => t.id === idSource);
+  if (iS < 0) return;
+  const [d] = chevaletLocal.splice(iS, 1);
+  if (idCible === null) {
+    chevaletLocal.push(d);
+  } else {
+    const iC = chevaletLocal.findIndex((t) => t.id === idCible);
+    if (iC < 0) chevaletLocal.push(d);
+    else chevaletLocal.splice(iC, 0, d);
+  }
   rafraichirChevalet();
 }
 
-// Clic sur une tuile du chevalet : réorganisation OU sélection pour pose
+// Clic sur une tuile du chevalet : échange (réorg en cours) OU sélection pour pose
 function onClickTuileChevalet(d) {
   if (reorgSource !== null) {
-    // mode réorganisation : deuxième clic
+    // réorganisation : clic sur une seconde tuile → échange
     if (d.id === reorgSource) { reorgSource = null; rafraichirChevalet(); return; }
     // Échanger les deux tuiles dans le chevalet
     const chev = chevaletLocal;
@@ -339,12 +436,6 @@ function onClickTuileChevalet(d) {
     const iB = chev.findIndex((t) => t.id === d.id);
     if (iA >= 0 && iB >= 0) [chev[iA], chev[iB]] = [chev[iB], chev[iA]];
     reorgSource = null;
-    rafraichirChevalet();
-    return;
-  }
-  if (modeReorg) {
-    // premier clic en mode réorg : sélectionner la source
-    reorgSource = d.id;
     rafraichirChevalet();
     return;
   }
@@ -1002,7 +1093,6 @@ function trierChevalet() {
 function brancherEvenements() {
   document.getElementById("btn-retour").addEventListener("click", onRetourAccueil);
   document.getElementById("btn-trier").addEventListener("click", trierChevalet);
-  document.getElementById("btn-reorg").addEventListener("click", basculerReorg);
   document.getElementById("btn-annuler").addEventListener("click", onAnnuler);
   document.getElementById("btn-mode-tapis").addEventListener("click", basculerModeTapis);
   document.getElementById("btn-verifier-calc").addEventListener("click", onVerifierCalc);

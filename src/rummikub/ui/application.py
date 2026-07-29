@@ -20,16 +20,24 @@ class ApplicationRummikub:
 
     def naviguer_vers_jeu(self, config):
         from rummikub.moteur.partie import creer_partie, backup_debut_tour
+        from rummikub import reglages as Reglages
         self.etat_jeu = creer_partie(config["joueurs"], config["regles"])
         # Mémorise la vitesse IA (utile côté JS, non gérée par le moteur).
         self.etat_jeu["config"]["vitesse_ia"] = \
             config.get("regles", {}).get("vitesse_ia", "Normale")
+        # Mode de réorganisation du chevalet (préférence UI, lue depuis config.json).
+        self.etat_jeu["config"]["mode_reorg"] = \
+            Reglages.charger().get("mode_reorg", "clic")
         backup_debut_tour(self.etat_jeu)
         self._window.load_url(str(_WEB / "jeu.html"))
 
     def reprendre_jeu(self, etat):
         from rummikub.moteur.partie import backup_debut_tour
+        from rummikub import reglages as Reglages
         self.etat_jeu = etat
+        # Reflète toujours la préférence UI courante, même sur partie reprise.
+        self.etat_jeu.setdefault("config", {})["mode_reorg"] = \
+            Reglages.charger().get("mode_reorg", "clic")
         backup_debut_tour(self.etat_jeu)
         self._window.load_url(str(_WEB / "jeu.html"))
 

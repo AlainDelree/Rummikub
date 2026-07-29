@@ -240,6 +240,10 @@ function remplirChampsReglages() {
   document.querySelectorAll("input[name='joker-val']").forEach((el) => {
     el.checked = el.value === jokerVal;
   });
+  const modeReorg = r.mode_reorg || "clic";
+  document.querySelectorAll("input[name='mode-reorg']").forEach((el) => {
+    el.checked = el.value === modeReorg;
+  });
   construireGrilleAvatars();
 }
 
@@ -261,6 +265,7 @@ function construireGrilleAvatars() {
 
 async function sauvegarderReglages() {
   const jokerEl = document.querySelector("input[name='joker-val']:checked");
+  const reorgEl = document.querySelector("input[name='mode-reorg']:checked");
   const data = {
     prenom: document.getElementById("rgl-prenom").value.trim() || "Joueur",
     avatar_index: etat.avatarIndex,
@@ -268,6 +273,7 @@ async function sauvegarderReglages() {
     nb_manches: parseInt(document.getElementById("rgl-manches").value, 10) || 1,
     valeur_joker_penalite: jokerEl ? parseInt(jokerEl.value, 10) : 30,
     vitesse_ia: document.getElementById("rgl-vitesse").value,
+    mode_reorg: reorgEl ? reorgEl.value : "clic",
   };
   try {
     etat.reglages = await window.pywebview.api.sauvegarder_reglages(data);
