@@ -4,15 +4,15 @@
 #btn-reglages:hover { opacity: 1; }
 
 /* Espace le titre RUMMIKUB de la section JOUEURS */
-#titre-container { margin-bottom: 34px; }
+#titre-container { margin-bottom: 43px; }
 
-.section-label { margin-bottom: 18px; justify-content: flex-start; }
-#section-joueurs { margin-bottom: 34px; }
+.section-label { margin-bottom: 24px; justify-content: flex-start; }
+#section-joueurs { margin-bottom: 43px; }
 /* Tuiles-titres plus petites que le titre RUMMIKUB (52px), pour JOUEURS/PARTIES */
 .section-label .tuile-titre { --tw: 33px; }
 
 .carte-joueur { display: flex; align-items: center; gap: 10px;
-  padding: 13px 18px; border-radius: 6px; margin-bottom: 10px; }
+  padding: 18px 24px; border-radius: 6px; margin-bottom: 16px; }
 .carte-joueur.humain { background: var(--couleur-humain-fond); }
 .carte-joueur.ia     { background: var(--couleur-ordinateur-fond); }
 
@@ -36,15 +36,15 @@
 
 /* Boutons d'ajout d'adversaire par niveau */
 #boutons-ajout-niveau { display: flex; flex-wrap: wrap; align-items: center;
-  gap: 6px; margin-top: 18px; }
+  gap: 6px; margin-top: 30px; }
 #label-ajout { font-size: 0.85rem; opacity: 0.8; margin-right: 4px; }
 .btn-ajout-niveau:disabled { opacity: 0.4; cursor: not-allowed; }
 
 .carte-partie { display: flex; align-items: center; justify-content: space-between;
-  padding: 11px 16px; border: 1px solid var(--couleur-bordure);
-  border-radius: 6px; margin-bottom: 10px; font-size: 0.88rem; }
+  padding: 16px 22px; border: 1px solid var(--couleur-bordure);
+  border-radius: 6px; margin-bottom: 16px; font-size: 0.88rem; }
 /* Espace la liste des parties sauvegardées du bouton Lancer */
-#liste-parties { margin-bottom: 20px; }
+#liste-parties { margin-bottom: 50px; }
 .badge-terminee { background: #555; color: #fff; border-radius: 4px;
   padding: 1px 7px; font-size: 0.75rem; }
 

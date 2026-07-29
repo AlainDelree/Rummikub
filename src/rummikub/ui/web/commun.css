@@ -158,9 +158,9 @@ body {
   background: #fff;
   border-radius: var(--rayon-bordure);
   box-shadow: var(--ombre);
-  padding: 38px;
+  padding: 50px;
   max-width: 700px;
-  margin: 32px auto;
+  margin: 44px auto;
 }
 
 /* --- Titre en tuiles --- */
