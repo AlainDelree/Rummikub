@@ -60,9 +60,16 @@ class ApplicationRummikub:
         def apres_demarrage():
             self._window.maximize()
 
-        # debug=True désactive le cache disque persistant de WebKit : sans cela,
-        # les modifications CSS/JS ne sont pas prises en compte au relancement
-        # (pywebview sert les fichiers via HTTP local, mis en cache par WebKit).
+        # Désactivation ciblée du cache WebKit SANS ouvrir la DevTools.
+        # Le mode debug active `enable_developer_extras`, ce qui désactive le
+        # cache mémoire/disque de WebKit2GTK — indispensable pour que les
+        # modifications CSS/JS soient prises en compte sans vidage manuel.
+        # Mais `debug=True` ouvre aussi l'inspecteur au démarrage, inacceptable
+        # pour un jeu. On le supprime en forçant OPEN_DEVTOOLS_IN_DEBUG=False :
+        # la DevTools n'est jamais affichée tout en gardant le cache désactivé
+        # (cf. webview/platforms/gtk.py : `if settings['OPEN_DEVTOOLS_IN_DEBUG']:
+        # self.webview.get_inspector().show()`).
+        webview.settings['OPEN_DEVTOOLS_IN_DEBUG'] = False
         webview.start(apres_demarrage, debug=True)
 
 
