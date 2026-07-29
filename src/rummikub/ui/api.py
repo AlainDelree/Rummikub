@@ -1,12 +1,29 @@
 """API pywebview : méthodes appelables depuis JS via window.pywebview.api.*"""
 import json
+import threading
 from rummikub import reglages as Reglages
 from rummikub.persistance import stockage as Stockage
 
 
 class Api:
+    # Délai (s) avant une navigation load_url : laisse pywebview livrer la
+    # valeur de retour de l'appel API courant AVANT de changer de page.
+    _DELAI_NAVIGATION = 0.05
+
     def __init__(self, app):
         self._app = app   # référence à ApplicationRummikub
+
+    def _differer_navigation(self, fn):
+        """Exécute une navigation (load_url) hors du thread de l'appel API.
+
+        pywebview livre la valeur de retour d'une méthode via un callback JS
+        (window.pywebview._returnValuesCallbacks[...]). Si load_url est appelé
+        dans le même thread synchrone, la nouvelle page détruit le contexte JS
+        avant que ce callback ne soit invoqué → JavascriptException en boucle.
+        On diffère donc la navigation sur un thread minuteur : la méthode API
+        retourne d'abord, le callback est livré, puis la page change.
+        """
+        threading.Timer(self._DELAI_NAVIGATION, fn).start()
 
     # --- Accueil ---
     def charger_accueil(self):
@@ -25,14 +42,14 @@ class Api:
 
     def lancer_nouvelle_partie(self, config):
         # config = {joueurs:[{nom,est_ia,niveau},...], regles:{...}}
-        self._app.naviguer_vers_jeu(config)
+        self._differer_navigation(lambda: self._app.naviguer_vers_jeu(config))
         return {"ok": True}
 
     def reprendre_partie(self, pid):
         etat = Stockage.charger_partie(pid)
         if not etat:
             return {"ok": False, "erreur": "Partie introuvable"}
-        self._app.reprendre_jeu(etat)
+        self._differer_navigation(lambda: self._app.reprendre_jeu(etat))
         return {"ok": True}
 
     # --- Jeu ---
@@ -132,4 +149,5 @@ class Api:
         return {"ok": True, "etat": self._app.etat_jeu}
 
     def jeu_retour_accueil(self):
-        self._app.naviguer_vers_accueil(); return {"ok": True}
+        self._differer_navigation(lambda: self._app.naviguer_vers_accueil())
+        return {"ok": True}
