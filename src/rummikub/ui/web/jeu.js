@@ -265,13 +265,6 @@ function rafraichirPlateau() {
 
     zone.appendChild(groupe);
   });
-
-  // Clic sur le fond du tapis (hors combo) : sortir du mode insertion ciblée.
-  // Les combos font stopPropagation, donc ce listener ne se déclenche que si le
-  // clic atterrit sur le fond du tapis (issue #48).
-  zone.addEventListener("click", () => {
-    if (comboActive !== null) { comboActive = null; rafraichirPlateau(); }
-  });
 }
 
 // Rendu de la zone de travail (4 rangées)
