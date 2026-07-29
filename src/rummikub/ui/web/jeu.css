@@ -119,6 +119,16 @@ body { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
   border-color: #22c55e;
   color: #22c55e;
 }
+/* Zone d'insertion interne (entre deux tuiles) : plus étroite pour ne pas
+   surcharger l'affichage des combinaisons. */
+.zone-ext.zone-ext-interne { width: 20px; font-size: 1rem; }
+/* Trou laissé par un joker pris via le mode tapis : surligné en orange pour
+   guider vers la position de remplacement (reste visible même sans survol). */
+.zone-ext.trou-joker {
+  opacity: 1; pointer-events: auto;
+  border-style: solid; border-color: #f59e0b; color: #f59e0b;
+  animation: pulse-joker 1s infinite alternate;
+}
 
 /* Zone de travail (4 rangées de pose) */
 #zone-travail {
