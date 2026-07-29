@@ -16,7 +16,8 @@ body { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
 .sac-img { width: 100%; height: auto; display: block;
   filter: drop-shadow(0 2px 3px rgba(0,0,0,0.35)); }
 .sac-nombre {
-  position: absolute; left: 0; right: 0; top: 60%;
+  position: absolute; left: 0; right: 0; top: 50%;
+  transform: translateY(-50%);
   text-align: center; line-height: 1;
   font-weight: 800; font-size: 1.4rem; color: #5b3f22;
   text-shadow: 0 1px 0 rgba(255,255,255,0.75), 0 0 3px rgba(255,255,255,0.6);

@@ -15,6 +15,7 @@ let travail = [[], [], [], []]; // 4 rangées de pose, chacune = [dict_tuile, ..
 let rangeeActive = 0;         // index 0-3 de la rangée de travail active
 let modeReorg = false;        // mode réorganisation du chevalet actif ?
 let reorgSource = null;       // id de la tuile source d'un échange en cours
+let dernierClicChevalet = { id: null, temps: 0 }; // détection du double-clic
 
 // ------------------------------------------------------------ utilitaires
 function clone(x) { return JSON.parse(JSON.stringify(x)); }
@@ -327,8 +328,26 @@ function onClickTuileChevalet(d) {
     rafraichirChevalet();
     return;
   }
-  // comportement normal : sélection pour pose
+  // comportement normal : un clic sélectionne, un double-clic pose directement.
+  // Détection manuelle du double-clic : le re-rendu du chevalet remplace les
+  // éléments DOM à chaque clic, donc l'événement natif « dblclick » n'est pas
+  // fiable. On compare l'id de la tuile et l'horodatage du clic précédent.
+  const maintenant = Date.now();
+  if (dernierClicChevalet.id === d.id &&
+      maintenant - dernierClicChevalet.temps < 350) {
+    dernierClicChevalet = { id: null, temps: 0 };
+    poserTuileDirectement(d);
+    return;
+  }
+  dernierClicChevalet = { id: d.id, temps: maintenant };
   selectionnerTuile(d.id);
+}
+
+// Double-clic sur une tuile du chevalet : la placer directement dans la rangée
+// active (rangeeActive vaut 0 par défaut si aucune n'a été activée).
+function poserTuileDirectement(d) {
+  tuileSelectionnee = d.id;
+  placerTuileDansRangee(); // gère lui-même le blocage « pas votre tour »
 }
 
 function retirerDuChevalet(id) {
@@ -368,6 +387,7 @@ function activerRangee(index) {
 // Placer la tuile sélectionnée du chevalet dans la rangée active
 function placerTuileDansRangee() {
   if (tuileSelectionnee === null) return;
+  if (!estMonTour()) { toast("Ce n'est pas votre tour", "erreur"); return; }
   const d = retirerDuChevalet(tuileSelectionnee);
   if (!d) return;
   travail[rangeeActive].push(d);
@@ -407,6 +427,7 @@ function viderRangee(index) {
 // Ajouter la tuile sélectionnée à l'extrémité d'une combinaison du tapis
 function etendreTapis(idxCombo, position) {
   if (tuileSelectionnee === null) return;
+  if (!estMonTour()) { toast("Ce n'est pas votre tour", "erreur"); return; }
   const d = retirerDuChevalet(tuileSelectionnee);
   if (!d) return;
   // Retirer la tuile des DEUX vues du chevalet (locale + serveur) pour éviter
@@ -485,6 +506,7 @@ function peutRemplacerJoker(tuileSel, infoJoker) {
 // Tenter de récupérer un joker du tapis en le remplaçant par la tuile sélectionnée.
 function tenterRecupererJoker(idxCombo, idxTuile, dictJoker) {
   if (!tuileSelectionnee) return;
+  if (!estMonTour()) { toast("Ce n'est pas votre tour", "erreur"); return; }
 
   const chev = chevaletLocal;
   const idxSel = chev.findIndex((t) => t.id === tuileSelectionnee);
