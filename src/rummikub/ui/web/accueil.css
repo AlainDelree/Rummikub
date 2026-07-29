@@ -3,6 +3,9 @@
   border: none; font-size: 1.4rem; cursor: pointer; opacity: 0.7; }
 #btn-reglages:hover { opacity: 1; }
 
+/* Espace le titre RUMMIKUB de la section JOUEURS */
+#titre-container { margin-bottom: 18px; }
+
 .section-label { margin-bottom: 14px; justify-content: flex-start; }
 #section-joueurs { margin-bottom: 28px; }
 /* Tuiles-titres plus petites que le titre RUMMIKUB (52px), pour JOUEURS/PARTIES */
