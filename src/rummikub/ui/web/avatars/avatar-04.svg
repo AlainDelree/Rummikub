@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img">
+<defs><clipPath id="cadre"><circle cx="32" cy="32" r="32"/></clipPath></defs>
+<g clip-path="url(#cadre)">
+<rect width="64" height="64" fill="#ffe4a3"/>
+<path d="M9 64 Q9 49 22 46 L42 46 Q55 49 55 64 Z" fill="#27ae60"/>
+<rect x="28" y="40" width="8" height="8" fill="#f6d3b0"/>
+<circle cx="17" cy="32" r="3.4" fill="#f6d3b0"/>
+<circle cx="47" cy="32" r="3.4" fill="#f6d3b0"/>
+<circle cx="32" cy="30" r="15" fill="#f6d3b0"/>
+<path d="M16 34 Q15 24 20 22 L20 30 Q17 32 17 34 Z" fill="#7a7a7a"/><path d="M48 34 Q49 24 44 22 L44 30 Q47 32 47 34 Z" fill="#7a7a7a"/>
+<circle cx="25" cy="30" r="1.9" fill="#3a2a20"/>
+<circle cx="39" cy="30" r="1.9" fill="#3a2a20"/>
+<path d="M27 38 Q32 41.5 37 38" fill="none" stroke="#9c4a37" stroke-width="1.7" stroke-linecap="round"/>
+<path d="M25 37.5 Q28.5 36 32 37.8 Q35.5 36 39 37.5 Q35.5 40 32 38.6 Q28.5 40 25 37.5 Z" fill="#7a7a7a"/>
+<path d="M18 32 Q18 49 32 49 Q46 49 46 32 Q46 41 32 41 Q18 41 18 32 Z" fill="#8a8a8a"/>
+</g></svg>

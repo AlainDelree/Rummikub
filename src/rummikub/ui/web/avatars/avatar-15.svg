@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img">
+<defs><clipPath id="cadre"><circle cx="32" cy="32" r="32"/></clipPath></defs>
+<g clip-path="url(#cadre)">
+<rect width="64" height="64" fill="#d7bde2"/>
+<path d="M9 64 Q9 49 22 46 L42 46 Q55 49 55 64 Z" fill="#f39c12"/>
+<rect x="28" y="40" width="8" height="8" fill="#f6d3b0"/>
+<circle cx="17" cy="32" r="3.4" fill="#f6d3b0"/>
+<circle cx="47" cy="32" r="3.4" fill="#f6d3b0"/>
+<circle cx="32" cy="30" r="15" fill="#f6d3b0"/>
+<path d="M16 30 Q16 11 32 11 Q48 11 48 30 Q48 20 32 20 Q16 20 16 30 Z" fill="#c0c0c0"/>
+<circle cx="25" cy="30" r="1.9" fill="#3a2a20"/>
+<circle cx="39" cy="30" r="1.9" fill="#3a2a20"/>
+<path d="M27 38 Q32 41.5 37 38" fill="none" stroke="#9c4a37" stroke-width="1.7" stroke-linecap="round"/>
+<path d="M15 22 Q16 12 32 12 Q48 12 49 22 Q40 18 32 18 Q24 18 15 22 Z" fill="#8e44ad"/><circle cx="46" cy="12" r="2.5" fill="#8e44ad"/>
+</g></svg>
