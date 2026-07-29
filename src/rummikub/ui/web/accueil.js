@@ -207,10 +207,12 @@ function afficherParties(liste) {
   });
 }
 
-async function reprendrePartie(pid) {
+function reprendrePartie(pid) {
+  // Fire and forget : la navigation vers jeu.html se fait côté Python.
+  // Ne pas « await » (voir lancerPartie) : le callback JS disparaît avec la
+  // page et pywebview lèverait une TypeError.
   try {
-    const r = await window.pywebview.api.reprendre_partie(pid);
-    if (!r || !r.ok) toast((r && r.erreur) || "Impossible de reprendre", "erreur");
+    window.pywebview.api.reprendre_partie(pid);
   } catch (e) {
     toast("Erreur : " + e, "erreur");
   }
@@ -306,9 +308,11 @@ async function lancerPartie() {
     vitesse_ia: document.getElementById("rgl-vitesse").value,
   };
 
+  // Fire and forget : la navigation vers jeu.html se fait côté Python.
+  // Ne pas « await » : la page a déjà changé quand Python répond, donc le
+  // callback JS n'existe plus et pywebview lèverait une TypeError.
   try {
-    const r = await window.pywebview.api.lancer_nouvelle_partie({ joueurs, regles });
-    if (!r || !r.ok) toast((r && r.erreur) || "Impossible de lancer", "erreur");
+    window.pywebview.api.lancer_nouvelle_partie({ joueurs, regles });
   } catch (e) {
     toast("Erreur : " + e, "erreur");
   }
