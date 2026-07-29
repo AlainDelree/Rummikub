@@ -20,6 +20,7 @@ let dernierClicChevalet = { id: null, temps: 0 }; // détection du double-clic
 // Détection de l'appui long (500 ms) sur une tuile du chevalet → active la réorg
 let appuiLong = { timer: null, id: null, declenche: false };
 let dragSourceId = null;      // id de la tuile en cours de glisser-déposer
+let dernierePositionSouris = { x: 0, y: 0 }; // dernière position connue du curseur (fantôme, issue #50)
 
 // ------------------------------------------------------------ utilitaires
 function clone(x) { return JSON.parse(JSON.stringify(x)); }
@@ -60,6 +61,59 @@ function tuileDepuisDict(d) {
   const el = creerTuileJeu(d.valeur, d.est_joker ? null : d.couleur);
   el.dataset.id = d.id;
   return el;
+}
+
+// ------------------------------------------------------------ fantôme (issue #50)
+// Retrouve le dict d'une tuile par son id (chevalet, zone de travail ou tapis).
+function trouverDictTuile(id) {
+  const c = chevaletLocal.find((t) => t.id === id);
+  if (c) return c;
+  for (const rangee of travail) {
+    const t = rangee.find((x) => x.id === id);
+    if (t) return t;
+  }
+  for (const combo of plateauLocal) {
+    const t = combo.find((x) => x.id === id);
+    if (t) return t;
+  }
+  return null;
+}
+
+// Marque (transparence) toutes les tuiles d'origine d'id `id` : elles « volent ».
+function marquerFantomeSource(id) {
+  document.querySelectorAll(".tuile-jeu").forEach((t) => {
+    if (t.dataset.id === id) t.classList.add("fantome-source");
+  });
+}
+
+// Crée le fantôme : copie visuelle agrandie de la tuile, suivant le curseur.
+function creerFantome(id) {
+  detruireFantome();
+  const d = trouverDictTuile(id);
+  if (!d) return;
+  const el = tuileDepuisDict(d);
+  el.id = "tuile-fantome";
+  el.classList.add("tuile-fantome");
+  el.style.left = dernierePositionSouris.x + "px";
+  el.style.top = dernierePositionSouris.y + "px";
+  document.body.appendChild(el);
+  marquerFantomeSource(id);
+}
+
+// Détruit le fantôme et rend leur opacité aux tuiles d'origine.
+function detruireFantome() {
+  const f = document.getElementById("tuile-fantome");
+  if (f) f.remove();
+  document.querySelectorAll(".tuile-jeu.fantome-source").forEach(
+    (t) => t.classList.remove("fantome-source"));
+}
+
+// Synchronise le fantôme avec l'état de sélection : le (re)crée si une tuile est
+// sélectionnée, le détruit sinon. À appeler APRÈS les rafraîchissements de rendu
+// (les éléments source doivent exister pour recevoir `fantome-source`).
+function majFantome() {
+  if (tuileSelectionnee !== null) creerFantome(tuileSelectionnee);
+  else detruireFantome();
 }
 
 // Repli SVG du sac (utilisé si Sac_de_jeu.png est absent / ne charge pas).
@@ -427,6 +481,7 @@ function selectionnerTuile(id) {
   comboActive = null;
   rafraichirChevalet();
   rafraichirPlateau(); // afficher/masquer les zones d'extension du tapis
+  majFantome(); // (dé)sélection → crée / détruit le fantôme (issue #50)
 }
 
 // -------------------------------------------- réorganisation par appui long
@@ -621,6 +676,7 @@ function placerTuileDansRangee() {
   // en zone de travail (déplacement entre rangées) y figure déjà.
   if (info.source === "chevalet") tuilesCeTour.push(info.d.id);
   tuileSelectionnee = null;
+  detruireFantome(); // tuile posée → le fantôme disparaît (issue #50)
   rafraichirZoneTravail();
   rafraichirPlateau(); // masquer les zones d'extension
   rafraichirChevalet();
@@ -645,6 +701,7 @@ function insererTuileRangee(indexRangee, pos) {
   // zone de travail (déplacement) y figure déjà.
   if (info.source === "chevalet") tuilesCeTour.push(info.d.id);
   tuileSelectionnee = null;
+  detruireFantome(); // tuile posée → le fantôme disparaît (issue #50)
   rafraichirZoneTravail();
   rafraichirPlateau(); // masquer les zones d'extension
   rafraichirChevalet();
@@ -664,6 +721,7 @@ function reprendreTuileRangee(id, indexRangee) {
     rafraichirZoneTravail();
     rafraichirPlateau();
     rafraichirChevalet();
+    majFantome(); // (dé)sélection d'une tuile du tapis (issue #50)
     return;
   }
   const d = travail[indexRangee].splice(i, 1)[0];
@@ -714,6 +772,7 @@ function etendreTapis(idxCombo, position) {
   if (position === "fin") plateauLocal[idxCombo].push(d);
   else plateauLocal[idxCombo].unshift(d);
   tuileSelectionnee = null;
+  detruireFantome(); // tuile posée → le fantôme disparaît (issue #50)
   comboActive = null; // retour au rendu normal du tapis (issue #47)
   trouJoker = null; // le guidage a rempli son rôle
   rafraichirPlateau();
@@ -741,6 +800,7 @@ function insererTuileTapis(idxCombo, pos) {
   // (source "travail" : la tuile figure déjà dans tuilesCeTour)
   combo.splice(pos, 0, d);
   tuileSelectionnee = null;
+  detruireFantome(); // tuile posée → le fantôme disparaît (issue #50)
   comboActive = null; // insertion faite → retour au rendu normal (issue #47)
   trouJoker = null; // le trou (le cas échéant) est comblé
   rafraichirPlateau();
@@ -771,6 +831,7 @@ function reprendreTuile(id) {
     break;
   }
   rafraichirPlateau(); rafraichirZoneTravail(); rafraichirChevalet(); rafraichirBoutons();
+  majFantome(); // la tuile reprise du tapis peut redevenir sélectionnée (issue #50)
 }
 
 // ------------------------------------------------------------ manipulation du tapis
@@ -798,6 +859,7 @@ function prendreTuileTapis(idxCombo, idxTuile) {
   rafraichirZoneTravail();
   rafraichirChevalet();
   rafraichirBoutons();
+  majFantome(); // la tuile prise sur le tapis devient sélectionnée (issue #50)
 }
 
 // ------------------------------------------------------------ récupération de joker
@@ -878,6 +940,7 @@ function tenterRecupererJoker(idxCombo, idxTuile, dictJoker) {
 
   // 6. Désélectionner
   tuileSelectionnee = null;
+  detruireFantome(); // tuile posée (joker récupéré) → le fantôme disparaît (issue #50)
 
   rafraichirPlateau();
   rafraichirZoneTravail();
@@ -890,6 +953,7 @@ function reinitTour() {
   tuilesCeTour = [];
   tuilesOrigineTapis = [];
   tuileSelectionnee = null;
+  detruireFantome(); // pas de fantôme résiduel entre les tours (issue #50)
   comboActive = null;
   trouJoker = null;
   plateauLocal = clone(etat.plateau || []);
@@ -1264,6 +1328,24 @@ function brancherEvenements() {
       e.stopPropagation();
       viderRangee(i);
     });
+  });
+
+  // Fantôme (issue #50) : la tuile sélectionnée suit le curseur.
+  document.addEventListener("mousemove", (e) => {
+    dernierePositionSouris = { x: e.clientX, y: e.clientY };
+    const f = document.getElementById("tuile-fantome");
+    if (f) {
+      f.style.left = e.clientX + "px";
+      f.style.top = e.clientY + "px";
+    }
+  });
+  // Clic droit n'importe où → relâche la tuile tenue (toggle sélection → null),
+  // détruit le fantôme et supprime le menu contextuel natif.
+  document.addEventListener("contextmenu", (e) => {
+    if (tuileSelectionnee !== null) {
+      e.preventDefault();
+      selectionnerTuile(tuileSelectionnee); // toggle → null → majFantome() détruit
+    }
   });
 }
 

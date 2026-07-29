@@ -243,6 +243,21 @@ body { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
 .tuile-jeu.drag-en-cours { opacity: 0.4; }
 .tuile-jeu.drag-survol { outline: 2px dashed #22c55e; }
 
+/* Fantôme : la tuile sélectionnée « tenue » suit le curseur (issue #50).
+   Agrandie ~1.4×, centrée sur le curseur (left/top = position souris), ne capte
+   aucun clic (pointer-events: none) pour ne pas gêner les zones de dépôt. */
+#tuile-fantome {
+  position: fixed;
+  --tw: 54px;
+  margin: 0;
+  pointer-events: none;
+  z-index: 9999;
+  transform: translate(-50%, -50%) scale(1.4);
+  transition: none;
+}
+/* Tuile d'origine pendant qu'elle « vole » : rendue transparente. */
+.tuile-jeu.fantome-source { opacity: 0.3; }
+
 /* Récupération d'un joker du tapis (une tuile est sélectionnée) */
 .tuile-jeu.joker-recuperable {
   outline: 2px solid #f59e0b;
