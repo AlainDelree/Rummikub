@@ -83,6 +83,22 @@ body { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
   padding: 8px; border: 1px dashed rgba(255,255,255,0.3);
   border-radius: 6px; background: rgba(0,0,0,0.15); align-items: center; }
 
+/* Insertion ciblée (issue #47) : une tuile de la main étant prête, chaque
+   combinaison non ciblée devient cliquable pour la désigner ; la combinaison
+   ciblée (comboActive) reçoit une légère surbrillance et déroule ses zones. */
+.groupe-combinaison.combo-cliquable {
+  cursor: pointer;
+}
+.groupe-combinaison.combo-cliquable:hover {
+  border-color: rgba(59,130,246,0.7);
+  background: rgba(59,130,246,0.10);
+}
+.groupe-combinaison.combo-active {
+  border: 2px solid rgba(59,130,246,0.8);
+  background: rgba(59,130,246,0.14);
+  box-shadow: 0 0 8px rgba(59,130,246,0.35);
+}
+
 /* Mode manipulation du tapis : tuiles « prenables » à l'intérieur des combis */
 .tuile-jeu.tapis-manipulable {
   cursor: move;

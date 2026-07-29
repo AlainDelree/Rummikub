@@ -15,6 +15,7 @@ let rangeeActive = 0;         // index 0-3 de la rangée de travail active
 let reorgSource = null;       // id de la tuile source d'un échange (réorg clic-long)
 let tuilesOrigineTapis = [];  // ids des tuiles PRISES sur le tapis ce tour
 let trouJoker = null;         // { combo, pos } : trou laissé par un joker pris (guidage)
+let comboActive = null;       // index de la combo ciblée pour l'insertion, ou null (issue #47)
 let dernierClicChevalet = { id: null, temps: 0 }; // détection du double-clic
 // Détection de l'appui long (500 ms) sur une tuile du chevalet → active la réorg
 let appuiLong = { timer: null, id: null, declenche: false };
@@ -176,6 +177,11 @@ function rafraichirPlateau() {
   const zone = document.getElementById("zone-plateau");
   zone.innerHTML = "";
   const tuileSel = tuileSelectionnee !== null;
+  // Mode « insertion ciblée » (issue #47) : quand le tapis est manipulable et
+  // qu'une tuile de la main est prête, on ne déballe les zones d'insertion que
+  // sur la SEULE combinaison ciblée (comboActive). Les autres restent en rendu
+  // normal, cliquables pour devenir la cible.
+  const modeCible = tapisManipulable() && tuileSel;
   plateauLocal.forEach((combo, idxCombo) => {
     const groupe = document.createElement("div");
     groupe.className = "groupe-combinaison";
@@ -183,41 +189,61 @@ function rafraichirPlateau() {
     // signalée en rouge jusqu'à ce que le joueur la complète ou annule.
     if (combo.length < 3) groupe.classList.add("combi-invalide");
 
+    // En mode ciblé : cette combo est-elle celle qui montre ses zones ?
+    const estActive = modeCible && comboActive === idxCombo;
+    if (modeCible && !estActive) {
+      // Combo non ciblée : conteneur cliquable pour la désigner comme cible.
+      groupe.classList.add("combo-cliquable");
+      groupe.addEventListener("click", () => {
+        comboActive = idxCombo;
+        rafraichirPlateau();
+      });
+    } else if (estActive) {
+      groupe.classList.add("combo-active");
+    }
+
+    // Les zones d'insertion s'affichent : hors mode ciblé, dès qu'une tuile est
+    // prête (comportement historique) ; en mode ciblé, sur la combo active seule.
+    const afficherZones = modeCible ? estActive : tuileSel;
+
     // Position du trou (index d'insertion) laissé par un joker retiré de CETTE
     // combinaison — pour surligner en orange la zone correspondante.
     const posTrou = (trouJoker && trouJoker.combo === combo) ? trouJoker.pos : -1;
 
     // Zone d'extension en début de combinaison (= insertion en position 0)
     const extDebut = document.createElement("div");
-    extDebut.className = "zone-ext zone-ext-debut" + (tuileSel ? "" : " masquee") +
+    extDebut.className = "zone-ext zone-ext-debut" + (afficherZones ? "" : " masquee") +
       (posTrou === 0 ? " trou-joker" : "");
     extDebut.title = "Ajouter la tuile sélectionnée en début";
-    extDebut.addEventListener("click", () => etendreTapis(idxCombo, "debut"));
+    extDebut.addEventListener("click", (e) => { e.stopPropagation(); etendreTapis(idxCombo, "debut"); });
     groupe.appendChild(extDebut);
 
     combo.forEach((d, idxTuile) => {
       // Zone d'insertion interne entre la tuile précédente et celle-ci
       // (position exacte = idxTuile). Uniquement quand une tuile est prête.
-      if (idxTuile > 0 && tuileSel) {
+      if (idxTuile > 0 && afficherZones) {
         const zi = document.createElement("div");
         zi.className = "zone-ext zone-ext-interne" +
           (posTrou === idxTuile ? " trou-joker" : "");
         zi.title = "Insérer la tuile sélectionnée ici";
-        zi.addEventListener("click", () => insererTuileTapis(idxCombo, idxTuile));
+        zi.addEventListener("click", (e) => { e.stopPropagation(); insererTuileTapis(idxCombo, idxTuile); });
         groupe.appendChild(zi);
       }
 
       const el = tuileDepuisDict(d);
       if (tuilesCeTour.includes(d.id)) {
         el.classList.add("ce-tour");
-        el.addEventListener("click", () => reprendreTuile(d.id));
-      } else if (tapisManipulable() && tuileSelectionnee !== null) {
-        // Tapis manipulable + tuile prête : cliquer une tuile du tapis insère
-        // la tuile sélectionnée AVANT elle (simplification, issue #27).
-        el.classList.add("tapis-manipulable");
-        el.addEventListener("click", () => insererTuileTapis(idxCombo, idxTuile));
+        el.addEventListener("click", (e) => { e.stopPropagation(); reprendreTuile(d.id); });
+      } else if (modeCible) {
+        // Insertion ciblée : sur la combo active, cliquer une tuile insère la
+        // tuile sélectionnée AVANT elle. Sur une autre combo, aucun handler :
+        // le clic remonte au conteneur qui la désigne comme cible.
+        if (estActive) {
+          el.classList.add("tapis-manipulable");
+          el.addEventListener("click", (e) => { e.stopPropagation(); insererTuileTapis(idxCombo, idxTuile); });
+        }
       } else if (tapisManipulable()) {
-        // Tapis manipulable : toute tuile du tapis peut être « prise »
+        // Tapis manipulable (aucune tuile prête) : toute tuile peut être « prise »
         el.classList.add("tapis-manipulable");
         el.addEventListener("click", () => prendreTuileTapis(idxCombo, idxTuile));
       } else if (d.est_joker && tuileSelectionnee !== null &&
@@ -231,10 +257,10 @@ function rafraichirPlateau() {
 
     // Zone d'extension en fin de combinaison (= insertion en fin)
     const extFin = document.createElement("div");
-    extFin.className = "zone-ext zone-ext-fin" + (tuileSel ? "" : " masquee") +
+    extFin.className = "zone-ext zone-ext-fin" + (afficherZones ? "" : " masquee") +
       (posTrou === combo.length ? " trou-joker" : "");
     extFin.title = "Ajouter la tuile sélectionnée en fin";
-    extFin.addEventListener("click", () => etendreTapis(idxCombo, "fin"));
+    extFin.addEventListener("click", (e) => { e.stopPropagation(); etendreTapis(idxCombo, "fin"); });
     groupe.appendChild(extFin);
 
     zone.appendChild(groupe);
@@ -396,6 +422,9 @@ function rafraichirHistorique() {
 // ------------------------------------------------------------ sélection / placement
 function selectionnerTuile(id) {
   tuileSelectionnee = (tuileSelectionnee === id) ? null : id;
+  // Toute (dé)sélection remet la cible d'insertion à zéro : le joueur devra
+  // (re)cliquer une combinaison pour dérouler ses zones d'insertion (issue #47).
+  comboActive = null;
   rafraichirChevalet();
   rafraichirPlateau(); // afficher/masquer les zones d'extension du tapis
 }
@@ -685,6 +714,7 @@ function etendreTapis(idxCombo, position) {
   if (position === "fin") plateauLocal[idxCombo].push(d);
   else plateauLocal[idxCombo].unshift(d);
   tuileSelectionnee = null;
+  comboActive = null; // retour au rendu normal du tapis (issue #47)
   trouJoker = null; // le guidage a rempli son rôle
   rafraichirPlateau();
   rafraichirZoneTravail();
@@ -711,6 +741,7 @@ function insererTuileTapis(idxCombo, pos) {
   // (source "travail" : la tuile figure déjà dans tuilesCeTour)
   combo.splice(pos, 0, d);
   tuileSelectionnee = null;
+  comboActive = null; // insertion faite → retour au rendu normal (issue #47)
   trouJoker = null; // le trou (le cas échéant) est comblé
   rafraichirPlateau();
   rafraichirZoneTravail();
@@ -859,6 +890,7 @@ function reinitTour() {
   tuilesCeTour = [];
   tuilesOrigineTapis = [];
   tuileSelectionnee = null;
+  comboActive = null;
   trouJoker = null;
   plateauLocal = clone(etat.plateau || []);
   travail = [[], [], [], []];
