@@ -44,19 +44,38 @@ body {
   min-height: 100vh;
 }
 
-/* --- Tuile titre (comme Scrabble) --- */
+/* --- Tuile titre (même style que la vraie tuile Rummikub, cf. .tuile-jeu) --- */
 .tuile-titre {
-  display: inline-flex; align-items: center; justify-content: center;
-  width: 52px; height: 52px;
-  background: var(--tuile-fond);
-  border: 2px solid var(--tuile-bordure);
-  border-radius: 4px;
-  box-shadow: 2px 2px 4px rgba(0,0,0,0.25);
-  font-size: 1.5rem; font-weight: 700;
-  color: var(--tuile-texte);
+  --tw: 52px;                 /* un peu plus grande que .tuile-jeu, titre bien visible */
+  position: relative;
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  width: var(--tw);
+  height: calc(var(--tw) * 1.34);
+  padding-top: calc(var(--tw) * 0.11);
+  background: linear-gradient(158deg, #fffdf6 0%, #f6eed6 55%, #ece0c2 100%);
+  border: 1px solid #e3d6b2;
+  border-radius: calc(var(--tw) * 0.16);
+  box-shadow: 0 3px 5px rgba(40,30,10,0.38),
+              inset 0 1px 0 rgba(255,255,255,0.65),
+              inset 0 -2px 4px rgba(120,90,40,0.10);
+  font-weight: 800;
+  color: #3b2f1a;             /* brun foncé neutre, pas de couleur de suite */
   user-select: none;
+  overflow: hidden;
 }
-.tuile-titre.espace { background: transparent; border: none; box-shadow: none; }
+/* La lettre du titre dans le disque encaissé (réutilise .tuile-cercle) */
+.tuile-titre .tuile-cercle {
+  font-size: calc(var(--tw) * 0.52);
+  font-weight: 800;
+  line-height: 1;
+  color: inherit;
+}
+.tuile-titre.espace {
+  background: transparent; border: none; box-shadow: none; overflow: visible;
+}
 
 /* --- Tuile de jeu (style tuile Rummikub réelle : portrait ivoire) --- */
 .tuile-jeu {

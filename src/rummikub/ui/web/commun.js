@@ -48,8 +48,22 @@ function creerTuileJeu(valeur, couleur) {
 
 function creerTuileTitre(lettre) {
   const d = document.createElement("div");
-  d.className = "tuile-titre" + (lettre === " " ? " espace" : "");
-  d.textContent = lettre === " " ? "" : lettre;
+  if (lettre === " ") {
+    d.className = "tuile-titre espace";
+    return d;
+  }
+  d.className = "tuile-titre";
+
+  const cercle = document.createElement("span");
+  cercle.className = "tuile-cercle";
+  cercle.textContent = lettre;
+
+  const marque = document.createElement("span");
+  marque.className = "tuile-marque";
+  marque.textContent = "Rummikub";
+
+  d.appendChild(cercle);
+  d.appendChild(marque);
   return d;
 }
 
