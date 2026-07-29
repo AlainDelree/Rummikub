@@ -13,7 +13,6 @@ let plateauLocal = [];        // tapis existant, potentiellement étendu ce tour
 let travail = [[], [], [], []]; // 4 rangées de pose, chacune = [dict_tuile, ...]
 let rangeeActive = 0;         // index 0-3 de la rangée de travail active
 let reorgSource = null;       // id de la tuile source d'un échange (réorg clic-long)
-let modeTapis = false;        // mode manipulation du tapis actif ?
 let tuilesOrigineTapis = [];  // ids des tuiles PRISES sur le tapis ce tour
 let trouJoker = null;         // { combo, pos } : trou laissé par un joker pris (guidage)
 let dernierClicChevalet = { id: null, temps: 0 }; // détection du double-clic
@@ -38,6 +37,15 @@ function joueurCourantEstIA() {
 function estMonTour() {
   return etat && etat.index_joueur_actuel === indexHumain() &&
          !etat.manche_terminee;
+}
+
+// Le tapis est manipulable dès que c'est le tour du joueur humain et que sa
+// mise initiale est faite (comme au jeu physique). Le bouton « Annuler »
+// couvre les fausses manipulations. Remplace l'ancien toggle « Mode tapis ».
+function tapisManipulable() {
+  return estMonTour() &&
+         !!(etat.joueurs[indexHumain()] &&
+            etat.joueurs[indexHumain()].mise_initiale_faite);
 }
 
 function decrireTuile(d) {
@@ -203,13 +211,13 @@ function rafraichirPlateau() {
       if (tuilesCeTour.includes(d.id)) {
         el.classList.add("ce-tour");
         el.addEventListener("click", () => reprendreTuile(d.id));
-      } else if (modeTapis && tuileSelectionnee !== null) {
-        // Mode manipulation + tuile prête : cliquer une tuile du tapis insère
+      } else if (tapisManipulable() && tuileSelectionnee !== null) {
+        // Tapis manipulable + tuile prête : cliquer une tuile du tapis insère
         // la tuile sélectionnée AVANT elle (simplification, issue #27).
         el.classList.add("tapis-manipulable");
         el.addEventListener("click", () => insererTuileTapis(idxCombo, idxTuile));
-      } else if (modeTapis) {
-        // Mode manipulation : toute tuile du tapis peut être « prise »
+      } else if (tapisManipulable()) {
+        // Tapis manipulable : toute tuile du tapis peut être « prise »
         el.classList.add("tapis-manipulable");
         el.addEventListener("click", () => prendreTuileTapis(idxCombo, idxTuile));
       } else if (d.est_joker && tuileSelectionnee !== null &&
@@ -355,16 +363,6 @@ function rafraichirBoutons() {
   const piocheVide = (etat.pioche || []).length === 0;
   const monTour = estMonTour();
   document.getElementById("btn-annuler").disabled = !aPose;
-  // Mode tapis : réservé à mon tour ET après la mise initiale.
-  const miseFaite = !!(etat.joueurs[indexHumain()] &&
-                       etat.joueurs[indexHumain()].mise_initiale_faite);
-  const btnTapis = document.getElementById("btn-mode-tapis");
-  btnTapis.disabled = !monTour || !miseFaite;
-  if (btnTapis.disabled && modeTapis) {
-    // Le mode ne peut rester actif s'il n'est plus autorisé.
-    modeTapis = false;
-    btnTapis.classList.remove("actif");
-  }
   document.getElementById("btn-jouer").disabled = !aPose || !monTour;
   // Bouton Piocher/Passer fusionné : devient « Passer » quand la pioche est
   // vide et que c'est mon tour, sinon reste « Piocher » (issue #28).
@@ -744,21 +742,7 @@ function reprendreTuile(id) {
   rafraichirPlateau(); rafraichirZoneTravail(); rafraichirChevalet(); rafraichirBoutons();
 }
 
-// ------------------------------------------------------------ mode manipulation du tapis
-// Basculer le mode manipulation : toutes les tuiles du tapis deviennent
-// « prenables » pour être redistribuées entre combinaisons / zone de travail.
-function basculerModeTapis() {
-  if (!estMonTour()) { toast("Ce n'est pas votre tour", "erreur"); return; }
-  if (!(etat.joueurs[indexHumain()] &&
-        etat.joueurs[indexHumain()].mise_initiale_faite)) {
-    toast("Disponible après la mise initiale", "erreur");
-    return;
-  }
-  modeTapis = !modeTapis;
-  document.getElementById("btn-mode-tapis").classList.toggle("actif", modeTapis);
-  rafraichirPlateau();
-}
-
+// ------------------------------------------------------------ manipulation du tapis
 // Prendre une tuile à l'intérieur d'une combinaison du tapis : elle quitte
 // plateauLocal, entre dans tuilesCeTour, atterrit dans la rangée de travail
 // active et devient sélectionnée (pour la déplacer aussitôt vers une extension
@@ -879,9 +863,6 @@ function reinitTour() {
   plateauLocal = clone(etat.plateau || []);
   travail = [[], [], [], []];
   rangeeActive = 0;
-  modeTapis = false;
-  const btnTapis = document.getElementById("btn-mode-tapis");
-  if (btnTapis) btnTapis.classList.remove("actif");
   const rc = document.getElementById("resultat-calcul");
   if (rc) { rc.textContent = ""; rc.className = ""; }
 }
@@ -1223,7 +1204,6 @@ function brancherEvenements() {
   document.getElementById("btn-retour").addEventListener("click", onRetourAccueil);
   document.getElementById("btn-trier").addEventListener("click", trierChevalet);
   document.getElementById("btn-annuler").addEventListener("click", onAnnuler);
-  document.getElementById("btn-mode-tapis").addEventListener("click", basculerModeTapis);
   document.getElementById("btn-verifier-calc").addEventListener("click", onVerifierCalc);
   document.getElementById("btn-jouer").addEventListener("click", onJouer);
   // Le bouton #btn-piocher (fusion Piocher/Passer) reçoit son écouteur
