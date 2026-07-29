@@ -1,5 +1,14 @@
 from __future__ import annotations
-import sys
+import os, sys
+
+# Linux : WM_CLASS affiché dans la barre des tâches
+os.environ.setdefault("GDK_PROGRAM_CLASS", "Rummikub")
+
+# Windows : AppUserModelID affiché dans la barre des tâches
+if sys.platform == "win32":
+    import ctypes
+    ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("Rummikub")
+
 from pathlib import Path
 
 if not getattr(sys, "frozen", False):
