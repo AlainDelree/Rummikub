@@ -331,6 +331,7 @@ function rafraichirBoutons() {
   const piocheVide = (etat.pioche || []).length === 0;
   const monTour = estMonTour();
   document.getElementById("btn-annuler").disabled = !aPose;
+  document.getElementById("btn-remettre").disabled = !aPose;
   // Mode tapis : réservé à mon tour ET après la mise initiale.
   const miseFaite = !!(etat.joueurs[indexHumain()] &&
                        etat.joueurs[indexHumain()].mise_initiale_faite);
@@ -849,6 +850,64 @@ async function onAnnuler() {
   rafraichirTout();
 }
 
+// « Remettre » : remet le tapis à son état de début de tour et rapatrie les
+// tuiles que le joueur a posées ce tour dans la zone de pose (pas au chevalet),
+// pour repartir d'une base propre après des manipulations complexes du tapis.
+function onRemettre() {
+  if (tuilesCeTour.length === 0) return;
+
+  // Tuiles du joueur posées ce tour = tuilesCeTour privé des tuiles PRISES sur
+  // le tapis (celles-ci reviennent d'elles-mêmes via la restauration du plateau).
+  const idsJoueur = tuilesCeTour.filter((id) => !tuilesOrigineTapis.includes(id));
+
+  // Dictionnaires de ces tuiles : selon où elles ont été posées ce tour, elles
+  // sont actuellement sur le tapis (plateauLocal), en zone de travail, ou encore
+  // dans un des chevalets. On construit une table id→dict à partir de toutes ces
+  // sources ; le chevalet serveur — non modifié pour les poses en rangée — sert
+  // de repli comme indiqué par l'issue.
+  const parId = new Map();
+  const ajouter = (d) => { if (d && !parId.has(d.id)) parId.set(d.id, d); };
+  plateauLocal.forEach((combo) => combo.forEach(ajouter));
+  travail.forEach((rangee) => rangee.forEach(ajouter));
+  chevaletLocal.forEach(ajouter);
+  ((etat.joueurs[indexHumain()] || {}).chevalet || []).forEach(ajouter);
+
+  // Restaurer le tapis à l'état de début de tour : les tuiles d'origine tapis y
+  // reviennent, et plus aucune tuile du joueur n'y figure.
+  plateauLocal = clone(etat.plateau || []);
+
+  // Répartir les tuiles du joueur dans les rangées de travail, dans l'ordre,
+  // sans dépasser 13 tuiles par rangée (rangée 1 d'abord, puis 2, etc.).
+  travail = [[], [], [], []];
+  let r = 0;
+  idsJoueur.forEach((id) => {
+    const d = parId.get(id);
+    if (!d) return;
+    while (r < travail.length && travail[r].length >= 13) r++;
+    if (r >= travail.length) return; // filet : 4×13 = 52 places, jamais atteint
+    travail[r].push(clone(d));
+    // Cohérence du chevalet serveur (compteur des fiches joueurs) : une tuile
+    // posée sur le tapis en avait été retirée ; en zone de travail elle doit y
+    // figurer à nouveau, comme toute tuile simplement déplacée vers une rangée.
+    rendreAuChevaletServeur(clone(d));
+  });
+
+  // Les tuiles restent « posées ce tour » puisqu'elles occupent la zone de pose
+  // (comportement identique à une pose manuelle en rangée) ; seules les
+  // références liées au tapis sont remises à zéro.
+  tuilesCeTour = idsJoueur;
+  tuilesOrigineTapis = [];
+  trouJoker = null;
+  tuileSelectionnee = null;
+  rangeeActive = 0;
+  modeTapis = false;
+  const btnTapis = document.getElementById("btn-mode-tapis");
+  if (btnTapis) btnTapis.classList.remove("actif");
+
+  rafraichirTout();
+  rafraichirZoneTravail();
+}
+
 async function onVerifierCalc() {
   const zone = document.getElementById("resultat-calcul");
   const rangeesPosees = travail.filter((r) => r.length > 0);
@@ -1175,6 +1234,7 @@ function brancherEvenements() {
   document.getElementById("btn-retour").addEventListener("click", onRetourAccueil);
   document.getElementById("btn-trier").addEventListener("click", trierChevalet);
   document.getElementById("btn-annuler").addEventListener("click", onAnnuler);
+  document.getElementById("btn-remettre").addEventListener("click", onRemettre);
   document.getElementById("btn-mode-tapis").addEventListener("click", basculerModeTapis);
   document.getElementById("btn-verifier-calc").addEventListener("click", onVerifierCalc);
   document.getElementById("btn-jouer").addEventListener("click", onJouer);

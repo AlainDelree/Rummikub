@@ -307,6 +307,7 @@ body { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
 #barre-actions button { padding: 12px 22px; border: none; border-radius: 6px;
   cursor: pointer; font-weight: 600; font-size: 1.05rem; min-height: 44px; }
 #btn-annuler   { background: #b45309; color: #fff; }
+#btn-remettre  { background: #7f1d1d; color: #fff; }
 #btn-mode-tapis { background: #6d4c9f; color: #fff; }
 #btn-mode-tapis.actif { background: #3b82f6;
   box-shadow: 0 0 0 2px rgba(59,130,246,0.5) inset; }
