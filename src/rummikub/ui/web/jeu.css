@@ -4,6 +4,8 @@ body { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
   padding: 6px 12px; background: var(--tapis-vert-fonce); color: #fff; }
 #barre-top button { background: rgba(255,255,255,0.15); border: none;
   color: #fff; padding: 4px 10px; border-radius: 4px; cursor: pointer; }
+/* Bouton « Retour au menu » : fond vert très foncé bien visible sur la barre */
+#btn-retour { background: #1e3a2f; }
 
 /* Compteur de pioche : icône « sac » sous l'historique (panneau gauche) */
 #compteur-pioche {
