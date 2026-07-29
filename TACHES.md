@@ -34,10 +34,18 @@
   manipulation du tapis est désormais géré. Le joueur sélectionne une tuile
   du chevalet puis clique sur un joker posé (hors tuiles jouées ce tour) ;
   la tuile remplace le joker à sa position exacte et le joker atterrit dans
-  la rangée active de la zone de travail (il doit être rejoué). Le mode
-  manipulation avancé complet du tapis (basculer toutes les tuiles en mode
-  libre pour tout redistribuer entre combinaisons existantes) reste une
-  idée future non implémentée.
+  la rangée active de la zone de travail (il doit être rejoué).
+- Mode manipulation du tapis (Issue #23) : bouton « Mode tapis » (barre
+  d'actions, à côté d'Annuler), activable seulement à son tour et après la
+  mise initiale. Quand il est actif, toutes les tuiles du tapis (hors tuiles
+  posées ce tour) deviennent « prenables » (curseur de déplacement) : un clic
+  retire la tuile de sa combinaison, l'ajoute à tuilesCeTour/tuilesOrigineTapis
+  et la place dans la rangée de travail active où elle est sélectionnée, prête
+  à être envoyée vers une extension d'une autre combinaison ou à former une
+  nouvelle combinaison. Une combinaison source réduite à moins de 3 tuiles
+  reste affichée en rouge jusqu'à correction ou annulation. « Vérifier et
+  calculer » et « Jouer » valident l'ensemble du plateau proposé ; « Annuler »
+  restaure l'état complet de début de tour (backup serveur).
 
 ## Décisions d'architecture prises
 

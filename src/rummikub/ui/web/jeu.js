@@ -15,6 +15,8 @@ let travail = [[], [], [], []]; // 4 rangées de pose, chacune = [dict_tuile, ..
 let rangeeActive = 0;         // index 0-3 de la rangée de travail active
 let modeReorg = false;        // mode réorganisation du chevalet actif ?
 let reorgSource = null;       // id de la tuile source d'un échange en cours
+let modeTapis = false;        // mode manipulation du tapis actif ?
+let tuilesOrigineTapis = [];  // ids des tuiles PRISES sur le tapis ce tour
 let dernierClicChevalet = { id: null, temps: 0 }; // détection du double-clic
 
 // ------------------------------------------------------------ utilitaires
@@ -169,6 +171,9 @@ function rafraichirPlateau() {
   plateauLocal.forEach((combo, idxCombo) => {
     const groupe = document.createElement("div");
     groupe.className = "groupe-combinaison";
+    // Combinaison devenue invalide (<3 tuiles) suite à une manipulation :
+    // signalée en rouge jusqu'à ce que le joueur la complète ou annule.
+    if (combo.length < 3) groupe.classList.add("combi-invalide");
 
     // Zone d'extension en début de combinaison
     const extDebut = document.createElement("div");
@@ -182,6 +187,10 @@ function rafraichirPlateau() {
       if (tuilesCeTour.includes(d.id)) {
         el.classList.add("ce-tour");
         el.addEventListener("click", () => reprendreTuile(d.id));
+      } else if (modeTapis) {
+        // Mode manipulation : toute tuile du tapis peut être « prise »
+        el.classList.add("tapis-manipulable");
+        el.addEventListener("click", () => prendreTuileTapis(idxCombo, idxTuile));
       } else if (d.est_joker && tuileSelectionnee !== null &&
                  etat.joueurs[indexHumain()].mise_initiale_faite) {
         el.classList.add("joker-recuperable");
@@ -216,6 +225,7 @@ function rafraichirZoneTravail() {
     rangee.forEach((d) => {
       const el = tuileDepuisDict(d);
       el.classList.add("ce-tour");
+      if (d.id === tuileSelectionnee) el.classList.add("selectionnee");
       el.addEventListener("click", (e) => {
         e.stopPropagation();
         reprendreTuileRangee(d.id, i);
@@ -273,6 +283,16 @@ function rafraichirBoutons() {
   const piocheVide = (etat.pioche || []).length === 0;
   const monTour = estMonTour();
   document.getElementById("btn-annuler").disabled = !aPose;
+  // Mode tapis : réservé à mon tour ET après la mise initiale.
+  const miseFaite = !!(etat.joueurs[indexHumain()] &&
+                       etat.joueurs[indexHumain()].mise_initiale_faite);
+  const btnTapis = document.getElementById("btn-mode-tapis");
+  btnTapis.disabled = !monTour || !miseFaite;
+  if (btnTapis.disabled && modeTapis) {
+    // Le mode ne peut rester actif s'il n'est plus autorisé.
+    modeTapis = false;
+    btnTapis.classList.remove("actif");
+  }
   document.getElementById("btn-jouer").disabled = !aPose || !monTour;
   document.getElementById("btn-piocher").disabled = aPose || !monTour;
   document.getElementById("btn-passer").disabled =
@@ -377,6 +397,20 @@ function rendreAuChevaletServeur(d) {
   if (!chev.some((t) => t.id === d.id)) chev.push(d);
 }
 
+// Retire et retourne une tuile « plaçable » par id, qu'elle soit sur le
+// chevalet ou déjà dans une rangée de travail (cas du mode tapis, où une tuile
+// prise sur le tapis transite par la zone de travail avant d'être déplacée).
+// Retourne { d, source: "chevalet"|"travail" } ou null.
+function prelevereTuilePlacable(id) {
+  const iC = chevaletLocal.findIndex((t) => t.id === id);
+  if (iC >= 0) return { d: chevaletLocal.splice(iC, 1)[0], source: "chevalet" };
+  for (let r = 0; r < travail.length; r++) {
+    const iT = travail[r].findIndex((t) => t.id === id);
+    if (iT >= 0) return { d: travail[r].splice(iT, 1)[0], source: "travail" };
+  }
+  return null;
+}
+
 // ------------------------------------------------------------ zone de travail
 // Rendre une rangée active
 function activerRangee(index) {
@@ -388,10 +422,12 @@ function activerRangee(index) {
 function placerTuileDansRangee() {
   if (tuileSelectionnee === null) return;
   if (!estMonTour()) { toast("Ce n'est pas votre tour", "erreur"); return; }
-  const d = retirerDuChevalet(tuileSelectionnee);
-  if (!d) return;
-  travail[rangeeActive].push(d);
-  tuilesCeTour.push(d.id);
+  const info = prelevereTuilePlacable(tuileSelectionnee);
+  if (!info) return;
+  travail[rangeeActive].push(info.d);
+  // Une tuile venant du chevalet devient « posée ce tour » ; une tuile déjà
+  // en zone de travail (déplacement entre rangées) y figure déjà.
+  if (info.source === "chevalet") tuilesCeTour.push(info.d.id);
   tuileSelectionnee = null;
   rafraichirZoneTravail();
   rafraichirPlateau(); // masquer les zones d'extension
@@ -399,10 +435,21 @@ function placerTuileDansRangee() {
   rafraichirBoutons();
 }
 
-// Clic sur une tuile d'une rangée → retour au chevalet
+// Clic sur une tuile d'une rangée.
+// - Tuile prise sur le tapis : on la (dé)sélectionne pour pouvoir la déplacer
+//   vers une extension du tapis ou une autre rangée (jamais vers le chevalet :
+//   elle n'appartient pas au joueur).
+// - Tuile du chevalet : retour au chevalet comme auparavant.
 function reprendreTuileRangee(id, indexRangee) {
   const i = travail[indexRangee].findIndex((t) => t.id === id);
   if (i < 0) return;
+  if (tuilesOrigineTapis.includes(id)) {
+    tuileSelectionnee = (tuileSelectionnee === id) ? null : id;
+    rafraichirZoneTravail();
+    rafraichirPlateau();
+    rafraichirChevalet();
+    return;
+  }
   const d = travail[indexRangee].splice(i, 1)[0];
   chevaletLocal.push(d);
   tuilesCeTour = tuilesCeTour.filter((x) => x !== id);
@@ -411,13 +458,23 @@ function reprendreTuileRangee(id, indexRangee) {
   rafraichirBoutons();
 }
 
-// Vider toute une rangée → retour des tuiles au chevalet
+// Vider une rangée → retour des tuiles au chevalet. Les tuiles prises sur le
+// tapis n'appartiennent pas au joueur : elles restent dans la rangée (seul
+// « Annuler » remet le tapis dans son état de début de tour).
 function viderRangee(index) {
-  const chev = chevaletLocal;
-  const ids = travail[index].map((d) => d.id);
-  travail[index].forEach((d) => { chev.push(d); });
-  tuilesCeTour = tuilesCeTour.filter((id) => !ids.includes(id));
-  travail[index] = [];
+  const restants = [];
+  travail[index].forEach((d) => {
+    if (tuilesOrigineTapis.includes(d.id)) {
+      restants.push(d);
+    } else {
+      chevaletLocal.push(d);
+      tuilesCeTour = tuilesCeTour.filter((id) => id !== d.id);
+    }
+  });
+  travail[index] = restants;
+  if (restants.length > 0 && tuileSelectionnee === null) {
+    toast("Tuiles du tapis : utilisez « Annuler » pour tout remettre");
+  }
   rafraichirZoneTravail();
   rafraichirChevalet();
   rafraichirBoutons();
@@ -428,34 +485,85 @@ function viderRangee(index) {
 function etendreTapis(idxCombo, position) {
   if (tuileSelectionnee === null) return;
   if (!estMonTour()) { toast("Ce n'est pas votre tour", "erreur"); return; }
-  const d = retirerDuChevalet(tuileSelectionnee);
-  if (!d) return;
-  // Retirer la tuile des DEUX vues du chevalet (locale + serveur) pour éviter
-  // la désynchronisation introduite à l'issue #14.
-  retirerDuChevaletServeur(d.id);
+  const info = prelevereTuilePlacable(tuileSelectionnee);
+  if (!info) return;
+  const d = info.d;
+  if (info.source === "chevalet") {
+    // Retirer la tuile des DEUX vues du chevalet (locale + serveur) pour éviter
+    // la désynchronisation introduite à l'issue #14.
+    retirerDuChevaletServeur(d.id);
+    tuilesCeTour.push(d.id);
+  }
+  // (source "travail" : la tuile figure déjà dans tuilesCeTour)
   if (position === "fin") plateauLocal[idxCombo].push(d);
   else plateauLocal[idxCombo].unshift(d);
-  tuilesCeTour.push(d.id);
   tuileSelectionnee = null;
   rafraichirPlateau();
+  rafraichirZoneTravail();
   rafraichirChevalet();
   rafraichirBoutons();
 }
 
-// Reprendre une tuile ajoutée ce tour sur le tapis → retour au chevalet
+// Reprendre une tuile ajoutée ce tour sur le tapis.
+// - Tuile du chevalet posée sur le tapis → retour au chevalet.
+// - Tuile prise sur le tapis (mode manipulation) → retour en zone de travail
+//   et sélectionnée, prête à être redéplacée (jamais renvoyée au chevalet).
 function reprendreTuile(id) {
-  for (const combo of plateauLocal) {
+  for (let ic = 0; ic < plateauLocal.length; ic++) {
+    const combo = plateauLocal[ic];
     const i = combo.findIndex((t) => t.id === id);
-    if (i >= 0) {
-      const d = combo.splice(i, 1)[0];
+    if (i < 0) continue;
+    const d = combo.splice(i, 1)[0];
+    if (tuilesOrigineTapis.includes(id)) {
+      travail[rangeeActive].push(d);
+      tuileSelectionnee = d.id;
+    } else {
       chevaletLocal.push(d);
-      // Restituer aussi la tuile au chevalet serveur (symétrie avec etendreTapis)
-      rendreAuChevaletServeur(d);
-      break;
+      rendreAuChevaletServeur(d); // symétrie avec etendreTapis
+      tuilesCeTour = tuilesCeTour.filter((x) => x !== id);
     }
+    if (combo.length === 0) plateauLocal.splice(ic, 1);
+    break;
   }
-  tuilesCeTour = tuilesCeTour.filter((x) => x !== id);
-  rafraichirPlateau(); rafraichirChevalet(); rafraichirBoutons();
+  rafraichirPlateau(); rafraichirZoneTravail(); rafraichirChevalet(); rafraichirBoutons();
+}
+
+// ------------------------------------------------------------ mode manipulation du tapis
+// Basculer le mode manipulation : toutes les tuiles du tapis deviennent
+// « prenables » pour être redistribuées entre combinaisons / zone de travail.
+function basculerModeTapis() {
+  if (!estMonTour()) { toast("Ce n'est pas votre tour", "erreur"); return; }
+  if (!(etat.joueurs[indexHumain()] &&
+        etat.joueurs[indexHumain()].mise_initiale_faite)) {
+    toast("Disponible après la mise initiale", "erreur");
+    return;
+  }
+  modeTapis = !modeTapis;
+  document.getElementById("btn-mode-tapis").classList.toggle("actif", modeTapis);
+  rafraichirPlateau();
+}
+
+// Prendre une tuile à l'intérieur d'une combinaison du tapis : elle quitte
+// plateauLocal, entre dans tuilesCeTour, atterrit dans la rangée de travail
+// active et devient sélectionnée (pour la déplacer aussitôt vers une extension
+// du tapis si voulu). La combinaison source vidée est retirée ; réduite à
+// moins de 3 tuiles, elle reste affichée en rouge (voir rafraichirPlateau).
+function prendreTuileTapis(idxCombo, idxTuile) {
+  if (!estMonTour()) { toast("Ce n'est pas votre tour", "erreur"); return; }
+  const combo = plateauLocal[idxCombo];
+  if (!combo) return;
+  const d = combo[idxTuile];
+  if (!d) return;
+  combo.splice(idxTuile, 1);
+  tuilesCeTour.push(d.id);
+  tuilesOrigineTapis.push(d.id);
+  travail[rangeeActive].push(d);
+  tuileSelectionnee = d.id;
+  if (combo.length === 0) plateauLocal.splice(idxCombo, 1);
+  rafraichirPlateau();
+  rafraichirZoneTravail();
+  rafraichirChevalet();
+  rafraichirBoutons();
 }
 
 // ------------------------------------------------------------ récupération de joker
@@ -546,10 +654,14 @@ function tenterRecupererJoker(idxCombo, idxTuile, dictJoker) {
 
 function reinitTour() {
   tuilesCeTour = [];
+  tuilesOrigineTapis = [];
   tuileSelectionnee = null;
   plateauLocal = clone(etat.plateau || []);
   travail = [[], [], [], []];
   rangeeActive = 0;
+  modeTapis = false;
+  const btnTapis = document.getElementById("btn-mode-tapis");
+  if (btnTapis) btnTapis.classList.remove("actif");
   const rc = document.getElementById("resultat-calcul");
   if (rc) { rc.textContent = ""; rc.className = ""; }
 }
@@ -892,6 +1004,7 @@ function brancherEvenements() {
   document.getElementById("btn-trier").addEventListener("click", trierChevalet);
   document.getElementById("btn-reorg").addEventListener("click", basculerReorg);
   document.getElementById("btn-annuler").addEventListener("click", onAnnuler);
+  document.getElementById("btn-mode-tapis").addEventListener("click", basculerModeTapis);
   document.getElementById("btn-verifier-calc").addEventListener("click", onVerifierCalc);
   document.getElementById("btn-jouer").addEventListener("click", onJouer);
   document.getElementById("btn-piocher").addEventListener("click", onPiocher);

@@ -80,6 +80,27 @@ body { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
   padding: 8px; border: 1px dashed rgba(255,255,255,0.3);
   border-radius: 6px; background: rgba(0,0,0,0.15); align-items: center; }
 
+/* Mode manipulation du tapis : tuiles « prenables » à l'intérieur des combis */
+.tuile-jeu.tapis-manipulable {
+  cursor: move;
+  outline: 2px dashed rgba(59,130,246,0.7);
+}
+.tuile-jeu.tapis-manipulable:hover {
+  outline: 2px solid #3b82f6;
+  box-shadow: 0 0 8px rgba(59,130,246,0.6);
+}
+
+/* Combinaison rendue invalide (<3 tuiles) par une manipulation du tapis */
+.groupe-combinaison.combi-invalide {
+  border: 2px solid #ef4444;
+  background: rgba(239,68,68,0.18);
+  animation: pulse-invalide 1s infinite alternate;
+}
+@keyframes pulse-invalide {
+  from { box-shadow: 0 0 3px rgba(239,68,68,0.4); }
+  to   { box-shadow: 0 0 12px rgba(239,68,68,0.8); }
+}
+
 /* Zones d'extension aux extrémités des combinaisons du tapis */
 .zone-ext {
   width: 34px; height: 56px;
@@ -272,6 +293,9 @@ body { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
 #barre-actions button { padding: 12px 22px; border: none; border-radius: 6px;
   cursor: pointer; font-weight: 600; font-size: 1.05rem; min-height: 44px; }
 #btn-annuler   { background: #555; color: #fff; }
+#btn-mode-tapis { background: #6d4c9f; color: #fff; }
+#btn-mode-tapis.actif { background: #3b82f6;
+  box-shadow: 0 0 0 2px rgba(59,130,246,0.5) inset; }
 #btn-verifier-calc { background: #1565c0; color: #fff; }
 #btn-jouer     { background: #2e7d32; color: #fff; }
 #btn-piocher   { background: #5d4037; color: #fff; }
