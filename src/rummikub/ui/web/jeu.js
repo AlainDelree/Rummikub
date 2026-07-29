@@ -606,16 +606,53 @@ async function onJouer() {
   }
 }
 
+// Affiche la tuile piochée en grand au centre de l'écran (~1 s), puis l'anime
+// en la rétrécissant et la glissant vers le bas en direction du chevalet.
+// À la fin, l'overlay est retiré et le callback `apres` est appelé (il se
+// charge d'afficher la tuile dans le chevalet). Repli immédiat si `dict` est
+// absent (on ne bloque jamais le déroulement du tour).
+function animerPiochee(dict, apres) {
+  if (!dict) { apres(); return; }
+
+  const overlay = document.createElement("div");
+  overlay.id = "overlay-pioche";
+
+  const el = tuileDepuisDict(dict);
+  el.classList.add("tuile-piochee-grande");
+  overlay.appendChild(el);
+  document.body.appendChild(overlay);
+
+  // Phase 1 : tuile grande et centrée pendant 1 s.
+  setTimeout(() => {
+    // Phase 2 : glissement/rétrécissement vers le chevalet (transition CSS 500 ms).
+    el.classList.add("vers-chevalet");
+    setTimeout(() => {
+      overlay.remove();
+      apres();
+    }, 500);
+  }, 1000);
+}
+
 async function onPiocher() {
   try {
     const res = await window.pywebview.api.jeu_piocher();
     if (res && res.ok) {
       etat = res.etat;
       const t = (res.tuiles_piochees || [])[0];
-      toast("Vous piochez : " + decrireTuile(t));
       reconcilierChevalet();
       reinitTour();
-      rafraichirTout();
+      // Rafraîchir tout SAUF le chevalet : la tuile piochée n'y apparaît
+      // qu'à la fin de l'animation (elle est d'abord montrée en grand).
+      rafraichirFichesJoueurs();
+      rafraichirPlateau();
+      rafraichirZoneTravail();
+      rafraichirBoutons();
+      rafraichirHistorique();
+      mettreAJourSac((etat.pioche || []).length);
+      animerPiochee(t, () => {
+        rafraichirChevalet();
+        if (etat.manche_terminee) afficherFinManche();
+      });
     } else {
       toast((res && res.erreur) || "Impossible de piocher", "erreur");
     }

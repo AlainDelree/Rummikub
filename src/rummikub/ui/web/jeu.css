@@ -246,6 +246,27 @@ body { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
   transition: background 0.3s;
 }
 
+/* ------------------------------------------- Animation de pioche (joueur) */
+/* La tuile piochée est montrée en grand au centre, puis glisse vers le bas
+   (chevalet) en rétrécissant. Geste lent et lisible (public senior). */
+#overlay-pioche {
+  position: fixed; inset: 0; z-index: 200;
+  display: flex; align-items: center; justify-content: center;
+  pointer-events: none;
+}
+#overlay-pioche .tuile-piochee-grande {
+  --tw: 120px;
+  transform: translateY(0) scale(1);
+  opacity: 1;
+  transition: transform 0.5s cubic-bezier(0.5, 0, 0.75, 0),
+              opacity 0.5s ease-in;
+  filter: drop-shadow(0 14px 30px rgba(0,0,0,0.55));
+}
+#overlay-pioche .tuile-piochee-grande.vers-chevalet {
+  transform: translateY(42vh) scale(0.45);
+  opacity: 0;
+}
+
 #barre-actions { display: flex; gap: 8px; padding: 8px 12px;
   background: var(--tapis-vert-fonce); justify-content: center; }
 #barre-actions button { padding: 12px 22px; border: none; border-radius: 6px;
