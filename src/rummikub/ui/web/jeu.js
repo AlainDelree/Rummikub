@@ -322,6 +322,10 @@ function modeReorgReglage() {
   return (etat && etat.config && etat.config.mode_reorg) || "clic";
 }
 
+// Handler courant du bouton Piocher/Passer fusionné (issue #28). Mémorisé
+// pour pouvoir retirer l'ancien écouteur avant d'en ajouter un nouveau.
+let handlerBoutonPioche = null;
+
 function rafraichirBoutons() {
   const aPose = tuilesCeTour.length > 0;
   const piocheVide = (etat.pioche || []).length === 0;
@@ -338,9 +342,19 @@ function rafraichirBoutons() {
     btnTapis.classList.remove("actif");
   }
   document.getElementById("btn-jouer").disabled = !aPose || !monTour;
-  document.getElementById("btn-piocher").disabled = aPose || !monTour;
-  document.getElementById("btn-passer").disabled =
-    !piocheVide || aPose || !monTour;
+  // Bouton Piocher/Passer fusionné : devient « Passer » quand la pioche est
+  // vide et que c'est mon tour, sinon reste « Piocher » (issue #28).
+  const btnPiocher = document.getElementById("btn-piocher");
+  const passerMode = piocheVide && monTour;
+  const handler = passerMode ? onPasser : onPiocher;
+  btnPiocher.textContent = passerMode ? "⏭ Passer" : "⬇ Piocher";
+  btnPiocher.disabled = aPose || !monTour;
+  // Retirer l'ancien écouteur avant d'ajouter le nouveau pour éviter les doublons.
+  if (handlerBoutonPioche) {
+    btnPiocher.removeEventListener("click", handlerBoutonPioche);
+  }
+  btnPiocher.addEventListener("click", handler);
+  handlerBoutonPioche = handler;
 }
 
 function rafraichirHistorique() {
@@ -1164,8 +1178,8 @@ function brancherEvenements() {
   document.getElementById("btn-mode-tapis").addEventListener("click", basculerModeTapis);
   document.getElementById("btn-verifier-calc").addEventListener("click", onVerifierCalc);
   document.getElementById("btn-jouer").addEventListener("click", onJouer);
-  document.getElementById("btn-piocher").addEventListener("click", onPiocher);
-  document.getElementById("btn-passer").addEventListener("click", onPasser);
+  // Le bouton #btn-piocher (fusion Piocher/Passer) reçoit son écouteur
+  // dynamiquement dans rafraichirBoutons() selon le contexte (issue #28).
   document.getElementById("btn-nouvelle-manche").addEventListener("click", onNouvelleManche);
   document.getElementById("btn-fin-retour").addEventListener("click", onRetourAccueil);
 
