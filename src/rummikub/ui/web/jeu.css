@@ -200,6 +200,11 @@ body { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
    (public senior). Ne cible QUE #chevalet, pas le tapis ni la zone de travail. */
 #chevalet .tuile-jeu { --tw: 54px; }
 #chevalet .emplacement-vide { width: 54px; height: 72px; }
+/* Indice discret rappelant comment réorganiser le chevalet (issue #26). Caché
+   dès qu'une réorganisation est en cours (classe .masque, layout préservé). */
+#chevalet-hint { color: #9fb0ab; font-size: 0.75rem; margin-top: 6px;
+   opacity: 0.8; transition: opacity 0.15s; }
+#chevalet-hint.masque { visibility: hidden; opacity: 0; }
 .emplacement-vide { width: 42px; height: 56px;
   border: 1px dashed rgba(255,255,255,0.2); border-radius: 6px; }
 #btn-trier { padding: 10px 18px; border: none; border-radius: 6px;

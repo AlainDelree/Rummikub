@@ -66,10 +66,15 @@ function afficherTitreEnTuiles(texte, container) {
  * courts, casquette, casque, barbe, calvitie → masculin. (Les noms de fichiers
  * étant neutres « avatar-NN », la déduction se fait sur le dessin.)
  */
-const AVATARS_F = ["avatar-02", "avatar-08", "avatar-10"];
+// Genre déduit du dessin de chaque SVG (voir avatars/) :
+//   02 cheveux longs + boucles d'oreilles, 08 nœud dans les cheveux,
+//   10 cheveux longs + boucles d'oreilles, 15 bandeau + fleur → féminin.
+//   Les autres portent barbe, moustache, casquette, cheveux courts/bouclés
+//   ou casque, sans marqueur féminin → masculin.
+const AVATARS_F = ["avatar-02", "avatar-08", "avatar-10", "avatar-15"];
 const AVATARS_M = ["avatar-01", "avatar-03", "avatar-04", "avatar-05",
                    "avatar-06", "avatar-07", "avatar-09", "avatar-11",
-                   "avatar-12", "avatar-13", "avatar-14", "avatar-15"];
+                   "avatar-12", "avatar-13", "avatar-14"];
 // Liste ordonnée complète : sert de grille de sélection (l'index reste stable,
 // c'est lui qui est persisté dans les réglages via `avatar_index`).
 const AVATARS = ["avatar-01", "avatar-02", "avatar-03", "avatar-04", "avatar-05",

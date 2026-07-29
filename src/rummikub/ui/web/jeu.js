@@ -277,6 +277,20 @@ function rafraichirChevalet() {
     if (drag) brancherDropFin(vide);
     chev.appendChild(vide);
   }
+  majHintChevalet();
+}
+
+// Indice discret sous le chevalet : rappelle le geste de réorganisation selon
+// le mode réglé, et disparaît dès qu'une réorganisation est en cours.
+function majHintChevalet() {
+  const hint = document.getElementById("chevalet-hint");
+  if (!hint) return;
+  const drag = modeReorgReglage() === "drag";
+  const reorgEnCours = reorgSource !== null || dragSourceId !== null;
+  hint.textContent = drag
+    ? "Glissez les tuiles pour les réordonner"
+    : "Maintenez une tuile pour la déplacer";
+  hint.classList.toggle("masque", reorgEnCours);
 }
 
 // Mode de réorganisation choisi dans les réglages : "clic" (appui long + clic)
@@ -372,10 +386,12 @@ function brancherDragChevalet(el, d) {
       try { e.dataTransfer.setData("text/plain", d.id); } catch (_) {}
     }
     el.classList.add("drag-en-cours");
+    majHintChevalet();
   });
   el.addEventListener("dragend", () => {
     dragSourceId = null;
     el.classList.remove("drag-en-cours");
+    majHintChevalet();
   });
   el.addEventListener("dragover", (e) => {
     e.preventDefault();
