@@ -4,6 +4,7 @@
   "mise_initiale_min": 30,
   "nb_manches": 1,
   "valeur_joker_penalite": 30,
-  "vitesse_ia": "Lente",
+  "vitesse_ia": "Instantanée",
+  "mode_reorg": "clic",
   "theme": "Sombre"
 }
