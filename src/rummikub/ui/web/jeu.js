@@ -1,8 +1,7 @@
 "use strict";
 
-// Avatars emoji (cohérent avec accueil.js tant que web/avatars/ est vide)
-const AVATARS = ["🧑","👩","👨","🧔","👵","👴","🧓","👱","👩‍🦰","👨‍🦰",
-                 "👩‍🦱","👨‍🦱","🧑‍🎓","👩‍🎨","🦊"];
+// Avatars SVG et helpers genrés : voir commun.js (AVATARS, avatarPour,
+// elementAvatar, avatarStablePourPrenom) + genres.js (genrePrénom).
 const COULEURS_ORDRE = { rouge: 0, bleu: 1, jaune: 2, noir: 3 };
 
 // ------------------------------------------------------------ état local
@@ -23,10 +22,6 @@ let dragSourceId = null;      // id de la tuile en cours de glisser-déposer
 
 // ------------------------------------------------------------ utilitaires
 function clone(x) { return JSON.parse(JSON.stringify(x)); }
-
-function avatarPour(i) {
-  return AVATARS[((i % AVATARS.length) + AVATARS.length) % AVATARS.length];
-}
 
 function indexHumain() {
   if (!etat) return 0;
@@ -120,10 +115,12 @@ function rafraichirFichesJoueurs() {
     fiche.className = "fiche-joueur" +
       (i === etat.index_joueur_actuel ? " actif" : "");
 
-    const av = document.createElement("span");
-    av.className = "avatar-fiche";
-    av.textContent = avatarPour(
-      j.avatar_index != null ? j.avatar_index : i + 5);
+    // Avatar : index explicite s'il existe (choisi à l'accueil), sinon avatar
+    // stable accordé au genre du prénom (parties reprises sans avatar_index).
+    const nomFichierAvatar = j.avatar_index != null
+      ? avatarPour(j.avatar_index)
+      : avatarStablePourPrenom(j.nom);
+    const av = elementAvatar(nomFichierAvatar, "avatar-fiche");
     fiche.appendChild(av);
 
     const info = document.createElement("div");

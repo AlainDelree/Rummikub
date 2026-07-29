@@ -57,3 +57,68 @@ function afficherTitreEnTuiles(texte, container) {
   container.innerHTML = "";
   for (const c of texte) container.appendChild(creerTuileTitre(c));
 }
+
+/* ------------------------------------------------------------ avatars SVG
+ * Avatars du projet Scrabble (fichiers dans web/avatars/). Ils sont groupés
+ * par genre pour pouvoir accorder l'avatar au prénom du joueur (voir
+ * genres.js → genrePrénom). Le genre de chaque avatar a été déduit du contenu
+ * visuel du SVG : cheveux longs et/ou boucles d'oreilles → féminin ; cheveux
+ * courts, casquette, casque, barbe, calvitie → masculin. (Les noms de fichiers
+ * étant neutres « avatar-NN », la déduction se fait sur le dessin.)
+ */
+const AVATARS_F = ["avatar-02", "avatar-08", "avatar-10"];
+const AVATARS_M = ["avatar-01", "avatar-03", "avatar-04", "avatar-05",
+                   "avatar-06", "avatar-07", "avatar-09", "avatar-11",
+                   "avatar-12", "avatar-13", "avatar-14", "avatar-15"];
+// Liste ordonnée complète : sert de grille de sélection (l'index reste stable,
+// c'est lui qui est persisté dans les réglages via `avatar_index`).
+const AVATARS = ["avatar-01", "avatar-02", "avatar-03", "avatar-04", "avatar-05",
+                 "avatar-06", "avatar-07", "avatar-08", "avatar-09", "avatar-10",
+                 "avatar-11", "avatar-12", "avatar-13", "avatar-14", "avatar-15"];
+
+// Nom de fichier d'avatar pour un index (modulo, tolère les index négatifs).
+function avatarPour(i) {
+  return AVATARS[((i % AVATARS.length) + AVATARS.length) % AVATARS.length];
+}
+
+// Élément <img> pointant vers le SVG d'un avatar (nom SANS extension).
+function elementAvatar(nomFichier, className) {
+  const img = document.createElement("img");
+  if (className) img.className = className;
+  img.src = "avatars/" + nomFichier + ".svg";
+  img.alt = "";
+  return img;
+}
+
+// Groupe d'avatars cohérent avec le genre d'un prénom (genres.js). Repli sur
+// la liste complète si genres.js absent ou genre inconnu.
+function _avatarsPourPrenom(prenom) {
+  const g = (typeof genrePrénom === "function") ? genrePrénom(prenom) : "inconnu";
+  if (g === "F") return AVATARS_F;
+  if (g === "M") return AVATARS_M;
+  return AVATARS;
+}
+
+// Petit hash déterministe d'une chaîne (avatar stable d'un tour à l'autre).
+function _hashChaine(s) {
+  let h = 0;
+  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0;
+  return Math.abs(h);
+}
+
+// Avatar aléatoire du bon genre pour un prénom, en évitant si possible ceux
+// déjà attribués (`exclus` = liste de noms de fichiers).
+function avatarAleatoirePourPrenom(prenom, exclus) {
+  const base = _avatarsPourPrenom(prenom);
+  const exset = new Set(exclus || []);
+  const libres = base.filter((a) => !exset.has(a));
+  const pool = libres.length ? libres : base;
+  return pool[Math.floor(Math.random() * pool.length)];
+}
+
+// Avatar STABLE (déterministe) du bon genre pour un prénom : même prénom →
+// même avatar à chaque affichage (utile en jeu, redessiné souvent).
+function avatarStablePourPrenom(prenom) {
+  const base = _avatarsPourPrenom(prenom);
+  return base[_hashChaine(String(prenom || "")) % base.length];
+}

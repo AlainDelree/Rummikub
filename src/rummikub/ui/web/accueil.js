@@ -1,8 +1,7 @@
 "use strict";
 
-// Avatars (emoji tant que web/avatars/ est vide — issue ultérieure : images)
-const AVATARS = ["🧑","👩","👨","🧔","👵","👴","🧓","👱","👩‍🦰","👨‍🦰",
-                 "👩‍🦱","👨‍🦱","🧑‍🎓","👩‍🎨","🦊"];
+// Avatars SVG et helpers genrés : voir commun.js (AVATARS, avatarPour,
+// elementAvatar, avatarAleatoirePourPrenom) + genres.js (genrePrénom).
 const NIVEAUX = ["Débutant", "Facile", "Intermédiaire", "Avancé", "Expert"];
 const MAX_ADVERSAIRES = 3;
 
@@ -10,12 +9,8 @@ const MAX_ADVERSAIRES = 3;
 const etat = {
   reglages: null,
   avatarIndex: 0,
-  adversaires: [],   // [{nom, avatar, niveau}]
+  adversaires: [],   // [{nom, avatar, niveau}] — avatar = nom de fichier SVG
 };
-
-function avatarPour(i) {
-  return AVATARS[((i % AVATARS.length) + AVATARS.length) % AVATARS.length];
-}
 
 // ---------------------------------------------------------------- init
 async function init() {
@@ -44,14 +39,6 @@ async function init() {
   remplirChampsReglages();
 }
 
-function nouvelAdversaire(index) {
-  return {
-    nom: "Ordinateur " + (index + 1),
-    avatar: avatarPour(index + 5),
-    niveau: "Intermédiaire",
-  };
-}
-
 // ---------------------------------------------------------------- joueurs (humain + IA)
 function slugNiveau(niv) {
   return (niv || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
@@ -64,10 +51,8 @@ function afficherJoueurs() {
   // Carte humain (en premier, fond bleu clair, pas de bouton ✕)
   const carteH = document.createElement("div");
   carteH.className = "carte-joueur humain";
-  const avH = document.createElement("span");
-  avH.className = "avatar-joueur";
+  const avH = elementAvatar(avatarPour(etat.avatarIndex), "avatar-joueur");
   avH.id = "avatar-humain";
-  avH.textContent = avatarPour(etat.avatarIndex);
   carteH.appendChild(avH);
   const nomH = document.createElement("span");
   nomH.className = "nom-joueur";
@@ -82,9 +67,7 @@ function afficherJoueurs() {
     const carte = document.createElement("div");
     carte.className = "carte-joueur ia";
 
-    const av = document.createElement("span");
-    av.className = "avatar-joueur";
-    av.textContent = adv.avatar;
+    const av = elementAvatar(adv.avatar, "avatar-joueur");
     carte.appendChild(av);
 
     const bloc = document.createElement("div");
@@ -150,10 +133,12 @@ async function ajouterAdversaire(niveau) {
     toast("Maximum " + MAX_ADVERSAIRES + " adversaires", "erreur");
     return;
   }
-  const adv = nouvelAdversaire(etat.adversaires.length);
-  adv.niveau = niveau;
-  adv.nom = await nomIAAleatoire();
-  etat.adversaires.push(adv);
+  const nom = await nomIAAleatoire();
+  // Avatar accordé au genre du prénom tiré (genres.js), en évitant si
+  // possible les avatars déjà pris par les autres adversaires.
+  const avatar = avatarAleatoirePourPrenom(
+    nom, etat.adversaires.map((a) => a.avatar));
+  etat.adversaires.push({ nom, avatar, niveau });
   afficherJoueurs();
 }
 
@@ -253,10 +238,11 @@ function construireGrilleAvatars() {
   AVATARS.forEach((a, i) => {
     const b = document.createElement("button");
     b.className = "btn-avatar" + (i === etat.avatarIndex ? " selectionne" : "");
-    b.textContent = a;
+    b.appendChild(elementAvatar(a, "avatar-vignette"));
     b.addEventListener("click", () => {
       etat.avatarIndex = i;
-      document.getElementById("avatar-humain").textContent = avatarPour(i);
+      const avH = document.getElementById("avatar-humain");
+      if (avH) avH.src = "avatars/" + avatarPour(i) + ".svg";
       construireGrilleAvatars();
     });
     grille.appendChild(b);
@@ -303,7 +289,12 @@ async function lancerPartie() {
     { nom: nomHumain, est_ia: false, niveau: null, avatar_index: etat.avatarIndex },
   ];
   etat.adversaires.forEach((a) => {
-    joueurs.push({ nom: a.nom, est_ia: true, niveau: a.niveau });
+    // Transmettre l'index de l'avatar genré choisi pour que le jeu affiche
+    // exactement le même avatar (voir jeu.js / creer_partie).
+    joueurs.push({
+      nom: a.nom, est_ia: true, niveau: a.niveau,
+      avatar_index: AVATARS.indexOf(a.avatar),
+    });
   });
 
   const jokerEl = document.querySelector("input[name='joker-val']:checked");

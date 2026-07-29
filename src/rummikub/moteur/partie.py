@@ -33,7 +33,8 @@ def _plateau_vers_dict(plateau: list[list[Tuile]]) -> list[list[dict]]:
 
 def creer_partie(config_joueurs: list[dict], config_regles: dict) -> dict:
     """
-    config_joueurs = [{"nom": str, "est_ia": bool, "niveau": str|None}, ...]
+    config_joueurs = [{"nom": str, "est_ia": bool, "niveau": str|None,
+                       "avatar_index": int|None}, ...]  # avatar_index optionnel
     Crée et retourne un état complet avec tuiles distribuées.
     """
     nb_joueurs = len(config_joueurs)
@@ -45,6 +46,7 @@ def creer_partie(config_joueurs: list[dict], config_regles: dict) -> dict:
             "nom": cj["nom"],
             "est_ia": cj.get("est_ia", False),
             "niveau": cj.get("niveau"),
+            "avatar_index": cj.get("avatar_index"),
             "chevalet": [t.as_dict() for t in distribution["chevalets"][i]],
             "mise_initiale_faite": False,
             "score_manche": 0,

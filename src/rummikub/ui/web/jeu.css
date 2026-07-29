@@ -37,7 +37,8 @@ body { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
   padding: 8px; display: flex; align-items: center; gap: 8px; }
 .fiche-joueur.actif { background: var(--couleur-humain-fond);
   color: var(--couleur-texte); }
-.fiche-joueur .avatar-fiche { font-size: 1.6rem; }
+.fiche-joueur .avatar-fiche { width: 32px; height: 32px; border-radius: 50%;
+  object-fit: cover; flex-shrink: 0; }
 .fiche-joueur .info-fiche { flex: 1; min-width: 0; }
 .fiche-joueur .nom-fiche { font-weight: 600; }
 .fiche-joueur .meta-fiche { font-size: 0.75rem; opacity: 0.85; }
