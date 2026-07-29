@@ -3,7 +3,9 @@
   border: none; font-size: 1.4rem; cursor: pointer; opacity: 0.7; }
 #btn-reglages:hover { opacity: 1; }
 
-.section-label { margin-bottom: 8px; }
+.section-label { margin-bottom: 8px; justify-content: flex-start; }
+/* Tuiles-titres plus petites que le titre RUMMIKUB (52px), pour JOUEURS/PARTIES */
+.section-label .tuile-titre { --tw: 33px; }
 
 .carte-joueur { display: flex; align-items: center; gap: 10px;
   padding: 10px 14px; border-radius: 6px; margin-bottom: 6px; }
