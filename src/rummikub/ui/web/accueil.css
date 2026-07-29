@@ -4,7 +4,7 @@
 #btn-reglages:hover { opacity: 1; }
 
 /* Espace le titre RUMMIKUB de la section JOUEURS */
-#titre-container { margin-bottom: 18px; }
+#titre-container { margin-bottom: 28px; }
 
 .section-label { margin-bottom: 14px; justify-content: flex-start; }
 #section-joueurs { margin-bottom: 28px; }
