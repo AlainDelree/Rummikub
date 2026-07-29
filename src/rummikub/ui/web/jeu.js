@@ -52,32 +52,45 @@ function tuileDepuisDict(d) {
   return el;
 }
 
-// Redessine l'icône « sac de pioche » avec le nombre de tuiles restantes.
-function mettreAJourSac(nb) {
-  const cont = document.getElementById("compteur-pioche");
-  if (!cont) return;
-  cont.innerHTML = `
+// Repli SVG du sac (utilisé si Sac_de_jeu.png est absent / ne charge pas).
+function sacSvgHtml(nb) {
+  return `
     <svg width="54" height="60" viewBox="0 0 54 60"
          xmlns="http://www.w3.org/2000/svg">
-      <!-- Cordon du sac -->
       <path d="M20 14 Q20 6 27 6 Q34 6 34 14"
             fill="none" stroke="#c9a961" stroke-width="2.5"
             stroke-linecap="round"/>
-      <!-- Corps du sac -->
       <rect x="6" y="14" width="42" height="38" rx="10" ry="10"
             fill="#f5e6c8" stroke="#c9a961" stroke-width="2"/>
-      <!-- Reflet -->
       <ellipse cx="16" cy="22" rx="5" ry="3"
                fill="rgba(255,255,255,0.4)"/>
-      <!-- Nombre -->
       <text x="27" y="40" text-anchor="middle"
             font-family="system-ui, sans-serif"
             font-size="${nb > 99 ? 14 : nb > 9 ? 17 : 20}"
             font-weight="700" fill="#3b2f1a">${nb}</text>
-    </svg>
-    <div style="font-size:0.7rem;color:rgba(255,255,255,0.6);
-         text-align:center;margin-top:2px">tuiles</div>
-  `;
+    </svg>`;
+}
+
+// Bascule sur le SVG de repli si l'image du sac ne se charge pas.
+function sacImgFallback(img) {
+  const cont = img.closest("#compteur-pioche");
+  if (!cont) return;
+  const nb = cont.dataset.nb || "0";
+  cont.innerHTML = sacSvgHtml(nb) + `<div class="sac-label">tuiles</div>`;
+}
+
+// Redessine l'icône « sac de pioche » (image + nombre superposé).
+function mettreAJourSac(nb) {
+  const cont = document.getElementById("compteur-pioche");
+  if (!cont) return;
+  cont.dataset.nb = nb;
+  cont.innerHTML = `
+    <div class="sac-pioche">
+      <img src="Sac_de_jeu.png" alt="Sac de pioche" class="sac-img"
+           onerror="sacImgFallback(this)">
+      <span class="sac-nombre">${nb}</span>
+    </div>
+    <div class="sac-label">tuiles</div>`;
 }
 
 // ------------------------------------------------------------ rafraîchissement
