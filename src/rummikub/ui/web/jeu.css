@@ -313,8 +313,8 @@ body { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
   box-shadow: 0 0 0 2px rgba(59,130,246,0.5) inset; }
 #btn-verifier-calc { background: #1565c0; color: #fff; }
 #btn-jouer     { background: #2e7d32; color: #fff; }
-#btn-piocher   { background: #5d4037; color: #fff; }
-#btn-trier     { background: #475569; color: #fff; }
+#btn-piocher   { background: #92400e; color: #fff; }
+#btn-trier     { background: #0284c7; color: #fff; }
 button:disabled { opacity: 0.4; cursor: not-allowed; }
 
 .overlay-cache   { display: none; }
