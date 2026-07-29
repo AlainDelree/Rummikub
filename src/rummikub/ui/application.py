@@ -60,7 +60,10 @@ class ApplicationRummikub:
         def apres_demarrage():
             self._window.maximize()
 
-        webview.start(apres_demarrage, debug=False)
+        # debug=True désactive le cache disque persistant de WebKit : sans cela,
+        # les modifications CSS/JS ne sont pas prises en compte au relancement
+        # (pywebview sert les fichiers via HTTP local, mis en cache par WebKit).
+        webview.start(apres_demarrage, debug=True)
 
 
 def main():
