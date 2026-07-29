@@ -235,6 +235,7 @@ function rafraichirPlateau() {
 
 // Rendu de la zone de travail (4 rangées)
 function rafraichirZoneTravail() {
+  const tuileSel = tuileSelectionnee !== null;
   travail.forEach((rangee, i) => {
     const cont = document.querySelector(`.rangee-tuiles[data-rangee="${i}"]`);
     const wrap = document.querySelector(`.rangee-travail[data-rangee="${i}"]`);
@@ -244,17 +245,40 @@ function rafraichirZoneTravail() {
     wrap.classList.toggle("active", i === rangeeActive);
     wrap.classList.toggle("non-vide", rangee.length > 0);
     if (ind) ind.classList.toggle("actif", i === rangeeActive);
-    rangee.forEach((d) => {
+    // Zone d'insertion avant la première tuile (position 0), visible quand une
+    // tuile est prête à être posée. Même système que sur le tapis (issue #27).
+    if (tuileSel && rangee.length > 0) cont.appendChild(zoneInsertionRangee(i, 0));
+    rangee.forEach((d, idx) => {
       const el = tuileDepuisDict(d);
       el.classList.add("ce-tour");
       if (d.id === tuileSelectionnee) el.classList.add("selectionnee");
       el.addEventListener("click", (e) => {
         e.stopPropagation();
-        reprendreTuileRangee(d.id, i);
+        // Tuile prête (autre que celle-ci) : cliquer une tuile de la rangée
+        // insère la tuile sélectionnée AVANT elle (miroir du tapis, issue #27).
+        if (tuileSel && d.id !== tuileSelectionnee) insererTuileRangee(i, idx);
+        else reprendreTuileRangee(d.id, i);
       });
       cont.appendChild(el);
+      // Zone d'insertion après cette tuile (= avant la suivante, ou en fin de
+      // rangée pour la dernière — l'ancien clic-sur-rangée reste en secours).
+      if (tuileSel) cont.appendChild(zoneInsertionRangee(i, idx + 1));
     });
   });
+}
+
+// Crée une zone d'insertion (style .zone-ext-interne, 20px) pour la rangée de
+// travail `indexRangee` à la position `pos`. Clic → insère la tuile
+// sélectionnée à cette position exacte via splice().
+function zoneInsertionRangee(indexRangee, pos) {
+  const zi = document.createElement("div");
+  zi.className = "zone-ext zone-ext-interne";
+  zi.title = "Insérer la tuile sélectionnée ici";
+  zi.addEventListener("click", (e) => {
+    e.stopPropagation();
+    insererTuileRangee(indexRangee, pos);
+  });
+  return zi;
 }
 
 // Réconcilie l'ordre local avec le contenu serveur après une action :
@@ -569,6 +593,30 @@ function placerTuileDansRangee() {
   travail[rangeeActive].push(info.d);
   // Une tuile venant du chevalet devient « posée ce tour » ; une tuile déjà
   // en zone de travail (déplacement entre rangées) y figure déjà.
+  if (info.source === "chevalet") tuilesCeTour.push(info.d.id);
+  tuileSelectionnee = null;
+  rafraichirZoneTravail();
+  rafraichirPlateau(); // masquer les zones d'extension
+  rafraichirChevalet();
+  rafraichirBoutons();
+}
+
+// Insérer la tuile sélectionnée à une position exacte `pos` d'une rangée de
+// travail. Miroir de placerTuileDansRangee() mais via splice() : sert les zones
+// d'insertion internes et le clic direct sur une tuile de la rangée (issue #31).
+function insererTuileRangee(indexRangee, pos) {
+  if (tuileSelectionnee === null) return;
+  if (!estMonTour()) { toast("Ce n'est pas votre tour", "erreur"); return; }
+  rangeeActive = indexRangee;
+  // Si la tuile sélectionnée est déjà dans CETTE rangée avant `pos` (déplacement
+  // interne d'une tuile prise sur le tapis), son retrait décale les index.
+  const jSel = travail[indexRangee].findIndex((t) => t.id === tuileSelectionnee);
+  const info = prelevereTuilePlacable(tuileSelectionnee);
+  if (!info) return;
+  const posEff = (jSel >= 0 && jSel < pos) ? pos - 1 : pos;
+  travail[indexRangee].splice(posEff, 0, info.d);
+  // Une tuile venant du chevalet devient « posée ce tour » ; une tuile déjà en
+  // zone de travail (déplacement) y figure déjà.
   if (info.source === "chevalet") tuilesCeTour.push(info.d.id);
   tuileSelectionnee = null;
   rafraichirZoneTravail();
