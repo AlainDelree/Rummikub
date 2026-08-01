@@ -30,7 +30,7 @@ REM ===========================================================================
 REM  ETAPE 0 : localiser ISCC.exe
 REM ===========================================================================
 echo.
-echo [0/6] Recherche de ISCC.exe (Inno Setup 6)...
+echo [0/6] Recherche de ISCC.exe ^(Inno Setup 6^)...
 set "ISCC=%ORIGDIR%\.tools\InnoSetup6\ISCC.exe"
 
 if not exist "%ISCC%" (
@@ -98,7 +98,7 @@ REM ===========================================================================
 REM  ETAPE 4 : build PyInstaller
 REM ===========================================================================
 echo.
-echo [4/6] Construction avec PyInstaller (rummikub.spec)...
+echo [4/6] Construction avec PyInstaller ^(rummikub.spec^)...
 call ".venv_build\Scripts\python.exe" -m PyInstaller rummikub.spec -y
 if errorlevel 1 (
     echo [ERREUR] Echec de PyInstaller
@@ -107,6 +107,10 @@ if errorlevel 1 (
 
 REM ===========================================================================
 REM  ETAPE 5 : verification de l'executable produit
+REM  Gabarit de taille attendu : Rummikub n'embarque AUCUN dictionnaire,
+REM  la taille normale du dossier dist\Rummikub est d'environ 12 Mo.
+REM  Fourchette de sanite : 5 Mo a 25 Mo (5242880 a 26214400 octets).
+REM  Hors de cette fourchette -> simple avertissement, pas d'echec.
 REM ===========================================================================
 echo.
 echo [5/6] Verification de dist\Rummikub\Rummikub.exe ...
@@ -118,6 +122,8 @@ set "TOTAL=0"
 for /f "usebackq delims=" %%S in (`powershell -NoProfile -Command "(Get-ChildItem -Recurse -File 'dist\Rummikub' | Measure-Object -Sum Length).Sum"`) do set "TOTAL=%%S"
 echo       OK : dist\Rummikub\Rummikub.exe present.
 echo       Taille totale du dossier dist\Rummikub : %TOTAL% octets
+if %TOTAL% LSS 5242880 echo       [ATTENTION] Taille inhabituellement PETITE ^(attendu ~12 Mo, fourchette 5-25 Mo^).
+if %TOTAL% GTR 26214400 echo       [ATTENTION] Taille inhabituellement GRANDE ^(attendu ~12 Mo, fourchette 5-25 Mo^).
 
 REM ===========================================================================
 REM  ETAPE 6 : installeur Inno Setup + copie + nettoyage + reset git
@@ -126,7 +132,7 @@ echo.
 echo [6/6] Generation de l'installeur avec Inno Setup...
 "%ISCC%" installeur\rummikub.iss
 if errorlevel 1 (
-    echo [ERREUR] Echec de la compilation de l'installeur (ISCC).
+    echo [ERREUR] Echec de la compilation de l'installeur ^(ISCC^).
     popd & exit /b 1
 )
 
@@ -136,12 +142,12 @@ if not exist "%SETUP%" (
     popd & exit /b 1
 )
 
-echo       Copie de l'installeur (staging local %BUILDDIR%\installeur\output)...
+echo       Copie de l'installeur ^(staging local %BUILDDIR%\installeur\output^)...
 if not exist "installeur\output" mkdir "installeur\output"
 copy /y "%SETUP%" "installeur\output\Rummikub-Setup.exe" >nul
 if errorlevel 1 ( echo [ERREUR] Echec de la copie locale de l'installeur. & popd & exit /b 1 )
 
-echo       Copie de l'installeur vers le partage (%ORIGDIR%\installeur\output)...
+echo       Copie de l'installeur vers le partage ^(%ORIGDIR%\installeur\output^)...
 if not exist "%ORIGDIR%\installeur\output" mkdir "%ORIGDIR%\installeur\output"
 copy /y "%SETUP%" "%ORIGDIR%\installeur\output\Rummikub-Setup.exe" >nul
 if errorlevel 1 ( echo [ERREUR] Echec de la copie de l'installeur vers le partage. & popd & exit /b 1 )
@@ -152,7 +158,7 @@ echo.
 echo       Nettoyage de %BUILDDIR% ...
 rmdir /s /q "%BUILDDIR%"
 
-echo       Reset du depot partage (git reset --hard origin/master)...
+echo       Reset du depot partage ^(git reset --hard origin/master^)...
 git -C Z:\CCW\rummikub reset --hard origin/master
 
 echo.
