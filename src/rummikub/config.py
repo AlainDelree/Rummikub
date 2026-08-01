@@ -1,15 +1,22 @@
 from pathlib import Path
+import os
 import sys
 
 if getattr(sys, "frozen", False):
     RACINE_PROJET = Path(sys._MEIPASS)
+    # Application gelée (PyInstaller) : installée dans un dossier en lecture
+    # seule (ex. C:\Program Files\Rummikub), donc les données utilisateur
+    # (SQLite, config.json) doivent aller dans un dossier accessible en
+    # écriture — %APPDATA%\Rummikub, sinon PermissionError [WinError 5].
+    RACINE_DATA = Path(os.environ.get("APPDATA", Path.home())) / "Rummikub"
+    FICHIER_CFG = RACINE_DATA / "config.json"
 else:
     RACINE_PROJET = Path(__file__).resolve().parent.parent.parent
+    RACINE_DATA  = RACINE_PROJET / "data"
+    FICHIER_CFG  = RACINE_PROJET / "config.json"
 
 RACINE_WEB   = Path(__file__).parent / "ui" / "web"
-RACINE_DATA  = RACINE_PROJET / "data"
 FICHIER_DB   = RACINE_DATA / "parties.db"
-FICHIER_CFG  = RACINE_PROJET / "config.json"
 
 COULEURS           = ["rouge", "bleu", "jaune", "noir"]
 NB_SERIES          = 2
