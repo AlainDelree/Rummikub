@@ -1,5 +1,5 @@
 import json
-from rummikub.config import FICHIER_CFG
+from rummikub.config import FICHIER_CFG, RACINE_DATA
 
 DEFAUTS = {
     "prenom": "Joueur",
@@ -19,5 +19,6 @@ def charger():
 
 def sauvegarder(data: dict):
     merged = {**charger(), **data}
+    RACINE_DATA.mkdir(parents=True, exist_ok=True)
     FICHIER_CFG.write_text(json.dumps(merged, ensure_ascii=False, indent=2), "utf-8")
     return merged
