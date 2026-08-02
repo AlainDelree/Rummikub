@@ -107,10 +107,12 @@ if errorlevel 1 (
 
 REM ===========================================================================
 REM  ETAPE 5 : verification de l'executable produit
-REM  Gabarit de taille attendu : Rummikub n'embarque AUCUN dictionnaire,
-REM  la taille normale du dossier dist\Rummikub est d'environ 12 Mo.
-REM  Fourchette de sanite : 5 Mo a 25 Mo (5242880 a 26214400 octets).
+REM  Gabarit de taille attendu : cette mesure porte sur le DOSSIER dist\Rummikub
+REM  NON COMPRESSE (arborescence PyInstaller onedir), et non sur l'installeur.
+REM  Taille normale observee du dossier dist\Rummikub : ~28 Mo (28 712 051 octets).
+REM  Fourchette de sanite : 20 Mo a 45 Mo (20971520 a 47185920 octets).
 REM  Hors de cette fourchette -> simple avertissement, pas d'echec.
+REM  (Le garde-fou sur l'installeur final compresse est a l'etape 6.)
 REM ===========================================================================
 echo.
 echo [5/6] Verification de dist\Rummikub\Rummikub.exe ...
@@ -121,9 +123,9 @@ if not exist "dist\Rummikub\Rummikub.exe" (
 set "TOTAL=0"
 for /f "usebackq delims=" %%S in (`powershell -NoProfile -Command "(Get-ChildItem -Recurse -File 'dist\Rummikub' | Measure-Object -Sum Length).Sum"`) do set "TOTAL=%%S"
 echo       OK : dist\Rummikub\Rummikub.exe present.
-echo       Taille totale du dossier dist\Rummikub : %TOTAL% octets
-if %TOTAL% LSS 5242880 echo       [ATTENTION] Taille inhabituellement PETITE ^(attendu ~12 Mo, fourchette 5-25 Mo^).
-if %TOTAL% GTR 26214400 echo       [ATTENTION] Taille inhabituellement GRANDE ^(attendu ~12 Mo, fourchette 5-25 Mo^).
+echo       Taille totale du dossier dist\Rummikub ^(non compresse^) : %TOTAL% octets
+if %TOTAL% LSS 20971520 echo       [ATTENTION] Dossier dist\ inhabituellement PETIT ^(attendu ~28 Mo, fourchette 20-45 Mo^).
+if %TOTAL% GTR 47185920 echo       [ATTENTION] Dossier dist\ inhabituellement GRAND ^(attendu ~28 Mo, fourchette 20-45 Mo^).
 
 REM ===========================================================================
 REM  ETAPE 6 : installeur Inno Setup + copie + nettoyage + reset git
@@ -151,6 +153,17 @@ echo       Copie de l'installeur vers le partage ^(%ORIGDIR%\installeur\output^)
 if not exist "%ORIGDIR%\installeur\output" mkdir "%ORIGDIR%\installeur\output"
 copy /y "%SETUP%" "%ORIGDIR%\installeur\output\Rummikub-Setup.exe" >nul
 if errorlevel 1 ( echo [ERREUR] Echec de la copie de l'installeur vers le partage. & popd & exit /b 1 )
+
+REM  Garde-fou sur l'INSTALLEUR FINAL COMPRESSE (Rummikub-Setup.exe).
+REM  Distinct de l'etape 5 (dossier dist\ non compresse) : ici on mesure le .exe
+REM  d'installation genere par Inno Setup, soit ~12 Mo (12 180 000 octets observes).
+REM  Fourchette de sanite : 5 Mo a 25 Mo (5242880 a 26214400 octets).
+REM  Hors de cette fourchette -> simple avertissement, pas d'echec.
+set "SETUPSIZE=0"
+for /f "usebackq delims=" %%S in (`powershell -NoProfile -Command "(Get-Item '%SETUP%').Length"`) do set "SETUPSIZE=%%S"
+echo       Taille de l'installeur Rummikub-Setup.exe ^(compresse^) : %SETUPSIZE% octets
+if %SETUPSIZE% LSS 5242880 echo       [ATTENTION] Installeur inhabituellement PETIT ^(attendu ~12 Mo, fourchette 5-25 Mo^).
+if %SETUPSIZE% GTR 26214400 echo       [ATTENTION] Installeur inhabituellement GRAND ^(attendu ~12 Mo, fourchette 5-25 Mo^).
 
 popd
 
