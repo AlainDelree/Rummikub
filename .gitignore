@@ -6,3 +6,5 @@ build/
 !rummikub.spec
 *.db
 data/parties.db
+.tools/
+installeur/output/
