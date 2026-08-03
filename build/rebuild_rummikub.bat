@@ -139,7 +139,7 @@ REM  Recupere depuis la Release v1 du depot AlainDelree/Actualise.
 REM ===========================================================================
 echo.
 echo [6/9] Telechargement d'Actualise ^(updater^)...
-set "ACTUALISE_URL=https://github.com/AlainDelree/Actualise/releases/download/v2/actualise.zip"
+set "ACTUALISE_URL=https://github.com/AlainDelree/Actualise/releases/download/v3/actualise.zip"
 set "ACTUALISE_ZIP=%BUILDDIR%\actualise.zip"
 set "ACTUALISE_EXTRACT=%BUILDDIR%\actualise_extract"
 powershell -NoProfile -Command "$ProgressPreference='SilentlyContinue'; try { Invoke-WebRequest -Uri '%ACTUALISE_URL%' -OutFile '%ACTUALISE_ZIP%' -UseBasicParsing } catch { exit 1 }"

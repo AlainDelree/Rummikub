@@ -103,7 +103,7 @@ begin
   Contenu :=
     '{' + #13#10 +
     '  "actualise": {' + #13#10 +
-    '    "build_installe": 1,' + #13#10 +
+    '    "build_installe": 3,' + #13#10 +
     '    "depot_github": "AlainDelree/Actualise"' + #13#10 +
     '  },' + #13#10 +
     '  "application_cible": {' + #13#10 +
