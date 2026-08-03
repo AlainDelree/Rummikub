@@ -127,9 +127,6 @@ begin
     CreerConfigActualise();
 end;
 
-[Run]
-Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChange(MyAppName, '&', '&&')}}"; Flags: nowait postinstall skipifsilent
-
 [UninstallDelete]
 ; Nettoie les données créées par l'application à la désinstallation.
 Type: filesandordirs; Name: "{app}\logs"
