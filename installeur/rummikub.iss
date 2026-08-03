@@ -24,7 +24,7 @@
 ; Déposé par build\rebuild_rummikub.bat avant l'appel à ISCC (Actualise.exe +
 ; son dossier _internal\, runtime Python + DLL, mode PyInstaller --onedir).
 #define MyActualiseSrcDir "C:\Temp\RummikubBuild\Actualise_dist"
-#define MyActualiseDir "{sd}\Actualise"
+#define MyActualiseDir "{sd}\Actualise_Rummikub"
 
 [Setup]
 ; AppId identifie l'application de façon unique (NE PAS changer entre versions).
