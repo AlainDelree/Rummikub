@@ -1111,7 +1111,7 @@ async function jouerIA() {
   const btnIA = document.querySelector(".btn-jouer-ia");
   if (btnIA) btnIA.disabled = true;
 
-  // Vitesse d'animation selon le réglage « Vitesse de l'IA »
+  // Vitesse d'animation selon le réglage « Vitesse de l'ordinateur »
   const VITESSES = {
     "Instantanée": { reflexion: 0,    tuile: 100 },
     "Rapide":      { reflexion: 400,  tuile: 400 },
