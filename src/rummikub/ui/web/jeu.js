@@ -424,7 +424,7 @@ function majHintChevalet() {
   const reorgEnCours = reorgSource !== null || dragSourceId !== null;
   hint.textContent = drag
     ? "Glissez les tuiles pour les réordonner"
-    : "Maintenez une tuile pour la déplacer";
+    : "Cliquez sur une tuile puis sur sa destination";
   hint.classList.toggle("masque", reorgEnCours);
 }
 
@@ -1295,6 +1295,17 @@ function trierChevalet() {
   rafraichirChevalet();
 }
 
+// Tri d'une rangée de la zone de pose par valeur croissante (issue #66).
+// Ex. 9,10,8 → 8,9,10. Les jokers sont renvoyés en fin de rangée.
+function trierRangee(index) {
+  travail[index].sort((a, b) => {
+    if (a.est_joker) return 1;
+    if (b.est_joker) return -1;
+    return (a.valeur || 0) - (b.valeur || 0);
+  });
+  rafraichirZoneTravail();
+}
+
 // ------------------------------------------------------------ événements
 function brancherEvenements() {
   document.getElementById("btn-retour").addEventListener("click", onRetourAccueil);
@@ -1311,8 +1322,9 @@ function brancherEvenements() {
   document.querySelectorAll(".rangee-travail").forEach((rangeeEl) => {
     const i = parseInt(rangeeEl.dataset.rangee, 10);
     rangeeEl.addEventListener("click", (e) => {
-      // Ignorer les clics sur une tuile ou sur le bouton vider
+      // Ignorer les clics sur une tuile ou sur les boutons vider / trier
       if (e.target.classList.contains("btn-vider-rangee")) return;
+      if (e.target.classList.contains("btn-trier-rangee")) return;
       if (e.target.closest(".tuile-jeu")) return;
       if (tuileSelectionnee !== null) {
         rangeeActive = i;
@@ -1327,6 +1339,13 @@ function brancherEvenements() {
     btn.addEventListener("click", (e) => {
       e.stopPropagation();
       viderRangee(i);
+    });
+  });
+  document.querySelectorAll(".btn-trier-rangee").forEach((btn) => {
+    const i = parseInt(btn.dataset.rangee, 10);
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      trierRangee(i);
     });
   });
 

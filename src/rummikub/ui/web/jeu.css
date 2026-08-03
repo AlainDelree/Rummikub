@@ -168,6 +168,16 @@ body { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
   text-transform: uppercase;
   letter-spacing: 0.05em;
 }
+/* Grille 2×2 des 4 rangées de pose (issue #66) : rangées 1-2 empilées à
+   gauche, 3-4 à droite. Moitié moins haute que l'ancienne pile de 4, laisse
+   plus de place au tapis. grid-auto-flow: column remplit colonne par colonne. */
+.travail-grille {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: auto auto;
+  grid-auto-flow: column;
+  gap: 6px 12px;
+}
 .rangee-travail {
   display: flex;
   align-items: center;
@@ -196,7 +206,7 @@ body { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
 }
 .rangee-indicateur.actif { background: #22c55e; }
 .rangee-tuiles {
-  display: flex; gap: 4px; flex-wrap: wrap; flex: 1; min-height: 60px;
+  display: flex; gap: 4px; flex-wrap: wrap; flex: 1; min-height: 50px;
   align-items: center;
 }
 .rangee-tuiles:empty::before {
@@ -211,6 +221,16 @@ body { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
   visibility: hidden;
 }
 .rangee-travail.non-vide .btn-vider-rangee { visibility: visible; }
+
+/* Petit bouton de tri par rangée (issue #66) : trie les tuiles de la rangée
+   par valeur croissante. Discret, n'apparaît que si la rangée n'est pas vide. */
+.btn-trier-rangee {
+  background: none; border: none; color: rgba(255,255,255,0.3);
+  cursor: pointer; font-size: 0.9rem; padding: 2px 5px; line-height: 1;
+  flex-shrink: 0; visibility: hidden;
+}
+.rangee-travail.non-vide .btn-trier-rangee { visibility: visible; }
+.btn-trier-rangee:hover { color: #22c55e; }
 
 #resultat-calcul { padding: 4px 12px; min-height: 1.4em; color: #fff;
   font-size: 0.9rem; }
