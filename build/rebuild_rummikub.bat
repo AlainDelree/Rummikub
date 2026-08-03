@@ -208,7 +208,7 @@ REM  l'installeur compresse) -> hors fourchette = simple avertissement.
 REM ===========================================================================
 echo.
 echo [8/9] Creation de manifest.json et de rummikub.zip...
-echo {"build": 1, "supprimer": []}>manifest.json
+echo {"build": 2, "supprimer": []}>manifest.json
 if not exist "installeur\output" mkdir "installeur\output"
 if exist "installeur\output\rummikub.zip" del /f /q "installeur\output\rummikub.zip"
 powershell -NoProfile -Command "try { Compress-Archive -Path 'dist\Rummikub\*','manifest.json' -DestinationPath 'installeur\output\rummikub.zip' -Force } catch { exit 1 }"

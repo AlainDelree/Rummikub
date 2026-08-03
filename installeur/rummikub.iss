@@ -109,7 +109,7 @@ begin
     '  "application_cible": {' + #13#10 +
     '    "nom": "Rummikub",' + #13#10 +
     '    "depot_github": "AlainDelree/Rummikub",' + #13#10 +
-    '    "build_installe": 1,' + #13#10 +
+    '    "build_installe": 2,' + #13#10 +
     '    "repertoire_installation": "' + EchapperJSON(RepertoireInstallation) + '",' + #13#10 +
     '    "executable": "Rummikub.exe",' + #13#10 +
     '    "icone": "' + EchapperJSON(ExpandConstant('{app}') + '\rummikub.ico') + '"' + #13#10 +
