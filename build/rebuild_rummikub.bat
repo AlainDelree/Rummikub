@@ -26,10 +26,10 @@ set "PUBLIER=0"
 set "BUILD_OVERRIDE="
 :parse_args
 if "%~1"=="" goto args_done
-if /i "%~1"=="--publier" ( set "PUBLIER=1" & shift & goto parse_args )
-if /i "%~1"=="--build" ( set "BUILD_OVERRIDE=%~2" & shift & shift & goto parse_args )
+if /i "%~1"=="--publier" ( set "PUBLIER=1" & shift /1 & goto parse_args )
+if /i "%~1"=="--build" ( set "BUILD_OVERRIDE=%~2" & shift /1 & shift /1 & goto parse_args )
 echo [ATTENTION] Argument inconnu ignore : %~1
-shift
+shift /1
 goto parse_args
 :args_done
 
