@@ -1,8 +1,25 @@
+import json
+import subprocess
+import sys
 import webview
 from pathlib import Path
 from rummikub.ui.api import Api
 
 _WEB = Path(__file__).parent / "web"
+
+
+def _handler_fermeture_actualise():
+    """À la fermeture de Rummikub, si Actualise a déposé un flag de mise à
+    jour, retire le flag et lance le bat de mise à jour. Ne doit JAMAIS
+    empêcher la fermeture de la fenêtre."""
+    _flag = Path(sys.executable).parent / "actualise_update.flag"
+    if _flag.exists():
+        try:
+            _data = json.loads(_flag.read_text(encoding="utf-8"))
+            _flag.unlink(missing_ok=True)
+            subprocess.Popen([_data["bat"]], shell=True)
+        except Exception:
+            pass
 
 
 class ApplicationRummikub:
@@ -56,6 +73,10 @@ class ApplicationRummikub:
             width=1100, height=750,
             min_size=(900, 600),
         )
+
+        # Handler de fermeture : déclenche la mise à jour Actualise si un flag
+        # a été déposé pendant la session (voir _handler_fermeture_actualise).
+        self._window.events.closing += _handler_fermeture_actualise
 
         def apres_demarrage():
             self._window.maximize()
