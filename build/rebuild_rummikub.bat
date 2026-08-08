@@ -10,7 +10,8 @@ REM    4. PyInstaller (rummikub.spec)
 REM    5. Verifier dist\Rummikub\Rummikub.exe + taille (dossier non compresse)
 REM    6. Telecharger et extraire Actualise (updater) -> Actualise_dist
 REM    7. ISCC (installeur) + copie du Setup (local + partage) + garde-fou taille
-REM    8. manifest.json + rummikub.zip (dist + manifest) + copie + garde-fou taille
+REM    8. manifest.json + zip (dist + manifest) + copie + garde-fou taille
+REM       (rummikub-vN.zip en --publier, rummikub.zip sinon)
 REM    9. Nettoyage %BUILDDIR% + reset git du clone CCW
 REM ============================================================================
 setlocal EnableExtensions EnableDelayedExpansion
@@ -216,53 +217,15 @@ if %SETUPSIZE% LSS 5242880 echo       [ATTENTION] Installeur inhabituellement PE
 if %SETUPSIZE% GTR 26214400 echo       [ATTENTION] Installeur inhabituellement GRAND ^(attendu ~12 Mo, fourchette 5-25 Mo^).
 
 REM ===========================================================================
-REM  ETAPE 8 : manifest.json + rummikub.zip (dist\Rummikub\* + manifest.json)
-REM  rummikub.zip = dist\Rummikub\ + manifest.json, sans dossier englobant
-REM  (l'updater Actualise l'extrait directement par-dessus le dossier installe).
-REM  Nom fixe (pas de numero de version) : le numero vit dans le tag de la
-REM  Release GitHub, pas dans le nom de fichier.
-REM  Garde-fou de taille sur le zip : fourchette 5 Mo a 25 Mo (memes bornes que
-REM  l'installeur compresse) -> hors fourchette = simple avertissement.
+REM  Determination du numero de build et du nom du zip
+REM  En mode --publier, le zip publie doit s'appeler rummikub-vN.zip (format
+REM  versionne attendu par Actualise pour construire l'URL de telechargement) ;
+REM  on calcule donc NEWBUILD DES MAINTENANT, avant l'etape 8, pour nommer le
+REM  zip de facon coherente entre l'etape 8 et l'etape 8bis. Sans --publier, le
+REM  zip garde le nom fixe rummikub.zip (build de test local, jamais publie).
 REM ===========================================================================
-echo.
-echo [8/9] Creation de manifest.json et de rummikub.zip...
-echo {"build": 2, "supprimer": []}>manifest.json
-if not exist "installeur\output" mkdir "installeur\output"
-if exist "installeur\output\rummikub.zip" del /f /q "installeur\output\rummikub.zip"
-powershell -NoProfile -Command "try { Compress-Archive -Path 'dist\Rummikub\*','manifest.json' -DestinationPath 'installeur\output\rummikub.zip' -Force } catch { exit 1 }"
-if errorlevel 1 (
-    echo [ERREUR] Echec de la creation de rummikub.zip.
-    popd & exit /b 1
-)
-if not exist "installeur\output\rummikub.zip" (
-    echo [ERREUR] installeur\output\rummikub.zip introuvable apres compression.
-    popd & exit /b 1
-)
-set "ZIPSIZE=0"
-for /f "usebackq delims=" %%S in (`powershell -NoProfile -Command "(Get-Item 'installeur\output\rummikub.zip').Length"`) do set "ZIPSIZE=%%S"
-echo       Taille de rummikub.zip ^(compresse^) : %ZIPSIZE% octets
-if %ZIPSIZE% LSS 5242880 echo       [ATTENTION] rummikub.zip inhabituellement PETIT ^(attendu ~13 Mo, fourchette 5-25 Mo^).
-if %ZIPSIZE% GTR 26214400 echo       [ATTENTION] rummikub.zip inhabituellement GRAND ^(attendu ~13 Mo, fourchette 5-25 Mo^).
-
-echo       Copie de rummikub.zip vers le partage ^(%ORIGDIR%\installeur\output^)...
-copy /y "installeur\output\rummikub.zip" "%ORIGDIR%\installeur\output\rummikub.zip" >nul
-if errorlevel 1 ( echo [ERREUR] Echec de la copie de rummikub.zip vers le partage. & popd & exit /b 1 )
-
-REM ===========================================================================
-REM  ETAPE 8bis (--publier uniquement) : version.json + SHA-256 + commit local
-REM  Ne s'execute qu'avec l'argument --publier. Reprend rummikub.zip genere a
-REM  l'etape 8 pour :
-REM    - determiner le nouveau numero de build (version.json + 1, ou --build N) ;
-REM    - reecrire manifest.json avec ce numero et regenerer rummikub.zip ;
-REM    - calculer le SHA-256 du zip ;
-REM    - ecrire version.json a la racine du clone partage (%ORIGDIR%) ;
-REM    - commiter version.json EN LOCAL (jamais de git push).
-REM  git push et la creation de la Release GitHub restent MANUELS (voir la fin).
-REM ===========================================================================
-if not "%PUBLIER%"=="1" goto fin_publier
-
-echo.
-echo [8bis/9] Mode --publier : version.json ^(build + SHA-256^) et commit local...
+set "ZIPNAME=rummikub.zip"
+if not "%PUBLIER%"=="1" goto zipname_done
 
 REM --- Numero de build : --build N prioritaire, sinon version.json + 1 --------
 if defined BUILD_OVERRIDE (
@@ -279,24 +242,75 @@ if not defined CURBUILD (
 set /a NEWBUILD=CURBUILD+1
 echo       Build courant : !CURBUILD! -- nouveau build : !NEWBUILD!
 :build_determine
+set "ZIPNAME=rummikub-v!NEWBUILD!.zip"
+:zipname_done
 
-REM --- Reecrire manifest.json avec le nouveau build et regenerer le zip -------
-echo       Reecriture de manifest.json ^(build !NEWBUILD!^) et du zip...
-> manifest.json echo {"build": !NEWBUILD!, "supprimer": []}
-if exist "installeur\output\rummikub.zip" del /f /q "installeur\output\rummikub.zip"
-powershell -NoProfile -Command "try { Compress-Archive -Path 'dist\Rummikub\*','manifest.json' -DestinationPath 'installeur\output\rummikub.zip' -Force } catch { exit 1 }"
+REM ===========================================================================
+REM  ETAPE 8 : manifest.json + zip (dist\Rummikub\* + manifest.json)
+REM  Le zip = dist\Rummikub\ + manifest.json, sans dossier englobant
+REM  (l'updater Actualise l'extrait directement par-dessus le dossier installe).
+REM  Nom : rummikub-vN.zip en --publier (format versionne, cf. bloc ci-dessus),
+REM  rummikub.zip sinon (build de test local non publie).
+REM  Garde-fou de taille sur le zip : fourchette 5 Mo a 25 Mo (memes bornes que
+REM  l'installeur compresse) -> hors fourchette = simple avertissement.
+REM ===========================================================================
+echo.
+echo [8/9] Creation de manifest.json et de !ZIPNAME!...
+echo {"build": 2, "supprimer": []}>manifest.json
+if not exist "installeur\output" mkdir "installeur\output"
+if exist "installeur\output\!ZIPNAME!" del /f /q "installeur\output\!ZIPNAME!"
+powershell -NoProfile -Command "try { Compress-Archive -Path 'dist\Rummikub\*','manifest.json' -DestinationPath 'installeur\output\!ZIPNAME!' -Force } catch { exit 1 }"
 if errorlevel 1 (
-    echo [ERREUR] Echec de la regeneration de rummikub.zip ^(--publier^).
+    echo [ERREUR] Echec de la creation de !ZIPNAME!.
     popd & exit /b 1
 )
-copy /y "installeur\output\rummikub.zip" "%ORIGDIR%\installeur\output\rummikub.zip" >nul
-if errorlevel 1 ( echo [ERREUR] Echec de la copie de rummikub.zip vers le partage ^(--publier^). & popd & exit /b 1 )
+if not exist "installeur\output\!ZIPNAME!" (
+    echo [ERREUR] installeur\output\!ZIPNAME! introuvable apres compression.
+    popd & exit /b 1
+)
+set "ZIPSIZE=0"
+for /f "usebackq delims=" %%S in (`powershell -NoProfile -Command "(Get-Item 'installeur\output\!ZIPNAME!').Length"`) do set "ZIPSIZE=%%S"
+echo       Taille de !ZIPNAME! ^(compresse^) : %ZIPSIZE% octets
+if %ZIPSIZE% LSS 5242880 echo       [ATTENTION] !ZIPNAME! inhabituellement PETIT ^(attendu ~13 Mo, fourchette 5-25 Mo^).
+if %ZIPSIZE% GTR 26214400 echo       [ATTENTION] !ZIPNAME! inhabituellement GRAND ^(attendu ~13 Mo, fourchette 5-25 Mo^).
+
+echo       Copie de !ZIPNAME! vers le partage ^(%ORIGDIR%\installeur\output^)...
+copy /y "installeur\output\!ZIPNAME!" "%ORIGDIR%\installeur\output\!ZIPNAME!" >nul
+if errorlevel 1 ( echo [ERREUR] Echec de la copie de !ZIPNAME! vers le partage. & popd & exit /b 1 )
+
+REM ===========================================================================
+REM  ETAPE 8bis (--publier uniquement) : version.json + SHA-256 + commit local
+REM  Ne s'execute qu'avec l'argument --publier. Reprend le zip rummikub-vN.zip
+REM  genere a l'etape 8 (NEWBUILD deja calcule avant l'etape 8) pour :
+REM    - reecrire manifest.json avec ce numero et regenerer rummikub-vN.zip ;
+REM    - calculer le SHA-256 du zip ;
+REM    - ecrire version.json a la racine du clone partage (%ORIGDIR%) ;
+REM    - commiter version.json EN LOCAL (jamais de git push).
+REM  git push et la creation de la Release GitHub restent MANUELS (voir la fin).
+REM ===========================================================================
+if not "%PUBLIER%"=="1" goto fin_publier
+
+echo.
+echo [8bis/9] Mode --publier : version.json ^(build + SHA-256^) et commit local...
+
+REM --- Reecrire manifest.json avec le nouveau build et regenerer le zip -------
+REM  NEWBUILD et ZIPNAME ^(rummikub-vN.zip^) ont ete determines avant l'etape 8.
+echo       Reecriture de manifest.json ^(build !NEWBUILD!^) et du zip !ZIPNAME!...
+> manifest.json echo {"build": !NEWBUILD!, "supprimer": []}
+if exist "installeur\output\!ZIPNAME!" del /f /q "installeur\output\!ZIPNAME!"
+powershell -NoProfile -Command "try { Compress-Archive -Path 'dist\Rummikub\*','manifest.json' -DestinationPath 'installeur\output\!ZIPNAME!' -Force } catch { exit 1 }"
+if errorlevel 1 (
+    echo [ERREUR] Echec de la regeneration de !ZIPNAME! ^(--publier^).
+    popd & exit /b 1
+)
+copy /y "installeur\output\!ZIPNAME!" "%ORIGDIR%\installeur\output\!ZIPNAME!" >nul
+if errorlevel 1 ( echo [ERREUR] Echec de la copie de !ZIPNAME! vers le partage ^(--publier^). & popd & exit /b 1 )
 
 REM --- SHA-256 du zip regenere -----------------------------------------------
 set "ZIPSHA="
-for /f "usebackq delims=" %%H in (`powershell -NoProfile -Command "(Get-FileHash 'installeur\output\rummikub.zip' -Algorithm SHA256).Hash.ToLower()"`) do set "ZIPSHA=%%H"
+for /f "usebackq delims=" %%H in (`powershell -NoProfile -Command "(Get-FileHash 'installeur\output\!ZIPNAME!' -Algorithm SHA256).Hash.ToLower()"`) do set "ZIPSHA=%%H"
 if not defined ZIPSHA (
-    echo [ERREUR] Calcul du SHA-256 de rummikub.zip impossible.
+    echo [ERREUR] Calcul du SHA-256 de !ZIPNAME! impossible.
     popd & exit /b 1
 )
 echo       SHA-256 : !ZIPSHA!
@@ -332,7 +346,7 @@ if "%PUBLIER%"=="1" (
 echo.
 echo ============================================================================
 echo   Termine. Installeur : %ORIGDIR%\installeur\output\Rummikub-Setup.exe
-echo             Archive    : %ORIGDIR%\installeur\output\rummikub.zip
+echo             Archive    : %ORIGDIR%\installeur\output\!ZIPNAME!
 echo ============================================================================
 if "%PUBLIER%"=="1" (
     echo.
@@ -344,7 +358,7 @@ if "%PUBLIER%"=="1" (
     echo     1^) git -C "%ORIGDIR%" push
     echo     2^) Creer la Release GitHub ^(tag v!NEWBUILD!^) et y attacher :
     echo          - installeur\output\Rummikub-Setup.exe
-    echo          - installeur\output\rummikub.zip
+    echo          - installeur\output\!ZIPNAME!
     echo   ============================================================================
 )
 endlocal
