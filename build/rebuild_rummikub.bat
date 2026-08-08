@@ -218,13 +218,33 @@ if %SETUPSIZE% GTR 26214400 echo       [ATTENTION] Installeur inhabituellement G
 
 REM ===========================================================================
 REM  Determination du numero de build et du nom du zip
+REM  CURBUILD (build courant lu dans version.json) est desormais lu dans LES DEUX
+REM  modes : il fournit MANIFESTBUILD, la valeur ecrite dans manifest.json a
+REM  l'etape 8, pour que ce manifest reste coherent avec le build reel meme en
+REM  build de test (sans --publier).
 REM  En mode --publier, le zip publie doit s'appeler rummikub-vN.zip (format
 REM  versionne attendu par Actualise pour construire l'URL de telechargement) ;
 REM  on calcule donc NEWBUILD DES MAINTENANT, avant l'etape 8, pour nommer le
-REM  zip de facon coherente entre l'etape 8 et l'etape 8bis. Sans --publier, le
-REM  zip garde le nom fixe rummikub.zip (build de test local, jamais publie).
+REM  zip de facon coherente entre l'etape 8 et l'etape 8bis, et MANIFESTBUILD
+REM  prend alors la valeur de NEWBUILD. Sans --publier, le zip garde le nom fixe
+REM  rummikub.zip (build de test local, jamais publie).
 REM ===========================================================================
 set "ZIPNAME=rummikub.zip"
+
+REM --- Build courant (CURBUILD) lu dans version.json DANS LES DEUX MODES.
+REM     Sert de valeur de build pour le manifest de l'etape 8 en mode test
+REM     (sans --publier) et de base au calcul de NEWBUILD en mode --publier.
+set "CURBUILD="
+for /f "usebackq delims=" %%B in (`powershell -NoProfile -Command "[int]((ConvertFrom-Json (Get-Content -Raw '%ORIGDIR%\version.json')).build)"`) do set "CURBUILD=%%B"
+if not defined CURBUILD (
+    echo [ERREUR] Lecture du build courant impossible depuis %ORIGDIR%\version.json
+    popd & exit /b 1
+)
+
+REM --- Build embarque dans le manifest de l'etape 8 : par defaut le build courant.
+REM     En mode --publier il sera remplace par NEWBUILD (cf. bloc ci-dessous).
+set "MANIFESTBUILD=!CURBUILD!"
+
 if not "%PUBLIER%"=="1" goto zipname_done
 
 REM --- Numero de build : --build N prioritaire, sinon version.json + 1 --------
@@ -233,15 +253,10 @@ if defined BUILD_OVERRIDE (
     echo       Build impose via --build : !NEWBUILD!
     goto build_determine
 )
-set "CURBUILD="
-for /f "usebackq delims=" %%B in (`powershell -NoProfile -Command "[int]((ConvertFrom-Json (Get-Content -Raw '%ORIGDIR%\version.json')).build)"`) do set "CURBUILD=%%B"
-if not defined CURBUILD (
-    echo [ERREUR] Lecture du build courant impossible depuis %ORIGDIR%\version.json
-    popd & exit /b 1
-)
 set /a NEWBUILD=CURBUILD+1
 echo       Build courant : !CURBUILD! -- nouveau build : !NEWBUILD!
 :build_determine
+set "MANIFESTBUILD=!NEWBUILD!"
 set "ZIPNAME=rummikub-v!NEWBUILD!.zip"
 :zipname_done
 
@@ -256,7 +271,7 @@ REM  l'installeur compresse) -> hors fourchette = simple avertissement.
 REM ===========================================================================
 echo.
 echo [8/9] Creation de manifest.json et de !ZIPNAME!...
-echo {"build": 2, "supprimer": []}>manifest.json
+> manifest.json echo {"build": !MANIFESTBUILD!, "supprimer": []}
 if not exist "installeur\output" mkdir "installeur\output"
 if exist "installeur\output\!ZIPNAME!" del /f /q "installeur\output\!ZIPNAME!"
 powershell -NoProfile -Command "try { Compress-Archive -Path 'dist\Rummikub\*','manifest.json' -DestinationPath 'installeur\output\!ZIPNAME!' -Force } catch { exit 1 }"
