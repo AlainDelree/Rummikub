@@ -38,14 +38,15 @@ AppVersion={#MyAppVersion}
 AppPublisher={#MyAppPublisher}
 DefaultDirName={autopf}\{#MyAppName}
 DefaultGroupName={#MyAppName}
-; Aucun droit administrateur requis : installation dans le profil utilisateur
-; courant. Nécessaire pour qu'Actualise puisse écrire dans le dossier
-; d'installation sans droits admin. Avec PrivilegesRequired=lowest,
+; Droits administrateur requis : l'installation dépose l'instance Actualise
+; partagée dans {sd}\Actualise (= C:\Actualise), à la racine du disque système,
+; protégée en écriture pour les utilisateurs standards. PrivilegesRequired=lowest
+; échouait donc à créer ce dossier (Actualise non déployé, raccourci pointant
+; vers une installation incorrecte). Avec PrivilegesRequired=admin,
 ; {autopf}/{autodesktop}/{autoprograms} résolvent respectivement vers
-; %LOCALAPPDATA%\Programs, le Bureau et le menu Démarrer de l'utilisateur
-; courant (pas les emplacements "tous les utilisateurs", qui nécessiteraient
-; des droits admin).
-PrivilegesRequired=lowest
+; C:\Program Files, le Bureau commun et le menu Démarrer "tous les utilisateurs",
+; et l'écriture dans C:\Actualise devient possible.
+PrivilegesRequired=admin
 DisableProgramGroupPage=yes
 SetupIconFile=..\assets\rummikub.ico
 Compression=lzma
@@ -86,8 +87,9 @@ Name: "{#MyActualiseDir}\attente"
 [Icons]
 ; Les raccourcis pointent vers Actualise.exe (jamais directement vers
 ; Rummikub.exe) : Actualise met Rummikub à jour depuis les GitHub Releases
-; avant de le lancer, à chaque démarrage. {autoprograms} (et non {group}) est
-; requis avec PrivilegesRequired=lowest.
+; avant de le lancer, à chaque démarrage. {autoprograms} (et non {group}) reste
+; valide avec PrivilegesRequired=admin : il résout vers le menu Démarrer commun
+; (tous les utilisateurs), ce qui est le comportement attendu.
 ; Parameters "--config rummikub" : instance Actualise partagée, on précise
 ; quelle application lancer/mettre à jour (lit config_rummikub.json).
 Name: "{autoprograms}\{#MyAppName}"; Filename: "{#MyActualiseDir}\{#MyActualiseExeName}"; Parameters: "--config rummikub"; IconFilename: "{app}\{#MyAppIcoName}"
