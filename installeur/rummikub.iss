@@ -11,6 +11,13 @@
 #define MyAppExeName "Rummikub.exe"
 #define MyAppPublisher "Alain Delree"
 #define MyAppVersion "1.0"
+; Numéro de build installé. SOURCE UNIQUE : ce #define alimente à la fois
+;   - les métadonnées de Rummikub-Setup.exe (section [Setup], VersionInfo*
+;     ci-dessous : clic droit -> Propriétés -> Détails -> Version du fichier) ;
+;   - le champ build_installe de config_rummikub.json ([Code], procédure
+;     CreerConfigRummikub) consommé par l'updater Actualise.
+; À bumper ICI (et nulle part ailleurs) à chaque nouvelle version publiée.
+#define RummikubBuildInstalle 7
 #define MyDistDir "..\dist\Rummikub"
 ; Actualise (dépôt AlainDelree/Actualise) est l'updater autonome qui met
 ; Rummikub à jour depuis les GitHub Releases avant de le lancer (même
@@ -56,6 +63,14 @@ OutputDir=C:\Temp\RummikubOutput
 OutputBaseFilename=Rummikub-Setup
 ArchitecturesInstallIn64BitMode=x64compatible
 UninstallDisplayIcon={app}\{#MyAppExeName}
+; Métadonnées de l'exécutable d'installation Rummikub-Setup.exe (clic droit ->
+; Propriétés -> Détails). VersionInfoVersion => champ « Version du fichier »,
+; permettant de distinguer visuellement deux builds sans ouvrir le fichier.
+VersionInfoVersion={#RummikubBuildInstalle}.0.0.0
+VersionInfoProductVersion={#RummikubBuildInstalle}.0.0.0
+VersionInfoProductName={#MyAppName}
+VersionInfoDescription=Rummikub Setup build {#RummikubBuildInstalle}
+VersionInfoCompany={#MyAppPublisher}
 
 [Languages]
 Name: "french"; MessagesFile: "compiler:Languages\French.isl"
@@ -120,7 +135,7 @@ begin
     '{' + #13#10 +
     '  "nom": "Rummikub",' + #13#10 +
     '  "depot_github": "AlainDelree/Rummikub",' + #13#10 +
-    '  "build_installe": 7,' + #13#10 +
+    '  "build_installe": {#RummikubBuildInstalle},' + #13#10 +
     '  "repertoire_installation": "' + EchapperJSON(RepertoireInstallation) + '",' + #13#10 +
     '  "executable": "Rummikub.exe",' + #13#10 +
     '  "icone": "' + EchapperJSON(ExpandConstant('{app}') + '\rummikub.ico') + '",' + #13#10 +

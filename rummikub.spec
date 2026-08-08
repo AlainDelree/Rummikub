@@ -35,6 +35,20 @@ def collect_tree(src_dir, dest_dir):
 _icone = os.path.join(RACINE, "assets", "rummikub.ico")
 _icone = _icone if os.path.exists(_icone) else None
 
+# Métadonnées de version Windows (clic droit -> Propriétés -> Détails ->
+# « Version du fichier »). Le fichier version_info.txt (racine du dépôt) contient
+# le jeton « BUILD » que le script de build (build/rebuild_rummikub.bat) remplace
+# par le numéro de build réel avant PyInstaller. On n'active la ressource que si
+# ce jeton a bien été substitué : ainsi un « pyinstaller rummikub.spec » lancé
+# directement (sans substitution, jeton encore présent) ne casse pas l'analyse
+# du fichier de version par PyInstaller. Sous Linux, ce paramètre est ignoré.
+_fichier_version = os.path.join(RACINE, "version_info.txt")
+_version = None
+if os.path.exists(_fichier_version):
+    with open(_fichier_version, "r", encoding="utf-8") as _f:
+        if "BUILD" not in _f.read():
+            _version = _fichier_version
+
 datas = collect_tree("src/rummikub/ui/web", "rummikub/ui/web")
 
 
@@ -70,6 +84,7 @@ exe = EXE(
     codesign_identity=None,
     entitlements_file=None,
     icon=_icone,  # None => aucune icône personnalisée
+    version=_version,  # None => ressource VERSIONINFO non injectée (jeton non substitué)
 )
 
 coll = COLLECT(

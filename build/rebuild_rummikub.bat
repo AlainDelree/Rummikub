@@ -117,6 +117,45 @@ if errorlevel 1 (
 )
 
 REM ===========================================================================
+REM  ETAPE 3bis : injection du numero de build dans version_info.txt
+REM  PyInstaller lit version_info.txt (cf. rummikub.spec, parametre version=)
+REM  pour renseigner la ressource VERSIONINFO de Rummikub.exe (clic droit ->
+REM  Proprietes -> Details -> Version du fichier). Le fichier versionne du depot
+REM  contient le jeton « BUILD » ; on le remplace ICI, dans la COPIE de build
+REM  (%BUILDDIR%, ou l'on est deja positionne via pushd), par le numero de build
+REM  reel AVANT l'appel a PyInstaller. Le depot d'origine garde le jeton intact.
+REM  Numero retenu = meme regle que MANIFESTBUILD : build courant de
+REM  version.json, +1 en mode --publier, ou --build N s'il est fourni.
+REM  Remplacement via String.Replace (.NET) = sensible a la casse : seul le
+REM  jeton « BUILD » en majuscules est substitue, pas le mot « build ».
+REM ===========================================================================
+echo.
+echo [3bis/9] Injection du numero de build dans version_info.txt...
+set "EXEBUILD="
+for /f "usebackq delims=" %%B in (`powershell -NoProfile -Command "[int]((ConvertFrom-Json (Get-Content -Raw '%ORIGDIR%\version.json')).build)"`) do set "EXEBUILD=%%B"
+if not defined EXEBUILD (
+    echo [ERREUR] Lecture du build courant impossible depuis %ORIGDIR%\version.json
+    popd & exit /b 1
+)
+if "%PUBLIER%"=="1" (
+    if defined BUILD_OVERRIDE (
+        set "EXEBUILD=%BUILD_OVERRIDE%"
+    ) else (
+        set /a EXEBUILD=EXEBUILD+1
+    )
+)
+if not exist "version_info.txt" (
+    echo       [ATTENTION] version_info.txt introuvable : metadonnees de version non injectees.
+) else (
+    powershell -NoProfile -Command "(Get-Content -Raw 'version_info.txt').Replace('BUILD','!EXEBUILD!') | Set-Content -NoNewline -Encoding utf8 'version_info.txt'"
+    if errorlevel 1 (
+        echo [ERREUR] Echec du remplacement de BUILD dans version_info.txt.
+        popd & exit /b 1
+    )
+    echo       version_info.txt : jeton BUILD -^> !EXEBUILD!
+)
+
+REM ===========================================================================
 REM  ETAPE 4 : build PyInstaller
 REM ===========================================================================
 echo.

@@ -1,0 +1,45 @@
+# UTF-8
+#
+# Métadonnées de version de Rummikub.exe (ressource VERSIONINFO Windows).
+#
+# Visibles via clic droit sur Rummikub.exe -> Propriétés -> Détails ->
+# « Version du fichier ». Même approche que Scrabble.
+#
+# Le jeton « BUILD » (en majuscules) est un espace réservé : le script de
+# build (build/rebuild_rummikub.bat, étape 3bis) le remplace par le numéro
+# de build réel dans la COPIE de build, AVANT l'appel à PyInstaller. Le fichier
+# versionné du dépôt conserve donc le jeton non résolu.
+#
+# Référencé par rummikub.spec (paramètre version= de EXE). rummikub.spec
+# n'active la ressource que si le jeton a été substitué (voir le garde-fou
+# dans le .spec) : un « pyinstaller rummikub.spec » lancé directement, sans
+# substitution, reste ainsi fonctionnel (ressource simplement ignorée).
+#
+# Langue : français (0x040C), jeu de caractères Unicode (1200 / 0x04B0).
+VSVersionInfo(
+  ffi=FixedFileInfo(
+    filevers=(BUILD, 0, 0, 0),
+    prodvers=(BUILD, 0, 0, 0),
+    mask=0x3f,
+    flags=0x0,
+    OS=0x40004,
+    fileType=0x1,
+    subtype=0x0,
+    date=(0, 0)
+  ),
+  kids=[
+    StringFileInfo(
+      [
+      StringTable(
+        '040c04b0',
+        [StringStruct('CompanyName', 'Alain Delree'),
+         StringStruct('FileDescription', 'Rummikub build BUILD'),
+         StringStruct('FileVersion', 'BUILD.0.0.0'),
+         StringStruct('InternalName', 'Rummikub'),
+         StringStruct('OriginalFilename', 'Rummikub.exe'),
+         StringStruct('ProductName', 'Rummikub'),
+         StringStruct('ProductVersion', 'BUILD.0.0.0')])
+      ]),
+    VarFileInfo([VarStruct('Translation', [0x040c, 1200])])
+  ]
+)
