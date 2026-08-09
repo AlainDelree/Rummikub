@@ -11,13 +11,20 @@
 #define MyAppExeName "Rummikub.exe"
 #define MyAppPublisher "Alain Delree"
 #define MyAppVersion "1.0"
-; Numéro de build installé. SOURCE UNIQUE : ce #define alimente à la fois
+; Numéro de build installé. Injecté dynamiquement par build\rebuild_rummikub.bat
+; via ISCC (/DRummikubBuildInstalle=<build>), valeur issue de version.json (comme
+; Scrabble avec /DScrabbleBuildInstalle). Il alimente à la fois :
+;   - le nom du fichier Setup (OutputBaseFilename ci-dessous : Rummikub-Setup-vN) ;
 ;   - les métadonnées de Rummikub-Setup.exe (section [Setup], VersionInfo*
 ;     ci-dessous : clic droit -> Propriétés -> Détails -> Version du fichier) ;
 ;   - le champ build_installe de config_rummikub.json ([Code], procédure
 ;     CreerConfigRummikub) consommé par l'updater Actualise.
-; À bumper ICI (et nulle part ailleurs) à chaque nouvelle version publiée.
-#define RummikubBuildInstalle 7
+; Repli de secours UNIQUEMENT pour une compilation manuelle isolée (ISCC lancé à
+; la main, sans /D) : en pipeline normal la valeur vient toujours du flag /D.
+; Plus de numéro à bumper ici : la source unique est désormais version.json.
+#ifndef RummikubBuildInstalle
+  #define RummikubBuildInstalle "1"
+#endif
 #define MyDistDir "..\dist\Rummikub"
 ; Actualise (dépôt AlainDelree/Actualise) est l'updater autonome qui met
 ; Rummikub à jour depuis les GitHub Releases avant de le lancer (même

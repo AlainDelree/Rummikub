@@ -227,28 +227,25 @@ REM  Hors de cette fourchette -> simple avertissement, pas d'echec.
 REM ===========================================================================
 echo.
 echo [7/9] Generation de l'installeur avec Inno Setup...
-"%ISCC%" installeur\rummikub.iss
+REM  Numero de build injecte dynamiquement (issue #91), sur le modele de Scrabble
+REM  (/DScrabbleBuildInstalle) : EXEBUILD provient de version.json (etape 3bis,
+REM  +1 en --publier, --build N sinon). Le .iss n'a plus de #define hardcode ; le
+REM  nom du Setup (Rummikub-Setup-vN) reste donc toujours en phase avec version.json.
+"%ISCC%" /DRummikubBuildInstalle=!EXEBUILD! installeur\rummikub.iss
 if errorlevel 1 (
     echo [ERREUR] Echec de la compilation de l'installeur ^(ISCC^).
     popd & exit /b 1
 )
 
-REM --- Nom du Setup produit par ISCC (depuis l'issue #87) ---------------------
+REM --- Nom du Setup produit par ISCC (issues #87 / #91) ----------------------
 REM  rummikub.iss definit OutputBaseFilename=Rummikub-Setup-v{#RummikubBuildInstalle},
 REM  donc ISCC produit Rummikub-Setup-v{N}.exe (et non plus Rummikub-Setup.exe).
-REM  SOURCE UNIQUE de ce numero : le #define RummikubBuildInstalle du .iss, code
-REM  en dur et bumpe a la main (independamment de version.json). On le relit donc
-REM  ICI dans le .iss reellement compile (%BUILDDIR%\installeur) pour referencer
-REM  EXACTEMENT le fichier genere, au lieu de copier un ancien Rummikub-Setup.exe
-REM  stale.
-set "SETUPBUILD="
-for /f "usebackq delims=" %%B in (`powershell -NoProfile -Command "$m=[regex]::Match((Get-Content -Raw '%BUILDDIR%\installeur\rummikub.iss'),'#define\s+RummikubBuildInstalle\s+(\d+)'); if($m.Success){$m.Groups[1].Value}"`) do set "SETUPBUILD=%%B"
-if not defined SETUPBUILD (
-    echo [ERREUR] Lecture de RummikubBuildInstalle impossible depuis rummikub.iss
-    popd & exit /b 1
-)
-set "SETUPNAME=Rummikub-Setup-v%SETUPBUILD%.exe"
-echo       Setup attendu : %SETUPNAME% ^(build %SETUPBUILD%^)
+REM  Le numero N est desormais INJECTE via /DRummikubBuildInstalle=!EXEBUILD! a
+REM  l'appel ISCC ci-dessus (issue #91). On le connait donc directement : plus
+REM  besoin de le relire depuis le .iss par regex PowerShell (ancienne logique
+REM  issue #90 supprimee). !EXEBUILD! est toujours en phase avec version.json.
+set "SETUPNAME=Rummikub-Setup-v!EXEBUILD!.exe"
+echo       Setup attendu : !SETUPNAME! ^(build !EXEBUILD!^)
 
 set "SETUP=%OUTPUTDIR%\%SETUPNAME%"
 if not exist "%SETUP%" (
