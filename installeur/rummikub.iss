@@ -60,7 +60,7 @@ Compression=lzma
 SolidCompression=yes
 WizardStyle=modern
 OutputDir=C:\Temp\RummikubOutput
-OutputBaseFilename=Rummikub-Setup
+OutputBaseFilename=Rummikub-Setup-v{#RummikubBuildInstalle}
 ArchitecturesInstallIn64BitMode=x64compatible
 UninstallDisplayIcon={app}\{#MyAppExeName}
 ; Métadonnées de l'exécutable d'installation Rummikub-Setup.exe (clic droit ->
