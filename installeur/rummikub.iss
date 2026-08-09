@@ -32,10 +32,18 @@
 ; son dossier _internal\, runtime Python + DLL, mode PyInstaller --onedir).
 #define MyActualiseSrcDir "C:\Temp\RummikubBuild\Actualise_dist"
 ; Actualise est désormais une instance PARTAGÉE entre toutes les applications
-; (auparavant une instance par application : {sd}\Actualise_Rummikub). Le
-; dossier {sd}\Actualise héberge l'updater et les fichiers de configuration
+; (auparavant une instance par application : C:\Actualise_Rummikub). Le
+; dossier C:\Actualise héberge l'updater et les fichiers de configuration
 ; config_<app>.json / config_actualise.json.
-#define MyActualiseDir "{sd}\Actualise"
+; NB : chemin codé en dur (C:\Actualise) et NON {sd}\Actualise. Dans un
+; #define InnoSetup, {sd} est traité comme une chaîne littérale par le
+; préprocesseur : réinjecté tel quel dans les sections [Files]/[Dirs]/[Icons],
+; il n'était pas résolu et le setup installait dans un dossier erroné. Le
+; disque système est C: sur toutes les cibles ; on le fige donc explicitement.
+#define MyActualiseDir "C:\Actualise"
+; Ancienne instance dédiée à Rummikub, purgée à l'installation (voir [Code],
+; CurStepChanged). Codé en dur pour la même raison que MyActualiseDir.
+#define MyOldActualiseDir "C:\Actualise_Rummikub"
 
 [Setup]
 ; AppId identifie l'application de façon unique (NE PAS changer entre versions).
@@ -46,7 +54,7 @@ AppPublisher={#MyAppPublisher}
 DefaultDirName={autopf}\{#MyAppName}
 DefaultGroupName={#MyAppName}
 ; Droits administrateur requis : l'installation dépose l'instance Actualise
-; partagée dans {sd}\Actualise (= C:\Actualise), à la racine du disque système,
+; partagée dans C:\Actualise, à la racine du disque système,
 ; protégée en écriture pour les utilisateurs standards. PrivilegesRequired=lowest
 ; échouait donc à créer ce dossier (Actualise non déployé, raccourci pointant
 ; vers une installation incorrecte). Avec PrivilegesRequired=admin,
@@ -111,7 +119,7 @@ Name: "{autoprograms}\{#MyAppName}"; Filename: "{#MyActualiseDir}\{#MyActualiseE
 Name: "{autodesktop}\{#MyAppName}"; Filename: "{#MyActualiseDir}\{#MyActualiseExeName}"; Parameters: "--config rummikub"; IconFilename: "{app}\{#MyAppIcoName}"
 
 [Code]
-// Actualise est une instance PARTAGÉE ({sd}\Actualise) : chaque application y
+// Actualise est une instance PARTAGÉE (C:\Actualise) : chaque application y
 // dépose son propre fichier config_<app>.json, plus un config_actualise.json
 // commun à l'updater. Ces fichiers sont consommés par Actualise.exe au
 // lancement pour savoir quel dépôt GitHub surveiller, où est installée
@@ -183,9 +191,9 @@ begin
   if CurStep = ssPostInstall then
   begin
     // Migration instance dédiée -> instance partagée : supprime entièrement
-    // l'ancien dossier {sd}\Actualise_Rummikub s'il subsiste, AVANT d'écrire
-    // les nouvelles configurations dans {sd}\Actualise.
-    AncienDossier := ExpandConstant('{sd}\Actualise_Rummikub');
+    // l'ancien dossier C:\Actualise_Rummikub s'il subsiste, AVANT d'écrire
+    // les nouvelles configurations dans C:\Actualise.
+    AncienDossier := ExpandConstant('{#MyOldActualiseDir}');
     if DirExists(AncienDossier) then
       DelTree(AncienDossier, True, True, True);
 
@@ -196,7 +204,7 @@ begin
 end;
 
 // Désinstallation : ne pas supprimer aveuglément l'instance partagée
-// {sd}\Actualise (d'autres applications peuvent l'utiliser). On ne la retire
+// C:\Actualise (d'autres applications peuvent l'utiliser). On ne la retire
 // que si plus aucun config_*.json n'y subsiste.
 procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
 var
