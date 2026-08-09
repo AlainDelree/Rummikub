@@ -233,7 +233,24 @@ if errorlevel 1 (
     popd & exit /b 1
 )
 
-set "SETUP=%OUTPUTDIR%\Rummikub-Setup.exe"
+REM --- Nom du Setup produit par ISCC (depuis l'issue #87) ---------------------
+REM  rummikub.iss definit OutputBaseFilename=Rummikub-Setup-v{#RummikubBuildInstalle},
+REM  donc ISCC produit Rummikub-Setup-v{N}.exe (et non plus Rummikub-Setup.exe).
+REM  SOURCE UNIQUE de ce numero : le #define RummikubBuildInstalle du .iss, code
+REM  en dur et bumpe a la main (independamment de version.json). On le relit donc
+REM  ICI dans le .iss reellement compile (%BUILDDIR%\installeur) pour referencer
+REM  EXACTEMENT le fichier genere, au lieu de copier un ancien Rummikub-Setup.exe
+REM  stale.
+set "SETUPBUILD="
+for /f "usebackq delims=" %%B in (`powershell -NoProfile -Command "$m=[regex]::Match((Get-Content -Raw '%BUILDDIR%\installeur\rummikub.iss'),'#define\s+RummikubBuildInstalle\s+(\d+)'); if($m.Success){$m.Groups[1].Value}"`) do set "SETUPBUILD=%%B"
+if not defined SETUPBUILD (
+    echo [ERREUR] Lecture de RummikubBuildInstalle impossible depuis rummikub.iss
+    popd & exit /b 1
+)
+set "SETUPNAME=Rummikub-Setup-v%SETUPBUILD%.exe"
+echo       Setup attendu : %SETUPNAME% ^(build %SETUPBUILD%^)
+
+set "SETUP=%OUTPUTDIR%\%SETUPNAME%"
 if not exist "%SETUP%" (
     echo [ERREUR] Installeur introuvable : %SETUP%
     popd & exit /b 1
@@ -241,17 +258,17 @@ if not exist "%SETUP%" (
 
 echo       Copie de l'installeur ^(staging local %BUILDDIR%\installeur\output^)...
 if not exist "installeur\output" mkdir "installeur\output"
-copy /y "%SETUP%" "installeur\output\Rummikub-Setup.exe" >nul
+copy /y "%SETUP%" "installeur\output\%SETUPNAME%" >nul
 if errorlevel 1 ( echo [ERREUR] Echec de la copie locale de l'installeur. & popd & exit /b 1 )
 
 echo       Copie de l'installeur vers le partage ^(%ORIGDIR%\installeur\output^)...
 if not exist "%ORIGDIR%\installeur\output" mkdir "%ORIGDIR%\installeur\output"
-copy /y "%SETUP%" "%ORIGDIR%\installeur\output\Rummikub-Setup.exe" >nul
+copy /y "%SETUP%" "%ORIGDIR%\installeur\output\%SETUPNAME%" >nul
 if errorlevel 1 ( echo [ERREUR] Echec de la copie de l'installeur vers le partage. & popd & exit /b 1 )
 
 set "SETUPSIZE=0"
 for /f "usebackq delims=" %%S in (`powershell -NoProfile -Command "(Get-Item '%SETUP%').Length"`) do set "SETUPSIZE=%%S"
-echo       Taille de l'installeur Rummikub-Setup.exe ^(compresse^) : %SETUPSIZE% octets
+echo       Taille de l'installeur %SETUPNAME% ^(compresse^) : %SETUPSIZE% octets
 if %SETUPSIZE% LSS 5242880 echo       [ATTENTION] Installeur inhabituellement PETIT ^(attendu ~12 Mo, fourchette 5-25 Mo^).
 if %SETUPSIZE% GTR 26214400 echo       [ATTENTION] Installeur inhabituellement GRAND ^(attendu ~12 Mo, fourchette 5-25 Mo^).
 
@@ -399,7 +416,7 @@ if "%PUBLIER%"=="1" (
 
 echo.
 echo ============================================================================
-echo   Termine. Installeur : %ORIGDIR%\installeur\output\Rummikub-Setup.exe
+echo   Termine. Installeur : %ORIGDIR%\installeur\output\!SETUPNAME!
 echo             Archive    : %ORIGDIR%\installeur\output\!ZIPNAME!
 echo ============================================================================
 if "%PUBLIER%"=="1" (
@@ -411,7 +428,7 @@ if "%PUBLIER%"=="1" (
     echo   Le script ne fait JAMAIS de git push ni de gh release create. A la main :
     echo     1^) git -C "%ORIGDIR%" push
     echo     2^) Creer la Release GitHub ^(tag v!NEWBUILD!^) et y attacher :
-    echo          - installeur\output\Rummikub-Setup.exe
+    echo          - installeur\output\!SETUPNAME!
     echo          - installeur\output\!ZIPNAME!
     echo   ============================================================================
 )
