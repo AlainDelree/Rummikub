@@ -17,6 +17,7 @@ let tuilesOrigineTapis = [];  // ids des tuiles PRISES sur le tapis ce tour
 let trouJoker = null;         // { combo, pos } : trou laissé par un joker pris (guidage)
 let comboActive = null;       // index de la combo ciblée pour l'insertion, ou null (issue #47)
 let dernierClicChevalet = { id: null, temps: 0 }; // détection du double-clic
+let dernierClicTapis = { id: null, temps: 0 };    // idem pour le tapis (issue #103)
 // Détection de l'appui long (500 ms) sur une tuile du chevalet → active la réorg
 let appuiLong = { timer: null, id: null, declenche: false };
 let dragSourceId = null;      // id de la tuile en cours de glisser-déposer
@@ -285,6 +286,28 @@ function rafraichirPlateau() {
       }
 
       const el = tuileDepuisDict(d);
+      // Double-clic sur une tuile déjà posée du tapis (issue #103) : la retirer
+      // de sa combinaison et l'envoyer dans la zone de pose active, quel que
+      // soit le mode (même geste que le double-clic sur une tuile du chevalet).
+      // La combinaison source vidée est nettoyée par prendreTuileTapis.
+      // Détection manuelle : le re-rendu du plateau à chaque clic remplace les
+      // éléments DOM, donc le dblclick natif n'est pas fiable (même raison que
+      // le chevalet). Le handler est ajouté AVANT ceux du simple clic ; au 1er
+      // clic il ne fait qu'enregistrer l'horodatage et laisse le comportement
+      // existant intact, au 2e il prend la tuile et coupe les autres handlers.
+      if (tapisManipulable() && !tuilesCeTour.includes(d.id)) {
+        el.addEventListener("click", (e) => {
+          const maintenant = Date.now();
+          if (dernierClicTapis.id === d.id &&
+              maintenant - dernierClicTapis.temps < 350) {
+            e.stopImmediatePropagation();
+            dernierClicTapis = { id: null, temps: 0 };
+            prendreTuileTapis(idxCombo, idxTuile);
+            return;
+          }
+          dernierClicTapis = { id: d.id, temps: maintenant };
+        });
+      }
       if (tuilesCeTour.includes(d.id)) {
         el.classList.add("ce-tour");
         el.addEventListener("click", (e) => { e.stopPropagation(); reprendreTuile(d.id); });
