@@ -1,24 +1,23 @@
 @echo off
 REM ============================================================================
 REM  rebuild_rummikub.bat  --  Reconstruction complete de Rummikub (Windows)
-REM  Calque sur rebuild_scrabble.bat. 10 etapes (0 a 9) :
+REM  Calque sur rebuild_scrabble.bat. 9 etapes (0 a 8) :
 REM    0. Localiser ISCC.exe (Inno Setup 6)
 REM    1. Copier le projet vers C:\Temp\RummikubBuild
 REM    2. Environnement virtuel .venv_build + dependances
 REM    3. Fermer Rummikub.exe si en cours
 REM    4. PyInstaller (rummikub.spec)
 REM    5. Verifier dist\Rummikub\Rummikub.exe + taille (dossier non compresse)
-REM    6. Telecharger et extraire Actualise (updater) -> Actualise_dist
-REM    7. ISCC (installeur) + copie du Setup (local + partage) + garde-fou taille
-REM    8. manifest.json + zip (dist + manifest) + copie + garde-fou taille
+REM    6. ISCC (installeur) + copie du Setup (local + partage) + garde-fou taille
+REM    7. manifest.json + zip (dist + manifest) + copie + garde-fou taille
 REM       (rummikub-vN.zip en --publier, rummikub.zip sinon)
-REM    9. Nettoyage %BUILDDIR% + reset git du clone CCW
+REM    8. Nettoyage %BUILDDIR% + reset git du clone CCW
 REM ============================================================================
 setlocal EnableExtensions EnableDelayedExpansion
 
 REM --- Analyse des arguments ------------------------------------------------
 REM  Sans argument : comportement historique inchange (aucune publication).
-REM  --publier      : apres l'etape 8, met a jour version.json (build + SHA-256)
+REM  --publier      : apres l'etape 7, met a jour version.json (build + SHA-256)
 REM                   et fait un commit local dans le clone partage. Jamais de
 REM                   git push ni de gh release create (ces deux etapes restent
 REM                   manuelles, cf. rappel en fin de script).
@@ -52,7 +51,7 @@ REM ===========================================================================
 REM  ETAPE 0 : localiser ISCC.exe
 REM ===========================================================================
 echo.
-echo [0/9] Recherche de ISCC.exe ^(Inno Setup 6^)...
+echo [0/8] Recherche de ISCC.exe ^(Inno Setup 6^)...
 set "ISCC=%ORIGDIR%\.tools\InnoSetup6\ISCC.exe"
 
 if not exist "%ISCC%" (
@@ -76,7 +75,7 @@ REM ===========================================================================
 REM  ETAPE 1 : copie du projet vers le repertoire de build temporaire
 REM ===========================================================================
 echo.
-echo [1/9] Copie du projet vers %BUILDDIR% ...
+echo [1/8] Copie du projet vers %BUILDDIR% ...
 robocopy "%ORIGDIR%" "%BUILDDIR%" /MIR /XD .git venv .venv_build dist build __pycache__ .pytest_cache logs /NFL /NDL /NJH /NJS /NC /NS /NP
 if errorlevel 8 (
     echo [ERREUR] Echec de la copie du projet vers %BUILDDIR%
@@ -89,7 +88,7 @@ REM ===========================================================================
 REM  ETAPE 2 : environnement virtuel + dependances
 REM ===========================================================================
 echo.
-echo [2/9] Preparation de l'environnement virtuel .venv_build ...
+echo [2/8] Preparation de l'environnement virtuel .venv_build ...
 if not exist ".venv_build\Scripts\python.exe" (
     python -m venv .venv_build
     if errorlevel 1 (
@@ -108,7 +107,7 @@ REM ===========================================================================
 REM  ETAPE 3 : fermer Rummikub.exe si en cours d'execution
 REM ===========================================================================
 echo.
-echo [3/9] Fermeture de Rummikub.exe si necessaire...
+echo [3/8] Fermeture de Rummikub.exe si necessaire...
 taskkill /im Rummikub.exe /f >nul 2>&1
 if errorlevel 1 (
     echo       Aucune instance de Rummikub.exe en cours.
@@ -130,7 +129,7 @@ REM  Remplacement via String.Replace (.NET) = sensible a la casse : seul le
 REM  jeton « BUILD » en majuscules est substitue, pas le mot « build ».
 REM ===========================================================================
 echo.
-echo [3bis/9] Injection du numero de build dans version_info.txt...
+echo [3bis/8] Injection du numero de build dans version_info.txt...
 set "EXEBUILD="
 for /f "usebackq delims=" %%B in (`powershell -NoProfile -Command "[int]((ConvertFrom-Json (Get-Content -Raw '%ORIGDIR%\version.json')).build)"`) do set "EXEBUILD=%%B"
 if not defined EXEBUILD (
@@ -159,7 +158,7 @@ REM ===========================================================================
 REM  ETAPE 4 : build PyInstaller
 REM ===========================================================================
 echo.
-echo [4/9] Construction avec PyInstaller ^(rummikub.spec^)...
+echo [4/8] Construction avec PyInstaller ^(rummikub.spec^)...
 call ".venv_build\Scripts\python.exe" -m PyInstaller rummikub.spec -y
 if errorlevel 1 (
     echo [ERREUR] Echec de PyInstaller
@@ -173,10 +172,10 @@ REM  NON COMPRESSE (arborescence PyInstaller onedir), et non sur l'installeur.
 REM  Taille normale observee du dossier dist\Rummikub : ~28 Mo (28 712 051 octets).
 REM  Fourchette de sanite : 20 Mo a 45 Mo (20971520 a 47185920 octets).
 REM  Hors de cette fourchette -> simple avertissement, pas d'echec.
-REM  (Le garde-fou sur l'installeur final compresse est a l'etape 7.)
+REM  (Le garde-fou sur l'installeur final compresse est a l'etape 6.)
 REM ===========================================================================
 echo.
-echo [5/9] Verification de dist\Rummikub\Rummikub.exe ...
+echo [5/8] Verification de dist\Rummikub\Rummikub.exe ...
 if not exist "dist\Rummikub\Rummikub.exe" (
     echo [ERREUR] dist\Rummikub\Rummikub.exe introuvable apres le build.
     popd & exit /b 1
@@ -189,36 +188,7 @@ if %TOTAL% LSS 20971520 echo       [ATTENTION] Dossier dist\ inhabituellement PE
 if %TOTAL% GTR 47185920 echo       [ATTENTION] Dossier dist\ inhabituellement GRAND ^(attendu ~28 Mo, fourchette 20-45 Mo^).
 
 REM ===========================================================================
-REM  ETAPE 6 : telecharger et extraire Actualise (updater autonome)
-REM  Actualise.exe + son dossier _internal\ (runtime Python + DLL, mode
-REM  PyInstaller --onedir) sont l'updater embarque dans l'installeur (cf.
-REM  rummikub.iss, Source attendue : C:\Temp\RummikubBuild\Actualise_dist\).
-REM  Recupere depuis la Release v1 du depot AlainDelree/Actualise.
-REM ===========================================================================
-echo.
-echo [6/9] Telechargement d'Actualise ^(updater^)...
-set "ACTUALISE_URL=https://github.com/AlainDelree/Actualise/releases/download/v8/actualise-v8.zip"
-set "ACTUALISE_ZIP=%BUILDDIR%\actualise.zip"
-set "ACTUALISE_EXTRACT=%BUILDDIR%\actualise_extract"
-powershell -NoProfile -Command "$ProgressPreference='SilentlyContinue'; try { Invoke-WebRequest -Uri '%ACTUALISE_URL%' -OutFile '%ACTUALISE_ZIP%' -UseBasicParsing } catch { exit 1 }"
-if errorlevel 1 (
-    echo [ERREUR] Echec du telechargement d'actualise.zip ^(%ACTUALISE_URL%^).
-    popd & exit /b 1
-)
-powershell -NoProfile -Command "try { Expand-Archive -Path '%ACTUALISE_ZIP%' -DestinationPath '%ACTUALISE_EXTRACT%' -Force } catch { exit 1 }"
-if errorlevel 1 (
-    echo [ERREUR] Echec de l'extraction d'actualise.zip.
-    popd & exit /b 1
-)
-robocopy "%ACTUALISE_EXTRACT%" "%BUILDDIR%\Actualise_dist" /E /NFL /NDL /NJH /NJS /NC /NS /NP
-if errorlevel 8 (
-    echo [ERREUR] Echec de la copie de %ACTUALISE_EXTRACT% vers %BUILDDIR%\Actualise_dist.
-    popd & exit /b 1
-)
-echo       Actualise pret : %BUILDDIR%\Actualise_dist
-
-REM ===========================================================================
-REM  ETAPE 7 : installeur Inno Setup + copie (local + partage) + garde-fou
+REM  ETAPE 6 : installeur Inno Setup + copie (local + partage) + garde-fou
 REM  Garde-fou sur l'INSTALLEUR FINAL COMPRESSE (Rummikub-Setup.exe).
 REM  Distinct de l'etape 5 (dossier dist\ non compresse) : ici on mesure le .exe
 REM  d'installation genere par Inno Setup, soit ~12 Mo (12 180 000 octets observes).
@@ -226,7 +196,7 @@ REM  Fourchette de sanite : 5 Mo a 25 Mo (5242880 a 26214400 octets).
 REM  Hors de cette fourchette -> simple avertissement, pas d'echec.
 REM ===========================================================================
 echo.
-echo [7/9] Generation de l'installeur avec Inno Setup...
+echo [6/8] Generation de l'installeur avec Inno Setup...
 REM  Numero de build injecte dynamiquement (issue #91), sur le modele de Scrabble
 REM  (/DScrabbleBuildInstalle) : EXEBUILD provient de version.json (etape 3bis,
 REM  +1 en --publier, --build N sinon). Le .iss n'a plus de #define hardcode ; le
@@ -273,19 +243,19 @@ REM ===========================================================================
 REM  Determination du numero de build et du nom du zip
 REM  CURBUILD (build courant lu dans version.json) est desormais lu dans LES DEUX
 REM  modes : il fournit MANIFESTBUILD, la valeur ecrite dans manifest.json a
-REM  l'etape 8, pour que ce manifest reste coherent avec le build reel meme en
+REM  l'etape 7, pour que ce manifest reste coherent avec le build reel meme en
 REM  build de test (sans --publier).
 REM  En mode --publier, le zip publie doit s'appeler rummikub-vN.zip (format
 REM  versionne attendu par Actualise pour construire l'URL de telechargement) ;
-REM  on calcule donc NEWBUILD DES MAINTENANT, avant l'etape 8, pour nommer le
-REM  zip de facon coherente entre l'etape 8 et l'etape 8bis, et MANIFESTBUILD
+REM  on calcule donc NEWBUILD DES MAINTENANT, avant l'etape 7, pour nommer le
+REM  zip de facon coherente entre l'etape 7 et l'etape 7bis, et MANIFESTBUILD
 REM  prend alors la valeur de NEWBUILD. Sans --publier, le zip garde le nom fixe
 REM  rummikub.zip (build de test local, jamais publie).
 REM ===========================================================================
 set "ZIPNAME=rummikub.zip"
 
 REM --- Build courant (CURBUILD) lu dans version.json DANS LES DEUX MODES.
-REM     Sert de valeur de build pour le manifest de l'etape 8 en mode test
+REM     Sert de valeur de build pour le manifest de l'etape 7 en mode test
 REM     (sans --publier) et de base au calcul de NEWBUILD en mode --publier.
 set "CURBUILD="
 for /f "usebackq delims=" %%B in (`powershell -NoProfile -Command "[int]((ConvertFrom-Json (Get-Content -Raw '%ORIGDIR%\version.json')).build)"`) do set "CURBUILD=%%B"
@@ -294,7 +264,7 @@ if not defined CURBUILD (
     popd & exit /b 1
 )
 
-REM --- Build embarque dans le manifest de l'etape 8 : par defaut le build courant.
+REM --- Build embarque dans le manifest de l'etape 7 : par defaut le build courant.
 REM     En mode --publier il sera remplace par NEWBUILD (cf. bloc ci-dessous).
 set "MANIFESTBUILD=!CURBUILD!"
 
@@ -314,7 +284,7 @@ set "ZIPNAME=rummikub-v!NEWBUILD!.zip"
 :zipname_done
 
 REM ===========================================================================
-REM  ETAPE 8 : manifest.json + zip (dist\Rummikub\* + manifest.json)
+REM  ETAPE 7 : manifest.json + zip (dist\Rummikub\* + manifest.json)
 REM  Le zip = dist\Rummikub\ + manifest.json, sans dossier englobant
 REM  (l'updater Actualise l'extrait directement par-dessus le dossier installe).
 REM  Nom : rummikub-vN.zip en --publier (format versionne, cf. bloc ci-dessus),
@@ -323,7 +293,7 @@ REM  Garde-fou de taille sur le zip : fourchette 5 Mo a 25 Mo (memes bornes que
 REM  l'installeur compresse) -> hors fourchette = simple avertissement.
 REM ===========================================================================
 echo.
-echo [8/9] Creation de manifest.json et de !ZIPNAME!...
+echo [7/8] Creation de manifest.json et de !ZIPNAME!...
 > manifest.json echo {"build": !MANIFESTBUILD!, "supprimer": []}
 if not exist "installeur\output" mkdir "installeur\output"
 if exist "installeur\output\!ZIPNAME!" del /f /q "installeur\output\!ZIPNAME!"
@@ -347,9 +317,9 @@ copy /y "installeur\output\!ZIPNAME!" "%ORIGDIR%\installeur\output\!ZIPNAME!" >n
 if errorlevel 1 ( echo [ERREUR] Echec de la copie de !ZIPNAME! vers le partage. & popd & exit /b 1 )
 
 REM ===========================================================================
-REM  ETAPE 8bis (--publier uniquement) : version.json + SHA-256 + commit local
+REM  ETAPE 7bis (--publier uniquement) : version.json + SHA-256 + commit local
 REM  Ne s'execute qu'avec l'argument --publier. Reprend le zip rummikub-vN.zip
-REM  genere a l'etape 8 (NEWBUILD deja calcule avant l'etape 8) pour :
+REM  genere a l'etape 7 (NEWBUILD deja calcule avant l'etape 7) pour :
 REM    - reecrire manifest.json avec ce numero et regenerer rummikub-vN.zip ;
 REM    - calculer le SHA-256 du zip ;
 REM    - ecrire version.json a la racine du clone partage (%ORIGDIR%) ;
@@ -359,10 +329,10 @@ REM ===========================================================================
 if not "%PUBLIER%"=="1" goto fin_publier
 
 echo.
-echo [8bis/9] Mode --publier : version.json ^(build + SHA-256^) et commit local...
+echo [7bis/8] Mode --publier : version.json ^(build + SHA-256^) et commit local...
 
 REM --- Reecrire manifest.json avec le nouveau build et regenerer le zip -------
-REM  NEWBUILD et ZIPNAME ^(rummikub-vN.zip^) ont ete determines avant l'etape 8.
+REM  NEWBUILD et ZIPNAME ^(rummikub-vN.zip^) ont ete determines avant l'etape 7.
 echo       Reecriture de manifest.json ^(build !NEWBUILD!^) et du zip !ZIPNAME!...
 > manifest.json echo {"build": !NEWBUILD!, "supprimer": []}
 if exist "installeur\output\!ZIPNAME!" del /f /q "installeur\output\!ZIPNAME!"
@@ -397,10 +367,10 @@ if errorlevel 1 echo       [ATTENTION] git commit n'a rien commite ^(version.jso
 popd
 
 REM ===========================================================================
-REM  ETAPE 9 : nettoyage du build local + reset du clone CCW
+REM  ETAPE 8 : nettoyage du build local + reset du clone CCW
 REM ===========================================================================
 echo.
-echo [9/9] Nettoyage de %BUILDDIR% et reset du depot partage...
+echo [8/8] Nettoyage de %BUILDDIR% et reset du depot partage...
 echo       Nettoyage de %BUILDDIR% ...
 rmdir /s /q "%BUILDDIR%"
 
