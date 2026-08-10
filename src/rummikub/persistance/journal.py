@@ -16,6 +16,7 @@ tracées (pose, pioche, fin de tour, annulation, tour IA). Le tri du chevalet es
 purement côté JS et ne remonte jamais au serveur : il n'est donc pas journalisé.
 """
 
+import copy
 import json
 from datetime import datetime
 from pathlib import Path
@@ -44,7 +45,7 @@ def _main_humain(etat: dict) -> list:
     """Chevalet complet du premier joueur humain (``est_ia`` faux)."""
     for j in etat.get("joueurs", []):
         if not j.get("est_ia"):
-            return j.get("chevalet", [])
+            return copy.deepcopy(j.get("chevalet", []))
     return []
 
 
@@ -54,7 +55,7 @@ def _mains_joueurs(etat: dict) -> list:
     tuiles, ce qui permet de vérifier la conservation des 106 tuiles à chaque
     coup (mains + pioche + plateau)."""
     return [
-        {"nom": j.get("nom"), "tuiles": j.get("chevalet", [])}
+        {"nom": j.get("nom"), "tuiles": copy.deepcopy(j.get("chevalet", []))}
         for j in etat.get("joueurs", [])
     ]
 
@@ -113,8 +114,8 @@ def logger_action(etat: dict, action: str) -> None:
             "joueur_actuel": etat.get("index_joueur_actuel"),
             "main_humain": _main_humain(etat),
             "mains_joueurs": _mains_joueurs(etat),
-            "plateau": etat.get("plateau", []),
-            "pioche": etat.get("pioche", []),
+            "plateau": copy.deepcopy(etat.get("plateau", [])),
+            "pioche": copy.deepcopy(etat.get("pioche", [])),
             "sac_restant": len(etat.get("pioche", [])),
         })
         with open(journal["chemin"], "w", encoding="utf-8") as f:
