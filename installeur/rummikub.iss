@@ -26,18 +26,10 @@
   #define RummikubBuildInstalle "1"
 #endif
 #define MyDistDir "..\dist\Rummikub"
-; Actualise (dépôt AlainDelree/Actualise) est l'updater autonome qui met
-; Rummikub à jour depuis les GitHub Releases avant de le lancer (même
-; mécanisme que Scrabble). Le raccourci utilisateur doit pointer vers lui,
-; jamais directement vers Rummikub.exe.
-#define MyActualiseExeName "Actualise.exe"
 ; Icône affichée sur les raccourcis (Bureau/menu Démarrer), déployée dans
-; {app} par la section [Files] ci-dessous : sans elle, les raccourcis pointant
-; vers Actualise.exe afficheraient l'icône générique d'Actualise.
+; {app} par la section [Files] ci-dessous et référencée par IconFilename dans
+; [Icons].
 #define MyAppIcoName "rummikub.ico"
-; Déposé par build\rebuild_rummikub.bat avant l'appel à ISCC (Actualise.exe +
-; son dossier _internal\, runtime Python + DLL, mode PyInstaller --onedir).
-#define MyActualiseSrcDir "C:\Temp\RummikubBuild\Actualise_dist"
 ; Actualise est désormais une instance PARTAGÉE entre toutes les applications
 ; (auparavant une instance par application : C:\Actualise_Rummikub). Le
 ; dossier C:\Actualise héberge l'updater et les fichiers de configuration
@@ -96,34 +88,19 @@ Name: "french"; MessagesFile: "compiler:Languages\French.isl"
 Source: "{#MyDistDir}\*"; DestDir: "{app}"; Flags: recursesubdirs createallsubdirs ignoreversion; Excludes: "config.json,logs\*,data\parties.db,data\*.db"
 ; Icône des raccourcis : rummikub.spec ne l'embarque pas dans dist\Rummikub
 ; (elle sert seulement d'icône à l'exe), on la déploie donc explicitement dans
-; {app} pour que les raccourcis pointant vers Actualise.exe (voir [Icons])
-; l'affichent.
+; {app} pour la référencer via IconFilename dans [Icons].
 Source: "..\assets\rummikub.ico"; DestDir: "{app}"; DestName: "{#MyAppIcoName}"; Flags: ignoreversion
-; Actualise : updater autonome, installé à côté de Rummikub (pas dans {app})
-; car il survit aux mises à jour/réinstallations de Rummikub lui-même. Copie
-; récursive (Actualise.exe + _internal\, runtime Python + DLL, mode
-; PyInstaller --onedir).
-; PAS de flag ignoreversion ici : instance partagée, on laisse Inno Setup
-; comparer les versions et ne remplacer Actualise.exe (et son runtime) que si
-; la version embarquée est plus récente que celle déjà installée par une autre
-; application (ex. Scrabble). Évite d'écraser une version d'Actualise plus
-; récente déjà présente.
-Source: "{#MyActualiseSrcDir}\*"; DestDir: "{#MyActualiseDir}"; Flags: recursesubdirs createallsubdirs
 
 [Dirs]
 Name: "{#MyActualiseDir}"
-Name: "{#MyActualiseDir}\attente"
 
 [Icons]
-; Les raccourcis pointent vers Actualise.exe (jamais directement vers
-; Rummikub.exe) : Actualise met Rummikub à jour depuis les GitHub Releases
-; avant de le lancer, à chaque démarrage. {autoprograms} (et non {group}) reste
-; valide avec PrivilegesRequired=admin : il résout vers le menu Démarrer commun
-; (tous les utilisateurs), ce qui est le comportement attendu.
-; Parameters "--config rummikub" : instance Actualise partagée, on précise
-; quelle application lancer/mettre à jour (lit config_rummikub.json).
-Name: "{autoprograms}\{#MyAppName}"; Filename: "{#MyActualiseDir}\{#MyActualiseExeName}"; Parameters: "--config rummikub"; IconFilename: "{app}\{#MyAppIcoName}"
-Name: "{autodesktop}\{#MyAppName}"; Filename: "{#MyActualiseDir}\{#MyActualiseExeName}"; Parameters: "--config rummikub"; IconFilename: "{app}\{#MyAppIcoName}"
+; Les raccourcis pointent directement vers Rummikub.exe dans {app}.
+; {autoprograms} (et non {group}) reste valide avec PrivilegesRequired=admin :
+; il résout vers le menu Démarrer commun (tous les utilisateurs), ce qui est le
+; comportement attendu.
+Name: "{autoprograms}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; IconFilename: "{app}\{#MyAppIcoName}"
+Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; IconFilename: "{app}\{#MyAppIcoName}"
 
 [Code]
 // Actualise est une instance PARTAGÉE (C:\Actualise) : chaque application y
@@ -160,37 +137,6 @@ begin
   SaveStringToFile(DossierActualise + 'config_rummikub.json', Contenu, False);
 end;
 
-// config_actualise.json : configuration commune de l'updater. Écrit UNIQUEMENT
-// s'il n'existe pas déjà, afin de ne pas écraser celui qu'une autre application
-// (ex. Scrabble) aurait déjà déposé dans l'instance partagée.
-procedure CreerConfigActualise();
-var
-  DossierActualise, ZoneAttente, Contenu: String;
-begin
-  DossierActualise := ExpandConstant('{#MyActualiseDir}') + '\';
-  if FileExists(DossierActualise + 'config_actualise.json') then
-    exit;
-
-  ZoneAttente := DossierActualise + 'attente\';
-
-  Contenu :=
-    '{' + #13#10 +
-    '  "build_installe": 3,' + #13#10 +
-    '  "depot_github": "AlainDelree/Actualise",' + #13#10 +
-    '  "zone_attente": "' + EchapperJSON(ZoneAttente) + '"' + #13#10 +
-    '}' + #13#10;
-
-  SaveStringToFile(DossierActualise + 'config_actualise.json', Contenu, False);
-end;
-
-// actualise_path.txt : dépose dans {app} le chemin de l'instance Actualise
-// partagée, pour que Rummikub sache où la trouver au démarrage.
-procedure EcrireActualisePath();
-begin
-  SaveStringToFile(ExpandConstant('{app}') + '\actualise_path.txt',
-    ExpandConstant('{#MyActualiseDir}') + '\', False);
-end;
-
 procedure CurStepChanged(CurStep: TSetupStep);
 var
   AncienDossier: String;
@@ -205,8 +151,6 @@ begin
       DelTree(AncienDossier, True, True, True);
 
     CreerConfigRummikub();
-    CreerConfigActualise();
-    EcrireActualisePath();
   end;
 end;
 
