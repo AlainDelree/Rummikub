@@ -1014,6 +1014,7 @@ async function onJouer() {
       reconcilierChevalet();
       reinitTour();
       rafraichirTout();
+      autoZoomSiTapisDeborde(); // issue #104 : dézoome d'un cran si le tapis déborde
       toast("Coup joué", "succes");
     } else {
       toast((res && res.erreur) || "Coup invalide", "erreur");
@@ -1234,6 +1235,7 @@ async function jouerIA() {
     plateauLocal = clone(etat.plateau || []);
     rafraichirPlateau();
     rafraichirTout();
+    autoZoomSiTapisDeborde(); // issue #104 : dézoome d'un cran si le tapis déborde
 
     // Effacer les surbrillances dorées après 2 secondes
     setTimeout(() => {
@@ -1410,6 +1412,36 @@ function brancherZoomTapis() {
       try { localStorage.setItem(ZOOM_TAPIS_CLE, b.dataset.zoom); } catch (e) {}
     });
   });
+}
+
+// Zoom automatique au débordement (issue #104) : après une pose de tuiles, si le
+// contenu du tapis dépasse la zone visible (#zone-plateau-scroll : hauteur bornée
+// + défilement), on réduit le zoom d'UN cran (100% → 75% → 50%) pour rendre la
+// combinaison posée visible. On ne descend jamais sous le niveau minimal et on ne
+// fait rien si tout est déjà visible. Le joueur garde la main : il peut ensuite
+// zoomer/dézoomer librement, l'automatisme ne se redéclenche qu'à la pose suivante.
+function autoZoomSiTapisDeborde() {
+  const scroll = document.getElementById("zone-plateau-scroll");
+  const plateau = document.getElementById("zone-plateau");
+  if (!scroll || !plateau) return;
+  // La lecture de scrollHeight/scrollWidth force un reflow : les dimensions
+  // reflètent donc le contenu fraîchement rendu.
+  const deborde = scroll.scrollHeight > scroll.clientHeight
+    || scroll.scrollWidth > scroll.clientWidth;
+  if (!deborde) return;
+  // Niveaux disponibles dans l'ordre des boutons (du plus grand au plus petit),
+  // pour rester synchronisé avec le HTML sans coder les valeurs en dur ici.
+  const niveaux = [...document.querySelectorAll("#zoom-tapis .btn-zoom")]
+    .map((b) => b.dataset.zoom);
+  if (!niveaux.length) return;
+  const actuel = (plateau.style.getPropertyValue("--zoom-tapis") || "").trim()
+    || niveaux[0];
+  const idx = niveaux.indexOf(actuel);
+  // Niveau inconnu, ou déjà au minimal : on ne réduit pas davantage.
+  if (idx === -1 || idx >= niveaux.length - 1) return;
+  const suivant = niveaux[idx + 1];
+  appliquerZoomTapis(suivant);
+  try { localStorage.setItem(ZOOM_TAPIS_CLE, suivant); } catch (e) {}
 }
 
 // ------------------------------------------------------------ init
