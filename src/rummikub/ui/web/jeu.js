@@ -495,6 +495,7 @@ function brancherAppuiLongChevalet(el, d) {
 }
 
 function demarrerAppuiLong(d) {
+  if (!estMonTour()) return; // pas de réorg hors du tour (issue #96)
   annulerAppuiLong();
   appuiLong.id = d.id;
   appuiLong.declenche = false;
@@ -523,6 +524,7 @@ function finAppuiLong(d) {
 function brancherDragChevalet(el, d) {
   el.draggable = true;
   el.addEventListener("dragstart", (e) => {
+    if (!estMonTour()) { e.preventDefault(); return; } // pas de réorg hors tour (issue #96)
     dragSourceId = d.id;
     if (e.dataTransfer) {
       e.dataTransfer.effectAllowed = "move";
@@ -583,6 +585,9 @@ function deplacerTuileChevalet(idSource, idCible) {
 
 // Clic sur une tuile du chevalet : échange (réorg en cours) OU sélection pour pose
 function onClickTuileChevalet(d) {
+  // Hors du tour du joueur humain, aucune sélection/manipulation de tuile n'est
+  // permise, comme les boutons d'action déjà désactivés (issue #96).
+  if (!estMonTour()) return;
   if (reorgSource !== null) {
     // réorganisation : clic sur une seconde tuile → échange
     if (d.id === reorgSource) { reorgSource = null; rafraichirChevalet(); return; }
@@ -714,6 +719,7 @@ function insererTuileRangee(indexRangee, pos) {
 //   elle n'appartient pas au joueur).
 // - Tuile du chevalet : retour au chevalet comme auparavant.
 function reprendreTuileRangee(id, indexRangee) {
+  if (!estMonTour()) { toast("Ce n'est pas votre tour", "erreur"); return; }
   const i = travail[indexRangee].findIndex((t) => t.id === id);
   if (i < 0) return;
   if (tuilesOrigineTapis.includes(id)) {
