@@ -6,6 +6,6 @@
   "valeur_joker_penalite": 30,
   "vitesse_ia": "Instantanée",
   "mode_reorg": "clic",
-  "theme": "Sombre"
+  "theme": "Sombre",
   "log_parties": true
 }
