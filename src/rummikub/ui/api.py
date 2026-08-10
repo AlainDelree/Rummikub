@@ -66,6 +66,8 @@ class Api:
             backup_debut_tour(self._app.etat_jeu)
             from rummikub.persistance.stockage import sauvegarder_partie
             sauvegarder_partie(self._app.etat_jeu)
+            from rummikub.persistance.journal import logger_action
+            logger_action(self._app.etat_jeu, "pose")
         return res
 
     def jeu_piocher(self):
@@ -75,6 +77,8 @@ class Api:
         backup_debut_tour(self._app.etat_jeu)
         from rummikub.persistance.stockage import sauvegarder_partie
         sauvegarder_partie(self._app.etat_jeu)
+        from rummikub.persistance.journal import logger_action
+        logger_action(self._app.etat_jeu, "pioche")
         return res
 
     def jeu_passer(self):
@@ -84,11 +88,15 @@ class Api:
         backup_debut_tour(self._app.etat_jeu)
         from rummikub.persistance.stockage import sauvegarder_partie
         sauvegarder_partie(self._app.etat_jeu)
+        from rummikub.persistance.journal import logger_action
+        logger_action(self._app.etat_jeu, "fin_de_tour")
         return res
 
     def jeu_annuler(self):
         from rummikub.moteur.partie import annuler_tour
         annuler_tour(self._app.etat_jeu)
+        from rummikub.persistance.journal import logger_action
+        logger_action(self._app.etat_jeu, "annulation")
         return {"ok": True, "etat": self._app.etat_jeu}
 
     def jeu_verifier_plateau(self, plateau):
@@ -146,6 +154,8 @@ class Api:
         self._app.etat_jeu = res["etat"]
         backup_debut_tour(self._app.etat_jeu)
         sauvegarder_partie(self._app.etat_jeu)
+        from rummikub.persistance.journal import logger_action
+        logger_action(self._app.etat_jeu, "tour_ia")
         return {"ok": True, "etat": self._app.etat_jeu}
 
     def jeu_retour_accueil(self):

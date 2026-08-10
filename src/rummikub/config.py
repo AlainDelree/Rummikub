@@ -31,3 +31,8 @@ NB_TUILES_DEPART   = 14
 MISE_INITIALE_MIN  = 30
 NIVEAUX            = ["Débutant", "Facile", "Intermédiaire", "Avancé", "Expert"]
 AVATARS            = [f"avatar-{i:02d}" for i in range(1, 16)]
+
+# Journal de partie (débogage) : si True, chaque action de jeu est tracée dans
+# un fichier JSON horodaté sous RACINE_DATA/logs_parties (voir persistance/
+# journal.py). Désactivé par défaut → aucun overhead, aucun fichier créé.
+LOG_PARTIES        = False
