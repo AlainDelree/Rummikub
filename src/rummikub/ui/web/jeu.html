@@ -95,13 +95,23 @@
     <button id="btn-trier">Trier</button>
   </div>
 
-  <!-- Overlay fin de manche -->
+  <!-- Overlay fin de manche : scores de la manche + accès à la suite -->
   <div id="overlay-fin" class="overlay-cache">
     <div class="carte">
       <h2 id="titre-fin"></h2>
       <table id="tableau-scores"></table>
-      <button id="btn-nouvelle-manche" class="btn-primaire">Nouvelle manche</button>
+      <button id="btn-nouvelle-manche" class="btn-primaire">Manche suivante</button>
+      <button id="btn-fin-partie" class="btn-primaire">Fin de partie</button>
       <button id="btn-fin-retour" class="btn-primaire">Retour au menu</button>
+    </div>
+  </div>
+
+  <!-- Overlay classement final (fin de partie) : rang par score_cumul -->
+  <div id="overlay-classement" class="overlay-cache">
+    <div class="carte">
+      <h2 id="titre-classement"></h2>
+      <table id="tableau-classement"></table>
+      <button id="btn-classement-retour" class="btn-primaire">Retour à l'accueil</button>
     </div>
   </div>
 

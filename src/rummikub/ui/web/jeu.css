@@ -397,9 +397,12 @@ button:disabled { opacity: 0.4; cursor: not-allowed; }
   background: rgba(0,0,0,0.7); z-index: 100;
   align-items: center; justify-content: center; }
 
-#tableau-scores { width: 100%; border-collapse: collapse; margin: 12px 0; }
-#tableau-scores th, #tableau-scores td { padding: 6px 8px; text-align: left;
+#tableau-scores, #tableau-classement { width: 100%; border-collapse: collapse; margin: 12px 0; }
+#tableau-scores th, #tableau-scores td,
+#tableau-classement th, #tableau-classement td { padding: 6px 8px; text-align: left;
   border-bottom: 1px solid var(--couleur-bordure); }
-#tableau-scores tr.gagnant { font-weight: 700; color: var(--couleur-primaire); }
-#overlay-fin .carte button { margin-top: 10px; padding: 14px 22px;
+#tableau-scores tr.gagnant,
+#tableau-classement tr.gagnant { font-weight: 700; color: var(--couleur-primaire); }
+#overlay-fin .carte button,
+#overlay-classement .carte button { margin-top: 10px; padding: 14px 22px;
   font-size: 1.1rem; min-height: 44px; }

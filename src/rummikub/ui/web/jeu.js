@@ -1272,11 +1272,17 @@ async function jouerIA() {
 }
 
 // ------------------------------------------------------------ fin de manche
+// Overlay récapitulatif de la manche : score_manche + score_cumul de chaque
+// joueur, gagnant mis en avant. Selon qu'il reste ou non des manches à jouer
+// (etat.terminee posé par le moteur), on propose « Manche suivante » ou
+// « Fin de partie » (issue #108).
 function afficherFinManche() {
   const overlay = document.getElementById("overlay-fin");
   const gi = etat.gagnant_manche_index;
   const gagnant = (gi != null && etat.joueurs[gi]) ? etat.joueurs[gi].nom : "—";
-  document.getElementById("titre-fin").textContent = "🏆 " + gagnant + " remporte la manche";
+  const finPartie = !!etat.terminee;
+  document.getElementById("titre-fin").textContent =
+    (finPartie ? "🏁 Dernière manche — " : "🏆 ") + gagnant + " remporte la manche";
 
   const table = document.getElementById("tableau-scores");
   let html = "<tr><th>Joueur</th><th>Manche</th><th>Total</th></tr>";
@@ -1285,6 +1291,43 @@ function afficherFinManche() {
     html += "<tr" + cls + "><td>" + j.nom + "</td><td>" +
       (j.score_manche >= 0 ? "+" : "") + (j.score_manche || 0) + "</td><td>" +
       (j.score_cumul || 0) + "</td></tr>";
+  });
+  table.innerHTML = html;
+
+  // Boutons contextuels : partie en cours → « Manche suivante » (+ retour menu) ;
+  // dernière manche → « Fin de partie » qui ouvre le classement final.
+  document.getElementById("btn-nouvelle-manche").style.display = finPartie ? "none" : "";
+  document.getElementById("btn-fin-retour").style.display      = finPartie ? "none" : "";
+  document.getElementById("btn-fin-partie").style.display      = finPartie ? "" : "none";
+
+  overlay.className = "overlay-visible";
+}
+
+// Passage de l'overlay « fin de manche » au classement final de la partie.
+function onFinPartie() {
+  document.getElementById("overlay-fin").className = "overlay-cache";
+  afficherClassementFinal();
+}
+
+// Overlay de classement final : joueurs classés par score_cumul décroissant.
+function afficherClassementFinal() {
+  const overlay = document.getElementById("overlay-classement");
+  const classement = etat.joueurs
+    .map((j) => ({ nom: j.nom, score: j.score_cumul || 0 }))
+    .sort((a, b) => b.score - a.score);
+
+  const gagnant = classement.length ? classement[0].nom : "—";
+  document.getElementById("titre-classement").textContent =
+    "🏁 " + gagnant + " remporte la partie !";
+
+  const table = document.getElementById("tableau-classement");
+  let html = "<tr><th>Rang</th><th>Joueur</th><th>Score total</th></tr>";
+  const MEDAILLES = ["🥇", "🥈", "🥉"];
+  classement.forEach((j, rang) => {
+    const cls = (rang === 0) ? " class='gagnant'" : "";
+    const medaille = MEDAILLES[rang] ? MEDAILLES[rang] + " " : "";
+    html += "<tr" + cls + "><td>" + medaille + (rang + 1) + "</td><td>" +
+      j.nom + "</td><td>" + j.score + "</td></tr>";
   });
   table.innerHTML = html;
   overlay.className = "overlay-visible";
@@ -1347,7 +1390,9 @@ function brancherEvenements() {
   // Le bouton #btn-piocher (fusion Piocher/Passer) reçoit son écouteur
   // dynamiquement dans rafraichirBoutons() selon le contexte (issue #28).
   document.getElementById("btn-nouvelle-manche").addEventListener("click", onNouvelleManche);
+  document.getElementById("btn-fin-partie").addEventListener("click", onFinPartie);
   document.getElementById("btn-fin-retour").addEventListener("click", onRetourAccueil);
+  document.getElementById("btn-classement-retour").addEventListener("click", onRetourAccueil);
 
   brancherZoomTapis();
 

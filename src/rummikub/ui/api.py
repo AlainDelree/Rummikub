@@ -121,8 +121,11 @@ class Api:
         return valider_combinaison(combo)
 
     def jeu_nouvelle_manche(self):
-        from rummikub.moteur.partie import nouvelle_manche
+        from rummikub.moteur.partie import nouvelle_manche, backup_debut_tour
         self._app.etat_jeu = nouvelle_manche(self._app.etat_jeu)
+        # Point de retour arrière du 1er tour de la nouvelle manche (convention
+        # projet, comme jeu_jouer_coup / jeu_piocher / jeu_passer).
+        backup_debut_tour(self._app.etat_jeu)
         from rummikub.persistance.stockage import sauvegarder_partie
         sauvegarder_partie(self._app.etat_jeu)
         return {"ok": True, "etat": self._app.etat_jeu}
