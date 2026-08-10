@@ -1318,6 +1318,8 @@ function brancherEvenements() {
   document.getElementById("btn-nouvelle-manche").addEventListener("click", onNouvelleManche);
   document.getElementById("btn-fin-retour").addEventListener("click", onRetourAccueil);
 
+  brancherZoomTapis();
+
   // Zone de travail : clic sur une rangée (fond ou numéro) = placer / activer
   document.querySelectorAll(".rangee-travail").forEach((rangeeEl) => {
     const i = parseInt(rangeeEl.dataset.rangee, 10);
@@ -1365,6 +1367,40 @@ function brancherEvenements() {
       e.preventDefault();
       selectionnerTuile(tuileSelectionnee); // toggle → null → majFantome() détruit
     }
+  });
+}
+
+// ------------------------------------------------------------ zoom du tapis
+// Le zoom (issue #92) applique un transform: scale sur le SEUL #zone-plateau ;
+// la zone de travail et le chevalet ne sont pas touchés. Le niveau choisi est
+// mémorisé (localStorage) pour être restauré au chargement suivant.
+const ZOOM_TAPIS_CLE = "rummikub_zoom_tapis";
+
+function appliquerZoomTapis(valeur) {
+  const plateau = document.getElementById("zone-plateau");
+  if (!plateau) return;
+  plateau.style.setProperty("--zoom-tapis", valeur);
+  // Surbrillance du bouton correspondant.
+  document.querySelectorAll("#zoom-tapis .btn-zoom").forEach((b) => {
+    b.classList.toggle("actif", b.dataset.zoom === valeur);
+  });
+}
+
+function brancherZoomTapis() {
+  const boutons = document.querySelectorAll("#zoom-tapis .btn-zoom");
+  if (!boutons.length) return;
+  // Restauration du dernier niveau (défaut 100%).
+  let initial = "1";
+  try {
+    const memo = localStorage.getItem(ZOOM_TAPIS_CLE);
+    if (memo && [...boutons].some((b) => b.dataset.zoom === memo)) initial = memo;
+  } catch (e) { /* localStorage indisponible : on reste à 100% */ }
+  appliquerZoomTapis(initial);
+  boutons.forEach((b) => {
+    b.addEventListener("click", () => {
+      appliquerZoomTapis(b.dataset.zoom);
+      try { localStorage.setItem(ZOOM_TAPIS_CLE, b.dataset.zoom); } catch (e) {}
+    });
   });
 }
 

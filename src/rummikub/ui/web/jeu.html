@@ -25,8 +25,20 @@
 
     <!-- Colonne droite : plateau + zone de travail -->
     <div id="colonne-droite">
-      <div id="zone-plateau">
-        <!-- combinaisons du tapis générées dynamiquement -->
+      <!-- Tapis : wrapper non scalé (porte le contrôle de zoom + la zone de
+           défilement) ; seul #zone-plateau reçoit le transform: scale (issue #92) -->
+      <div id="zone-plateau-wrap">
+        <div id="zoom-tapis" role="group" aria-label="Zoom du tapis" title="Zoom du tapis (n'affecte que le tapis)">
+          <span class="zoom-icone" aria-hidden="true">🔍</span>
+          <button type="button" class="btn-zoom actif" data-zoom="1">100%</button>
+          <button type="button" class="btn-zoom" data-zoom="0.75">75%</button>
+          <button type="button" class="btn-zoom" data-zoom="0.5">50%</button>
+        </div>
+        <div id="zone-plateau-scroll">
+          <div id="zone-plateau">
+            <!-- combinaisons du tapis générées dynamiquement -->
+          </div>
+        </div>
       </div>
 
       <div id="zone-travail">
