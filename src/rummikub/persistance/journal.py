@@ -48,6 +48,17 @@ def _main_humain(etat: dict) -> list:
     return []
 
 
+def _mains_joueurs(etat: dict) -> list:
+    """Chevalets de tous les joueurs (humain + IA), dans le même ordre que
+    ``etat["joueurs"]``. Chaque entrée porte le nom du joueur et sa liste de
+    tuiles, ce qui permet de vérifier la conservation des 106 tuiles à chaque
+    coup (mains + pioche + plateau)."""
+    return [
+        {"nom": j.get("nom"), "tuiles": j.get("chevalet", [])}
+        for j in etat.get("joueurs", [])
+    ]
+
+
 def _rotation(dossier: Path) -> None:
     """Conserve au plus ``MAX_FICHIERS - 1`` fichiers avant d'en créer un nouveau
     (le total après création reste donc <= MAX_FICHIERS). Les noms étant
@@ -101,7 +112,9 @@ def logger_action(etat: dict, action: str) -> None:
             "tour": etat.get("tour_numero"),
             "joueur_actuel": etat.get("index_joueur_actuel"),
             "main_humain": _main_humain(etat),
+            "mains_joueurs": _mains_joueurs(etat),
             "plateau": etat.get("plateau", []),
+            "pioche": etat.get("pioche", []),
             "sac_restant": len(etat.get("pioche", [])),
         })
         with open(journal["chemin"], "w", encoding="utf-8") as f:
