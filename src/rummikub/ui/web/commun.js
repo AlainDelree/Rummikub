@@ -7,24 +7,27 @@ function toast(msg, type = "info") {
   el._t = setTimeout(() => el.className = "", 3000);
 }
 
-// Visage souriant « lune » du joker, façon vraie tuile Rummikub (rouge, SVG).
+// Visage souriant « lune » du joker, façon vraie tuile Rummikub (SVG).
+// Les couleurs sont en `currentColor` : le visage prend donc la couleur du
+// texte de la tuile (rouge ou noir selon le joker, cf. .tuile-jeu.joker.*).
 const SVG_JOKER_FACE = `
 <svg class="joker-face" viewBox="0 0 40 40" xmlns="http://www.w3.org/2000/svg"
-     fill="none" stroke="#cc2200" stroke-linecap="round" stroke-linejoin="round">
+     fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
   <circle cx="20" cy="20" r="15.2" stroke-width="1.6"/>
   <path d="M10.5 15.2 Q13.8 12.4 17 15" stroke-width="1.4"/>
   <path d="M23 15 Q26.2 12.4 29.5 15.2" stroke-width="1.4"/>
-  <circle cx="14" cy="18" r="1.5" fill="#cc2200" stroke="none"/>
-  <circle cx="26" cy="18" r="1.5" fill="#cc2200" stroke="none"/>
+  <circle cx="14" cy="18" r="1.5" fill="currentColor" stroke="none"/>
+  <circle cx="26" cy="18" r="1.5" fill="currentColor" stroke="none"/>
   <path d="M20 17.5 L20 24 Q22.2 24 22.6 22.2" stroke-width="1.3"/>
   <path d="M12.8 26.5 Q20 33 27.2 26.5" stroke-width="1.7"/>
 </svg>`;
 
-function creerTuileJeu(valeur, couleur) {
+// estJoker explicite : un joker a désormais une couleur réelle (rouge/noir), on
+// ne peut plus déduire son statut de l'absence de couleur.
+function creerTuileJeu(valeur, couleur, estJoker = false) {
   const d = document.createElement("div");
-  const estJoker = !couleur;
-  d.className = "tuile-jeu" + (couleur ? " " + couleur : " joker");
-  d.dataset.valeur = valeur; d.dataset.couleur = couleur || "joker";
+  d.className = "tuile-jeu" + (couleur ? " " + couleur : "") + (estJoker ? " joker" : "");
+  d.dataset.valeur = valeur; d.dataset.couleur = estJoker ? "joker" : (couleur || "");
 
   const cercle = document.createElement("span");
   cercle.className = "tuile-cercle";

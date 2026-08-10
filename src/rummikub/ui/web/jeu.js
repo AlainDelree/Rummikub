@@ -58,7 +58,7 @@ function decrireTuile(d) {
 
 // Construit un élément .tuile-jeu à partir d'un dict tuile.
 function tuileDepuisDict(d) {
-  const el = creerTuileJeu(d.valeur, d.est_joker ? null : d.couleur);
+  const el = creerTuileJeu(d.valeur, d.couleur, d.est_joker);
   el.dataset.id = d.id;
   return el;
 }
@@ -902,7 +902,9 @@ function peutRemplacerJoker(tuileSel, infoJoker) {
   if (tuileSel.valeur !== infoJoker.valeur) return false;
   if (infoJoker.type === "suite" && tuileSel.couleur !== infoJoker.couleur)
     return false;
-  if (infoJoker.type === "groupe" && tuileSel.couleur === null)
+  // Un joker ne peut pas en remplacer un autre (les jokers ont désormais une
+  // couleur réelle : on teste est_joker, plus l'absence de couleur).
+  if (infoJoker.type === "groupe" && tuileSel.est_joker)
     return false;
   return true;
 }

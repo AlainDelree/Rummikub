@@ -6,6 +6,7 @@ import random
 
 from rummikub.config import (
     COULEURS,
+    COULEURS_JOKERS,
     NB_SERIES,
     VALEUR_MIN,
     VALEUR_MAX,
@@ -55,7 +56,10 @@ def creer_sac() -> list[Tuile]:
             for valeur in range(VALEUR_MIN, VALEUR_MAX + 1):
                 sac.append(Tuile(f"{couleur}_{valeur}_{label}", valeur, couleur))
     for n in range(1, NB_JOKERS + 1):
-        sac.append(Tuile(f"joker_{n}", None, None, est_joker=True))
+        # Un joker rouge et un joker noir (standard Rummikub). La couleur est
+        # purement visuelle ; la logique de jeu s'appuie sur est_joker.
+        couleur = COULEURS_JOKERS[(n - 1) % len(COULEURS_JOKERS)]
+        sac.append(Tuile(f"joker_{n}", None, couleur, est_joker=True))
     return sac
 
 

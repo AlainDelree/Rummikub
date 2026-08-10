@@ -19,6 +19,10 @@ RACINE_WEB   = Path(__file__).parent / "ui" / "web"
 FICHIER_DB   = RACINE_DATA / "parties.db"
 
 COULEURS           = ["rouge", "bleu", "jaune", "noir"]
+# Couleurs des 2 jokers (standard Rummikub : un rouge, un noir). L'ordre suit
+# les IDs joker_1, joker_2. Purement visuel : la logique de jeu identifie un
+# joker par son drapeau est_joker, jamais par sa couleur.
+COULEURS_JOKERS    = ["rouge", "noir"]
 NB_SERIES          = 2
 VALEUR_MIN         = 1
 VALEUR_MAX         = 13

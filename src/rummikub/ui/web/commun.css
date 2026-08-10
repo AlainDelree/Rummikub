@@ -140,7 +140,12 @@ body {
 .tuile-jeu.bleu   { color: var(--tuile-bleu); }
 .tuile-jeu.jaune  { color: var(--tuile-jaune); }
 .tuile-jeu.noir   { color: var(--tuile-noir); }
-.tuile-jeu.joker  { color: var(--tuile-rouge); }
+/* Joker : sa couleur (rouge ou noir) provient de sa classe de couleur ; les
+   combos à 3 classes priment sur .tuile-jeu.rouge/.noir (2 classes). Le repli
+   .joker seul garde un rendu correct si aucune couleur n'est fournie. */
+.tuile-jeu.joker        { color: var(--tuile-rouge); }
+.tuile-jeu.joker.rouge  { color: var(--tuile-rouge); }
+.tuile-jeu.joker.noir   { color: var(--tuile-noir); }
 .tuile-jeu.selectionnee {
   border-color: var(--couleur-humain);
   transform: scale(1.08);
