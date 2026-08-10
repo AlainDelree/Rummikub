@@ -35,8 +35,24 @@ def _lancer_actualise_ui_si_flag():
             pass  # ne jamais bloquer le démarrage de Rummikub
 
 
+def _lancer_actualise_au_demarrage():
+    """Au démarrage de Rummikub, lance Actualise en arrière-plan s'il est
+    installé (C:\\Actualise\\Actualise.exe), avec l'argument `--config
+    rummikub`. Non-bloquant : ne doit JAMAIS empêcher ni retarder le
+    démarrage du jeu. Absence ou échec → simple log discret, aucune exception."""
+    _actualise = Path(r"C:\Actualise\Actualise.exe")
+    if not _actualise.exists():
+        return
+    try:
+        subprocess.Popen([str(_actualise), "--config", "rummikub"])
+    except Exception as exc:
+        # Log discret : ne jamais bloquer le démarrage de Rummikub.
+        print(f"[Rummikub] Lancement d'Actualise ignoré : {exc}", file=sys.stderr)
+
+
 from rummikub.ui.application import main
 
 if __name__ == "__main__":
+    _lancer_actualise_au_demarrage()
     _lancer_actualise_ui_si_flag()
     raise SystemExit(main())
