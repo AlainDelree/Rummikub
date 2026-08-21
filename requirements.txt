@@ -1,3 +1,9 @@
 pywebview
 pyinstaller
 pytest
+# pythonnet est une dépendance transitive de pywebview (backend WinForms sous Windows).
+# La version 2.5.2 n'a pas de roue pour Python 3.15 et sa compilation source casse.
+# On épingle donc la série 3.x. La borne rc1 est nécessaire car pip exclut les
+# pre-releases par défaut, et la première 3.0 stable n'était pas encore publiée.
+# Cf. issues #411/#412 sur le projet Scrabble (même problème).
+pythonnet>=3.0.0rc1,<4.0; sys_platform == "win32"
