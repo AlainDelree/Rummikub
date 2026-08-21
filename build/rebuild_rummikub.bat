@@ -40,7 +40,6 @@ popd
 
 set "BUILDDIR=C:\Temp\RummikubBuild"
 set "OUTPUTDIR=C:\Temp\RummikubOutput"
-set "SHARE_ISCC=\\VBOXSVR\CCW_Share\CCW\scrabble\.tools\InnoSetup6"
 
 echo ============================================================================
 echo   Reconstruction de Rummikub
@@ -54,19 +53,13 @@ echo.
 echo [0/8] Recherche de ISCC.exe ^(Inno Setup 6^)...
 set "ISCC=%ORIGDIR%\.tools\InnoSetup6\ISCC.exe"
 
-if not exist "%ISCC%" (
-    echo       ISCC.exe absent, tentative de copie depuis le partage CCW...
-    robocopy "%SHARE_ISCC%" "%ORIGDIR%\.tools\InnoSetup6" /E /NFL /NDL /NJH /NJS /NC /NS /NP
-    if errorlevel 8 (
-        echo [ERREUR] Echec de la copie de Inno Setup depuis %SHARE_ISCC%
-        exit /b 1
-    )
-)
-
+REM  Aucun fallback reseau (issue #111) : l'ancien partage \\VBOXSVR\CCW_Share\...
+REM  n'existe plus sur le PC fixe physique et faisait boucler robocopy en retry
+REM  infini. Le binaire DOIT etre present localement dans .tools\InnoSetup6\ ;
+REM  sinon on echoue immediatement et proprement (cf. rebuild_scrabble.bat).
 if not exist "%ISCC%" (
     echo [ERREUR] ISCC.exe introuvable : %ISCC%
-    echo          Installez Inno Setup 6 dans .tools\InnoSetup6\ ou verifiez le partage :
-    echo          %SHARE_ISCC%
+    echo          Installez Inno Setup 6 dans .tools\InnoSetup6\ avant de relancer le build.
     exit /b 1
 )
 echo       ISCC : %ISCC%
