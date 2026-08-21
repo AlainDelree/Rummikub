@@ -346,7 +346,7 @@ if not defined ZIPSHA (
 )
 echo       SHA-256 : !ZIPSHA!
 
-REM --- version.json a la racine du clone partage (%ORIGDIR% = Z:\CCW\rummikub) -
+REM --- version.json a la racine du clone partage (%ORIGDIR% = C:\CCW_Share\CCW\rummikub) -
 > "%ORIGDIR%\version.json" echo {"build": !NEWBUILD!, "sha256": "!ZIPSHA!"}
 echo       version.json ecrit : %ORIGDIR%\version.json
 
@@ -371,7 +371,7 @@ if "%PUBLIER%"=="1" (
     echo       [--publier] Reset git IGNORE pour preserver le commit version.json.
 ) else (
     echo       Reset du depot partage ^(git reset --hard origin/master^)...
-    git -C Z:\CCW\rummikub reset --hard origin/master
+    git -C C:\CCW_Share\CCW\rummikub reset --hard origin/master
 )
 
 echo.
