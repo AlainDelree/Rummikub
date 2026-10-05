@@ -177,7 +177,8 @@ function rafraichirTout() {
 // Jeu automatique du tour de l'IA (issue #126, réglage "Jouer automatiquement
 // le tour de l'ordinateur") : dès que c'est le tour d'une IA, programme son
 // coup après une latence d'environ 1 s (pour ne pas paraître brusque). Le
-// bouton « Jouer » manuel reste disponible et fonctionne normalement.
+// bouton « Jouer » manuel est masqué pendant ce temps (issue #129, voir
+// rafraichirFichesJoueurs) : plus de risque de double déclenchement.
 function verifierAutoIA() {
   if (!etat || etat.manche_terminee || !joueurCourantEstIA()) {
     indexAutoIAProgramme = null;
@@ -238,8 +239,13 @@ function rafraichirFichesJoueurs() {
       badge.textContent = "▶ À vous";
       fiche.appendChild(badge);
     }
-    // Tour d'une IA : bouton « Jouer » pour déclencher son coup manuellement
-    if (j.est_ia && i === etat.index_joueur_actuel && !etat.manche_terminee) {
+    // Tour d'une IA : bouton « Jouer » pour déclencher son coup manuellement.
+    // Masqué quand le réglage « Jouer automatiquement le tour de l'ordinateur »
+    // (issue #126) est actif : le coup se déclenche déjà tout seul, et laisser
+    // le bouton cliquable créerait une concurrence avec ce déclenchement
+    // automatique (issue #129) — inutile puisqu'il n'a alors aucun sens.
+    const iaAuto = !!(etat.config && etat.config.ia_auto);
+    if (j.est_ia && i === etat.index_joueur_actuel && !etat.manche_terminee && !iaAuto) {
       const btnIA = document.createElement("button");
       btnIA.className = "btn-jouer-ia";
       btnIA.textContent = "Jouer";

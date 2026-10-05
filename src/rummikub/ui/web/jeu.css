@@ -136,6 +136,19 @@ body { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
   outline: 2px solid #3b82f6;
   box-shadow: 0 0 8px rgba(59,130,246,0.6);
 }
+/* Une tuile du tour en cours (issue #128) reste manipulable comme les autres
+   dès la mise initiale faite : sans cette règle, le contour pointillé bleu
+   de .tapis-manipulable écrase visuellement le pourtour vert de .ce-tour
+   (issue #129) et la tuile posée par extension directe d'une combinaison
+   semblait ne plus avoir de pourtour. Le contour reprend la couleur verte
+   pour rester cohérent avec le pourtour plutôt que de le masquer. */
+.tuile-jeu.ce-tour.tapis-manipulable {
+  outline-color: rgba(34,197,94,0.8);
+}
+.tuile-jeu.ce-tour.tapis-manipulable:hover {
+  outline-color: #22c55e;
+  box-shadow: 0 0 8px rgba(34,197,94,0.6);
+}
 
 /* Combinaison rendue invalide (<3 tuiles) par une manipulation du tapis */
 .groupe-combinaison.combi-invalide {
