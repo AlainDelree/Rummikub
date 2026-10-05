@@ -526,6 +526,10 @@ function selectionnerTuile(id) {
   comboActive = null;
   rafraichirChevalet();
   rafraichirPlateau(); // afficher/masquer les zones d'extension du tapis
+  // Afficher/masquer les zones d'insertion internes des rangées de travail
+  // (sinon une tuile sélectionnée reste insérable seulement en fin de rangée,
+  // issue #127).
+  rafraichirZoneTravail();
   majFantome(); // (dé)sélection → crée / détruit le fantôme (issue #50)
 }
 
