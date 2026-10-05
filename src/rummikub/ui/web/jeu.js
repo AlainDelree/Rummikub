@@ -22,6 +22,8 @@ let dernierClicTapis = { id: null, temps: 0 };    // idem pour le tapis (issue #
 let appuiLong = { timer: null, id: null, declenche: false };
 let dragSourceId = null;      // id de la tuile en cours de glisser-déposer
 let dernierePositionSouris = { x: 0, y: 0 }; // dernière position connue du curseur (fantôme, issue #50)
+let triAutoActif = false;     // case "Tri automatique" (issue #126) : insère les tuiles piochées déjà triées
+let indexAutoIAProgramme = null; // index_joueur_actuel pour lequel un jeu auto de l'IA est déjà programmé (issue #126)
 
 // ------------------------------------------------------------ utilitaires
 function clone(x) { return JSON.parse(JSON.stringify(x)); }
@@ -169,6 +171,26 @@ function rafraichirTout() {
   rafraichirHistorique();
   mettreAJourSac((etat.pioche || []).length);
   if (etat.manche_terminee) afficherFinManche();
+  verifierAutoIA();
+}
+
+// Jeu automatique du tour de l'IA (issue #126, réglage "Jouer automatiquement
+// le tour de l'ordinateur") : dès que c'est le tour d'une IA, programme son
+// coup après une latence d'environ 1 s (pour ne pas paraître brusque). Le
+// bouton « Jouer » manuel reste disponible et fonctionne normalement.
+function verifierAutoIA() {
+  if (!etat || etat.manche_terminee || !joueurCourantEstIA()) {
+    indexAutoIAProgramme = null;
+    return;
+  }
+  if (!(etat.config && etat.config.ia_auto)) return;
+  if (indexAutoIAProgramme === etat.index_joueur_actuel) return; // déjà programmé
+  indexAutoIAProgramme = etat.index_joueur_actuel;
+  setTimeout(() => {
+    const btnIA = document.querySelector(".btn-jouer-ia");
+    if (btnIA && btnIA.disabled) return; // déjà déclenché manuellement entre-temps
+    if (etat && !etat.manche_terminee && joueurCourantEstIA()) jouerIA();
+  }, 1000);
 }
 
 function rafraichirFichesJoueurs() {
@@ -1081,6 +1103,7 @@ async function onPiocher() {
       etat = res.etat;
       const t = (res.tuiles_piochees || [])[0];
       reconcilierChevalet();
+      if (triAutoActif && t) insererTrie(t);
       reinitTour();
       // Rafraîchir tout SAUF le chevalet : la tuile piochée n'y apparaît
       // qu'à la fin de l'animation (elle est d'abord montrée en grand).
@@ -1093,6 +1116,7 @@ async function onPiocher() {
       animerPiochee(t, () => {
         rafraichirChevalet();
         if (etat.manche_terminee) afficherFinManche();
+        verifierAutoIA();
       });
     } else {
       toast((res && res.erreur) || "Impossible de piocher", "erreur");
@@ -1358,17 +1382,31 @@ async function onRetourAccueil() {
 }
 
 // ------------------------------------------------------------ tri du chevalet
+// Ordre de référence : couleur puis valeur croissante, jokers en fin
+// (partagé par le bouton "Trier" et l'insertion automatique à la pioché).
+function comparerTuiles(a, b) {
+  if (a.est_joker) return 1;
+  if (b.est_joker) return -1;
+  const ca = COULEURS_ORDRE[a.couleur] ?? 9;
+  const cb = COULEURS_ORDRE[b.couleur] ?? 9;
+  if (ca !== cb) return ca - cb;
+  return (a.valeur || 0) - (b.valeur || 0);
+}
+
 function trierChevalet() {
-  const chev = chevaletLocal;
-  chev.sort((a, b) => {
-    if (a.est_joker) return 1;
-    if (b.est_joker) return -1;
-    const ca = COULEURS_ORDRE[a.couleur] ?? 9;
-    const cb = COULEURS_ORDRE[b.couleur] ?? 9;
-    if (ca !== cb) return ca - cb;
-    return (a.valeur || 0) - (b.valeur || 0);
-  });
+  chevaletLocal.sort(comparerTuiles);
   rafraichirChevalet();
+}
+
+// Insère `tuile` dans chevaletLocal à sa place triée (issue #126, case "Tri
+// automatique"). Retire d'abord toute occurrence existante (cas de la tuile
+// piochée, déjà ajoutée en fin de liste par reconcilierChevalet).
+function insererTrie(tuile) {
+  const iExistant = chevaletLocal.findIndex((t) => t.id === tuile.id);
+  if (iExistant >= 0) chevaletLocal.splice(iExistant, 1);
+  let i = 0;
+  while (i < chevaletLocal.length && comparerTuiles(chevaletLocal[i], tuile) <= 0) i++;
+  chevaletLocal.splice(i, 0, tuile);
 }
 
 // Tri d'une rangée de la zone de pose par valeur croissante (issue #66).
@@ -1386,6 +1424,9 @@ function trierRangee(index) {
 function brancherEvenements() {
   document.getElementById("btn-retour").addEventListener("click", onRetourAccueil);
   document.getElementById("btn-trier").addEventListener("click", trierChevalet);
+  document.getElementById("chk-tri-auto").addEventListener("change", (e) => {
+    triAutoActif = e.target.checked;
+  });
   document.getElementById("btn-annuler").addEventListener("click", onAnnuler);
   document.getElementById("btn-verifier-calc").addEventListener("click", onVerifierCalc);
   document.getElementById("btn-jouer").addEventListener("click", onJouer);

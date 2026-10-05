@@ -264,9 +264,6 @@ body { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
 #resultat-calcul.ko { color: #fecaca; }
 
 #zone-chevalet { background: var(--tapis-vert-fonce); padding: 8px 12px; }
-#chevalet-entete { display: flex; align-items: center; gap: 12px;
-  flex-wrap: wrap; }
-#mes-tuiles-label { color: #fff; font-size: 0.85rem; opacity: 0.85; }
 #chevalet { display: flex; flex-wrap: wrap; gap: 8px;
   justify-content: center; padding: 8px 0; min-height: 82px; }
 /* Tuiles du chevalet du joueur humain : plus grandes et lisibles
@@ -391,6 +388,8 @@ body { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
 #btn-piocher   { background: #92400e; color: #fff; }
 #btn-trier     { background: #0284c7; color: #fff; }
 button:disabled { opacity: 0.4; cursor: not-allowed; }
+#label-tri-auto { display: flex; align-items: center; gap: 6px;
+  color: #fff; font-size: 0.9rem; cursor: pointer; }
 
 .overlay-cache   { display: none; }
 .overlay-visible { display: flex; position: fixed; inset: 0;
