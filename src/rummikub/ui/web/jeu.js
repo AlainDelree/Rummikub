@@ -10,8 +10,8 @@ let chevaletLocal = [];       // ordre local du chevalet, conservé entre les to
 let tuileSelectionnee = null; // id de tuile sélectionnée sur le chevalet
 let tuilesCeTour = [];        // ids des tuiles posées ce tour
 let plateauLocal = [];        // tapis existant, potentiellement étendu ce tour
-let travail = [[], [], [], []]; // 4 rangées de pose, chacune = [dict_tuile, ...]
-let rangeeActive = 0;         // index 0-3 de la rangée de travail active
+let travail = [[], []];       // 2 zones de pose (issue #128), chacune = [dict_tuile, ...]
+let rangeeActive = 0;         // index 0-1 de la rangée de travail active
 let reorgSource = null;       // id de la tuile source d'un échange (réorg clic-long)
 let tuilesOrigineTapis = [];  // ids des tuiles PRISES sur le tapis ce tour
 let trouJoker = null;         // { combo, pos } : trou laissé par un joker pris (guidage)
@@ -308,16 +308,26 @@ function rafraichirPlateau() {
       }
 
       const el = tuileDepuisDict(d);
-      // Double-clic sur une tuile déjà posée du tapis (issue #103) : la retirer
-      // de sa combinaison et l'envoyer dans la zone de pose active, quel que
-      // soit le mode (même geste que le double-clic sur une tuile du chevalet).
+      // Tuile posée sur le tapis pendant le tour en cours (via les rangées de
+      // pose, un « Placer », une extension ou une récupération de joker),
+      // pas encore validée par « Jouer » : pourtour coloré (issue #128). Elle
+      // se réarrange avec EXACTEMENT le même mécanisme que les tuiles des
+      // tours précédents (ci-dessous) — seule l'avant mise-initiale (où ce
+      // mécanisme n'existe pas encore) garde un retour direct vers la main.
+      const estCeTour = tuilesCeTour.includes(d.id);
+      if (estCeTour) el.classList.add("ce-tour");
+
+      // Double-clic sur une tuile déjà posée du tapis (issue #103, étendu aux
+      // tuiles du tour en cours par l'issue #128) : la retirer de sa
+      // combinaison et l'envoyer dans la zone de pose active, quel que soit
+      // le mode (même geste que le double-clic sur une tuile du chevalet).
       // La combinaison source vidée est nettoyée par prendreTuileTapis.
       // Détection manuelle : le re-rendu du plateau à chaque clic remplace les
       // éléments DOM, donc le dblclick natif n'est pas fiable (même raison que
       // le chevalet). Le handler est ajouté AVANT ceux du simple clic ; au 1er
       // clic il ne fait qu'enregistrer l'horodatage et laisse le comportement
       // existant intact, au 2e il prend la tuile et coupe les autres handlers.
-      if (tapisManipulable() && !tuilesCeTour.includes(d.id)) {
+      if (tapisManipulable()) {
         el.addEventListener("click", (e) => {
           const maintenant = Date.now();
           if (dernierClicTapis.id === d.id &&
@@ -330,8 +340,10 @@ function rafraichirPlateau() {
           dernierClicTapis = { id: d.id, temps: maintenant };
         });
       }
-      if (tuilesCeTour.includes(d.id)) {
-        el.classList.add("ce-tour");
+      if (!tapisManipulable() && estCeTour) {
+        // Avant la mise initiale, le réarrangement façon tapis n'est pas
+        // encore proposé (tapisManipulable() faux) : seule la reprise directe
+        // vers la main reste disponible pour ces tuiles.
         el.addEventListener("click", (e) => { e.stopPropagation(); reprendreTuile(d.id); });
       } else if (modeCible) {
         // Insertion ciblée : sur la combo active, cliquer une tuile insère la
@@ -366,7 +378,7 @@ function rafraichirPlateau() {
   });
 }
 
-// Rendu de la zone de travail (4 rangées)
+// Rendu de la zone de travail (2 zones de pose, issue #128)
 function rafraichirZoneTravail() {
   const tuileSel = tuileSelectionnee !== null;
   travail.forEach((rangee, i) => {
@@ -787,6 +799,30 @@ function reprendreTuileRangee(id, indexRangee) {
   rafraichirBoutons();
 }
 
+// Placer les tuiles d'une zone de pose sur le tapis, SANS valider le tour
+// (issue #128) : elles rejoignent plateauLocal comme une nouvelle combinaison,
+// visuellement distinguée par leur pourtour coloré (classe "ce-tour", déjà
+// posée par tuilesCeTour) et dès lors réarrangeables avec le mécanisme du
+// tapis — y compris en les combinant avec d'autres tuiles du tour en cours.
+// Rien n'est envoyé au serveur ici : seul « Jouer » valide définitivement.
+function placerRangee(index) {
+  if (!estMonTour()) { toast("Ce n'est pas votre tour", "erreur"); return; }
+  const tuiles = travail[index];
+  if (tuiles.length === 0) return;
+  plateauLocal.push(tuiles);
+  travail[index] = [];
+  // La tuile sélectionnée, si elle vient de cette rangée, n'existe plus en
+  // zone de pose (elle est désormais sur le tapis) : désélectionner.
+  if (tuiles.some((t) => t.id === tuileSelectionnee)) tuileSelectionnee = null;
+  comboActive = null;
+  trouJoker = null;
+  detruireFantome();
+  rafraichirPlateau();
+  rafraichirZoneTravail();
+  rafraichirChevalet();
+  rafraichirBoutons();
+}
+
 // Vider une rangée → retour des tuiles au chevalet. Les tuiles prises sur le
 // tapis n'appartiennent pas au joueur : elles restent dans la rangée (seul
 // « Annuler » remet le tapis dans son état de début de tour).
@@ -1014,7 +1050,7 @@ function reinitTour() {
   comboActive = null;
   trouJoker = null;
   plateauLocal = clone(etat.plateau || []);
-  travail = [[], [], [], []];
+  travail = [[], []];
   rangeeActive = 0;
   const rc = document.getElementById("resultat-calcul");
   if (rc) { rc.textContent = ""; rc.className = ""; }
@@ -1447,9 +1483,10 @@ function brancherEvenements() {
   document.querySelectorAll(".rangee-travail").forEach((rangeeEl) => {
     const i = parseInt(rangeeEl.dataset.rangee, 10);
     rangeeEl.addEventListener("click", (e) => {
-      // Ignorer les clics sur une tuile ou sur les boutons vider / trier
+      // Ignorer les clics sur une tuile ou sur les boutons vider / trier / placer
       if (e.target.classList.contains("btn-vider-rangee")) return;
       if (e.target.classList.contains("btn-trier-rangee")) return;
+      if (e.target.classList.contains("btn-placer-rangee")) return;
       if (e.target.closest(".tuile-jeu")) return;
       if (tuileSelectionnee !== null) {
         rangeeActive = i;
@@ -1471,6 +1508,13 @@ function brancherEvenements() {
     btn.addEventListener("click", (e) => {
       e.stopPropagation();
       trierRangee(i);
+    });
+  });
+  document.querySelectorAll(".btn-placer-rangee").forEach((btn) => {
+    const i = parseInt(btn.dataset.rangee, 10);
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      placerRangee(i);
     });
   });
 

@@ -75,7 +75,9 @@ body { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
      reflue et remplisse toute la largeur visible → plus de tuiles d'un coup.
    À zoom 1, largeur = 100% et scale = 1 : rendu strictement identique à avant. */
 #zone-plateau-wrap { position: relative; flex: 0 1 auto; min-height: 0; }
-#zone-plateau-scroll { max-height: 260px; overflow-y: auto; }
+/* Hauteur relevée de 260 à 330px (issue #128) : le passage de 4 à 2 zones de
+   pose libère de la place verticale, réattribuée ici au tapis de jeu. */
+#zone-plateau-scroll { max-height: 330px; overflow-y: auto; }
 #zone-plateau { padding: 12px;
   display: flex; flex-wrap: wrap; align-content: flex-start; gap: 10px;
   transform: scale(var(--zoom-tapis, 1)); transform-origin: top left;
@@ -174,7 +176,7 @@ body { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
   animation: pulse-joker 1s infinite alternate;
 }
 
-/* Zone de travail (4 rangées de pose) */
+/* Zone de travail (2 zones de pose, issue #128) */
 #zone-travail {
   background: rgba(0,0,0,0.2);
   border-top: 1px solid rgba(255,255,255,0.15);
@@ -194,14 +196,13 @@ body { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
   text-transform: uppercase;
   letter-spacing: 0.05em;
 }
-/* Grille 2×2 des 4 rangées de pose (issue #66) : rangées 1-2 empilées à
-   gauche, 3-4 à droite. Moitié moins haute que l'ancienne pile de 4, laisse
-   plus de place au tapis. grid-auto-flow: column remplit colonne par colonne. */
+/* 2 zones de pose côte à côte, sur une seule ligne (issue #128 : réduit de
+   4 à 2 grâce au bouton « Placer », qui permet de composer directement sur le
+   tapis — la hauteur libérée revient au tapis via #zone-plateau-scroll). */
 .travail-grille {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  grid-template-rows: auto auto;
-  grid-auto-flow: column;
+  grid-template-rows: auto;
   gap: 6px 12px;
 }
 .rangee-travail {
@@ -247,6 +248,17 @@ body { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
   visibility: hidden;
 }
 .rangee-travail.non-vide .btn-vider-rangee { visibility: visible; }
+
+/* Bouton « Placer » (issue #128) : transfère les tuiles de cette zone de pose
+   sur le tapis sans valider le tour. Contrairement à Vider/Trier (icônes
+   discrètes), c'est une action principale : fond vert plein, texte visible. */
+.btn-placer-rangee {
+  background: #22c55e; color: #0d2a1a; border: none;
+  border-radius: 4px; cursor: pointer; font-size: 0.75rem; font-weight: 700;
+  padding: 4px 8px; flex-shrink: 0; visibility: hidden;
+}
+.rangee-travail.non-vide .btn-placer-rangee { visibility: visible; }
+.btn-placer-rangee:hover { background: #16a34a; }
 
 /* Petit bouton de tri par rangée (issue #66) : trie les tuiles de la rangée
    par valeur croissante. Discret, n'apparaît que si la rangée n'est pas vide. */
