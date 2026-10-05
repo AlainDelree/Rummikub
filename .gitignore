@@ -8,3 +8,4 @@ build/
 data/parties.db
 .tools/
 installeur/output/
+data/logs_parties/
