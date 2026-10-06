@@ -863,6 +863,7 @@ function reprendreTuileRangee(id, indexRangee) {
   }
   const d = travail[indexRangee].splice(i, 1)[0];
   chevaletLocal.push(d);
+  rendreAuChevaletServeur(d); // symétrie avec etendreTapis/insererTuileTapis (#138)
   tuilesCeTour = tuilesCeTour.filter((x) => x !== id);
   rafraichirZoneTravail();
   rafraichirChevalet();
@@ -999,17 +1000,26 @@ function reprendreTuile(id) {
 // Prendre une tuile à l'intérieur d'une combinaison du tapis : elle quitte
 // plateauLocal, entre dans tuilesCeTour, atterrit dans la rangée de travail
 // active et devient sélectionnée (pour la déplacer aussitôt vers une extension
-// du tapis si voulu). La combinaison source vidée est retirée ; réduite à
-// moins de 3 tuiles, elle reste affichée en rouge (voir rafraichirPlateau).
+// du tapis si voulu, ou la rendre à la main si elle en vient — issue #138).
+// La combinaison source vidée est retirée ; réduite à moins de 3 tuiles, elle
+// reste affichée en rouge (voir rafraichirPlateau).
 function prendreTuileTapis(idxCombo, idxTuile) {
   if (!estMonTour()) { toast("Ce n'est pas votre tour", "erreur"); return; }
   const combo = plateauLocal[idxCombo];
   if (!combo) return;
   const d = combo[idxTuile];
   if (!d) return;
+  // Une tuile déjà posée ce tour depuis la main (ex. placée sur le tapis puis
+  // redéplacée au sein du tapis ce même tour) garde son origine « main » : si
+  // on ne la reconnaît pas ici, elle serait marquée à tort « origine tapis »
+  // et ne pourrait plus repartir en main sans « Annuler » tout le tour (#138).
+  const venaitDeLaMain = tuilesCeTour.includes(d.id) &&
+                         !tuilesOrigineTapis.includes(d.id);
   combo.splice(idxTuile, 1);
-  tuilesCeTour.push(d.id);
-  tuilesOrigineTapis.push(d.id);
+  if (!tuilesCeTour.includes(d.id)) tuilesCeTour.push(d.id);
+  if (!venaitDeLaMain && !tuilesOrigineTapis.includes(d.id)) {
+    tuilesOrigineTapis.push(d.id);
+  }
   travail[rangeeActive].push(d);
   tuileSelectionnee = d.id;
   // Un joker retiré laisse un trou à mettre en évidence (guidage pour placer la
