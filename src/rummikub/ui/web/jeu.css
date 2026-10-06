@@ -149,6 +149,16 @@ body { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
   outline-color: #22c55e;
   box-shadow: 0 0 8px rgba(34,197,94,0.6);
 }
+/* Même collision que ci-dessus mais pour une tuile déplacée depuis le tapis
+   (issue #139, suite #136/#129) : sans cette règle, le contour pointillé
+   bleu de .tapis-manipulable écrase le pourtour orange de .deplacee-tapis. */
+.tuile-jeu.deplacee-tapis.tapis-manipulable {
+  outline-color: rgba(245,158,11,0.8);
+}
+.tuile-jeu.deplacee-tapis.tapis-manipulable:hover {
+  outline-color: #f59e0b;
+  box-shadow: 0 0 8px rgba(245,158,11,0.6);
+}
 
 /* Combinaison rendue invalide (<3 tuiles) par une manipulation du tapis */
 .groupe-combinaison.combi-invalide {

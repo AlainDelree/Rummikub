@@ -159,11 +159,16 @@ body {
 }
 /* Tuile déjà présente sur le tapis avant ce tour mais déplacée/réorganisée
    pendant celui-ci (contrairement à .ce-tour, qui marque une tuile
-   réellement nouvelle issue de la main) : pourtour bleu plutôt que vert,
-   pour distinguer visuellement les deux origines (issue #136). */
+   réellement nouvelle issue de la main) : pourtour distinct du vert de
+   .ce-tour. Le bleu initial (#3b82f6, issue #136) se fondait avec le
+   contour pointillé bleu déjà posé par .tapis-manipulable (jeu.css) sur
+   toute tuile manipulable du tapis une fois la mise initiale faite — même
+   collision que celle corrigée pour le vert en #129. Orange retenu pour
+   rester visible à la fois sur fond bleu pointillé et sur fond vert
+   (issue #139). */
 .tuile-jeu.deplacee-tapis {
-  border-color: #3b82f6;
-  box-shadow: 0 0 5px rgba(59,130,246,0.6),
+  border-color: #f59e0b;
+  box-shadow: 0 0 5px rgba(245,158,11,0.6),
               0 3px 5px rgba(40,30,10,0.38);
 }
 
