@@ -49,6 +49,25 @@ function creerTuileJeu(valeur, couleur, estJoker = false) {
   return d;
 }
 
+// Tuile montrée dos visible (valeur et couleur non révélées) : utilisée pour
+// l'animation de pioche d'un joueur IA (issue #145). Même gabarit qu'une
+// vraie tuile (ombre, coins arrondis) mais disque vide et sans numéro.
+function creerTuileDos() {
+  const d = document.createElement("div");
+  d.className = "tuile-jeu dos";
+
+  const cercle = document.createElement("span");
+  cercle.className = "tuile-cercle";
+  d.appendChild(cercle);
+
+  const marque = document.createElement("span");
+  marque.className = "tuile-marque";
+  marque.textContent = "Rummikub";
+  d.appendChild(marque);
+
+  return d;
+}
+
 function creerTuileTitre(lettre) {
   const d = document.createElement("div");
   if (lettre === " ") {
