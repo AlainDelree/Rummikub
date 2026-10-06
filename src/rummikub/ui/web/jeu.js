@@ -38,6 +38,7 @@ let dragSourceId = null;      // id de la tuile en cours de glisser-déposer
 let dernierePositionSouris = { x: 0, y: 0 }; // dernière position connue du curseur (fantôme, issue #50)
 let triAutoActif = false;     // case "Tri automatique" (issue #126) : insère les tuiles piochées déjà triées
 let indexAutoIAProgramme = null; // index_joueur_actuel pour lequel un jeu auto de l'IA est déjà programmé (issue #126)
+let dezoomAutoActif = true;   // réglage "Dé-zoom automatique du tapis" (issue #135) ; persisté via Reglages
 
 // ------------------------------------------------------------ utilitaires
 function clone(x) { return JSON.parse(JSON.stringify(x)); }
@@ -1640,7 +1641,9 @@ function brancherZoomTapis() {
 // combinaison posée visible. On ne descend jamais sous le niveau minimal et on ne
 // fait rien si tout est déjà visible. Le joueur garde la main : il peut ensuite
 // zoomer/dézoomer librement, l'automatisme ne se redéclenche qu'à la pose suivante.
+// Peut être désactivé via le réglage "Dé-zoom automatique du tapis" (issue #135).
 function autoZoomSiTapisDeborde() {
+  if (!dezoomAutoActif) return; // réglage désactivé (issue #135)
   const scroll = document.getElementById("zone-plateau-scroll");
   const plateau = document.getElementById("zone-plateau");
   if (!scroll || !plateau) return;
@@ -1683,6 +1686,9 @@ async function init() {
   triAutoActif = !!(etat.config && etat.config.tri_auto);
   const chkTriAuto = document.getElementById("chk-tri-auto");
   if (chkTriAuto) chkTriAuto.checked = triAutoActif;
+  // Réglage "Dé-zoom automatique du tapis" (issue #135) : absent (vieille
+  // partie reprise sans ce champ) ⇒ comportement historique conservé (actif).
+  dezoomAutoActif = !(etat.config && etat.config.dezoom_auto === false);
   rafraichirTout();
 }
 

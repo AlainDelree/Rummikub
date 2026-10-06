@@ -13,6 +13,7 @@ DEFAUTS = {
     "mode_reorg": "clic",   # "clic" (appui long + clic) ou "drag" (glisser-déposer)
     "log_parties": False,   # journal de partie (débogage) : voir config.LOG_PARTIES
     "tri_auto": False,      # case "Tri automatique" du chevalet (issue #126/#130)
+    "dezoom_auto": True,    # dé-zoom automatique du tapis s'il déborde (issue #104/#135)
 }
 
 def charger():

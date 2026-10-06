@@ -222,6 +222,7 @@ function remplirChampsReglages() {
   document.getElementById("rgl-manches").value = r.nb_manches || 1;
   document.getElementById("rgl-vitesse").value = r.vitesse_ia || "Normale";
   document.getElementById("rgl-ia-auto").checked = !!r.ia_auto;
+  document.getElementById("rgl-dezoom-auto").checked = r.dezoom_auto !== false;
   const jokerVal = String(r.valeur_joker_penalite || 30);
   document.querySelectorAll("input[name='joker-val']").forEach((el) => {
     el.checked = el.value === jokerVal;
@@ -262,6 +263,7 @@ async function sauvegarderReglages() {
     vitesse_ia: document.getElementById("rgl-vitesse").value,
     ia_auto: document.getElementById("rgl-ia-auto").checked,
     mode_reorg: reorgEl ? reorgEl.value : "clic",
+    dezoom_auto: document.getElementById("rgl-dezoom-auto").checked,
   };
   try {
     etat.reglages = await window.pywebview.api.sauvegarder_reglages(data);
