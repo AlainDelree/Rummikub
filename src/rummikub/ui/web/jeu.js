@@ -1113,20 +1113,23 @@ function tenterRecupererJoker(idxCombo, idxTuile, dictJoker) {
   // 3. La tuile compte comme jouée ce tour
   tuilesCeTour.push(tuileSel.id);
 
-  // 4. Le joker atterrit dans la rangée active
+  // 4. Le joker atterrit dans la rangée active, marqué comme venant du tapis
+  // (même traitement qu'une tuile prise directement dessus, issue #137).
   travail[rangeeActive].push(dictJoker);
+  tuilesOrigineTapis.push(dictJoker.id);
 
   // 5. Le joker aussi compte comme joué (il DOIT être rejoué)
   tuilesCeTour.push(dictJoker.id);
 
-  // 6. Désélectionner
-  tuileSelectionnee = null;
-  detruireFantome(); // tuile posée (joker récupéré) → le fantôme disparaît (issue #50)
+  // 6. Le joker libéré devient la tuile sélectionnée, attaché au curseur comme
+  // s'il venait d'être pris sur le tapis, prêt à être replacé ailleurs (#137).
+  tuileSelectionnee = dictJoker.id;
 
   rafraichirPlateau();
   rafraichirZoneTravail();
   rafraichirChevalet();
   rafraichirBoutons();
+  majFantome(); // le joker libéré suit le curseur (issue #50 / #137)
   toast("Joker récupéré — placez-le dans votre zone de pose");
 }
 
