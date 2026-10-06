@@ -69,15 +69,24 @@ body { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
 /* Tapis avec zoom (issue #92) :
    - #zone-plateau-wrap : conteneur non scalé, porte le contrôle de zoom
      (position: relative pour l'ancrage absolu du contrôle).
-   - #zone-plateau-scroll : zone de défilement (max-height + overflow).
+   - #zone-plateau-scroll : zone de défilement (hauteur + overflow).
    - #zone-plateau : le SEUL élément scalé (transform-origin top left). La
      largeur est compensée (100% / zoom) pour que le contenu, une fois réduit,
      reflue et remplisse toute la largeur visible → plus de tuiles d'un coup.
    À zoom 1, largeur = 100% et scale = 1 : rendu strictement identique à avant. */
-#zone-plateau-wrap { position: relative; flex: 0 1 auto; min-height: 0; }
-/* Hauteur relevée de 260 à 330px (issue #128) : le passage de 4 à 2 zones de
-   pose libère de la place verticale, réattribuée ici au tapis de jeu. */
-#zone-plateau-scroll { max-height: 330px; overflow-y: auto; }
+/* issue #140 (suite #135) : sur la page RÉELLE complète (pas jeu.html isolé),
+   une hauteur figée (260px puis 330px, #128/#135) sous-utilise l'espace
+   disponible sur un portable (la fenêtre pywebview est maximisée, donc bien
+   plus haute que les 330px prévus) et peut même déborder de son propre
+   conteneur sur une petite fenêtre : #zone-plateau-wrap étant compressible
+   (flex-shrink) alors que #zone-plateau-scroll gardait un max-height fixe,
+   le tapis pouvait rendre jusqu'à 330px de haut même quand son parent n'en
+   avait réellement que ~255 de libres, chevauchant visuellement la zone de
+   pose juste en dessous. Le tapis occupe désormais TOUT l'espace vertical
+   restant (flex-grow), ce qui supprime à la fois le gâchis sur grand écran
+   et le chevauchement sur petit écran. */
+#zone-plateau-wrap { position: relative; flex: 1 1 auto; min-height: 120px; }
+#zone-plateau-scroll { height: 100%; overflow-y: auto; }
 #zone-plateau { padding: 12px;
   display: flex; flex-wrap: wrap; align-content: flex-start; gap: 10px;
   transform: scale(var(--zoom-tapis, 1)); transform-origin: top left;

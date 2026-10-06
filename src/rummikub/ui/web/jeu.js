@@ -1721,6 +1721,16 @@ function brancherZoomTapis() {
 // fait rien si tout est déjà visible. Le joueur garde la main : il peut ensuite
 // zoomer/dézoomer librement, l'automatisme ne se redéclenche qu'à la pose suivante.
 // Peut être désactivé via le réglage "Dé-zoom automatique du tapis" (issue #135).
+//
+// issue #140 (suite #135) : ce niveau n'est PLUS mémorisé dans localStorage (contrairement
+// à un clic manuel sur un bouton de zoom, cf. brancherZoomTapis). Sinon, un dé-zoom
+// automatique survenu une seule fois lors d'une ancienne partie restait collé comme
+// « préférence » et faisait démarrer TOUTES les parties suivantes déjà dézoomées dès
+// la première tuile posée — ce qui, en usage réel prolongé (localStorage persistant
+// entre les parties, contrairement à un test Playwright isolé qui repart toujours
+// d'un stockage vide), donnait l'impression d'un dé-zoom prématuré systématique.
+// Le réexamen à chaque chargement de page (voir l'appel dans init()) suffit à
+// retrouver le bon niveau pour une partie reprise dont le tapis est déjà chargé.
 function autoZoomSiTapisDeborde() {
   if (!dezoomAutoActif) return; // réglage désactivé (issue #135)
   const scroll = document.getElementById("zone-plateau-scroll");
@@ -1743,7 +1753,6 @@ function autoZoomSiTapisDeborde() {
   if (idx === -1 || idx >= niveaux.length - 1) return;
   const suivant = niveaux[idx + 1];
   appliquerZoomTapis(suivant);
-  try { localStorage.setItem(ZOOM_TAPIS_CLE, suivant); } catch (e) {}
 }
 
 // ------------------------------------------------------------ init
@@ -1768,7 +1777,23 @@ async function init() {
   // Réglage "Dé-zoom automatique du tapis" (issue #135) : absent (vieille
   // partie reprise sans ce champ) ⇒ comportement historique conservé (actif).
   dezoomAutoActif = !(etat.config && etat.config.dezoom_auto === false);
+  // Tapis vide (nouvelle partie, ou reprise avant la première pose) : remet le
+  // zoom à 100% même si une ancienne valeur dézoomée traîne en mémoire (issue
+  // #140). Sans ce correctif, un dé-zoom automatique déclenché une seule fois
+  // dans une partie précédente restait collé indéfiniment (localStorage
+  // persiste entre les parties, contrairement à un test isolé qui repart
+  // toujours à zéro) : chaque NOUVELLE partie démarrait déjà dézoomée, dès la
+  // première tuile posée, donnant l'impression d'un dé-zoom prématuré.
+  if (!etat.plateau || etat.plateau.length === 0) {
+    appliquerZoomTapis("1");
+    try { localStorage.setItem(ZOOM_TAPIS_CLE, "1"); } catch (e) {}
+  }
   rafraichirTout();
+  // Réévalue le dé-zoom automatique sur le tapis tel que chargé (issue #140) :
+  // une partie reprise avec un tapis déjà bien rempli doit retrouver le bon
+  // niveau de zoom dès l'affichage, sans attendre la pose suivante — et sans
+  // dépendre du niveau mémorisé par une partie précédente sans rapport.
+  autoZoomSiTapisDeborde();
 }
 
 let _initFait = false;
