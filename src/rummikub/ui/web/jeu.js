@@ -402,11 +402,29 @@ function rafraichirPlateau() {
         el.addEventListener("click", (e) => { e.stopPropagation(); reprendreTuile(d.id); });
       } else if (modeCible) {
         // Insertion ciblée : sur la combo active, cliquer une tuile insère la
-        // tuile sélectionnée AVANT elle. Sur une autre combo, aucun handler :
-        // le clic remonte au conteneur qui la désigne comme cible.
+        // tuile sélectionnée AVANT elle — SAUF si la tuile ciblée est un
+        // joker que la tuile de la main sélectionnée remplace exactement :
+        // dans ce cas, c'est un échange (retrait du joker, insertion de la
+        // tuile à sa place, joker libéré attaché au curseur), pas un simple
+        // ajout à côté (#143, suite #137 : cette branche « modeCible », ajoutée
+        // par #47 après la récupération de joker originale, est toujours
+        // évaluée avant l'ancienne branche « joker-recuperable » plus bas, qui
+        // de ce fait ne peut en réalité jamais s'exécuter pendant son propre
+        // tour — tapisManipulable() y est alors systématiquement vrai).
+        // Sur une autre combo, aucun handler par tuile : le clic remonte au
+        // conteneur qui la désigne comme cible.
         if (estActive) {
+          const tuileSelDict = trouverDictTuile(tuileSelectionnee);
+          const estEchangeJoker = d.est_joker && tuileSelDict &&
+            chevaletLocal.some((t) => t.id === tuileSelDict.id) &&
+            peutRemplacerJoker(tuileSelDict, valeurJokerDansCombo(combo, idxTuile));
           el.classList.add("tapis-manipulable");
-          el.addEventListener("click", (e) => { e.stopPropagation(); insererTuileTapis(idxCombo, idxTuile); });
+          if (estEchangeJoker) el.classList.add("joker-recuperable");
+          el.addEventListener("click", (e) => {
+            e.stopPropagation();
+            if (estEchangeJoker) tenterRecupererJoker(idxCombo, idxTuile, d);
+            else insererTuileTapis(idxCombo, idxTuile);
+          });
         }
       } else if (tapisManipulable()) {
         // Tapis manipulable (aucune tuile prête) : toute tuile peut être « prise »
@@ -420,11 +438,6 @@ function rafraichirPlateau() {
           derniereTuilePriseTapis = { idxCombo, temps: Date.now() };
           prendreTuileTapis(idxCombo, idxTuile);
         });
-      } else if (d.est_joker && tuileSelectionnee !== null &&
-                 etat.joueurs[indexHumain()].mise_initiale_faite) {
-        el.classList.add("joker-recuperable");
-        el.addEventListener("click", () =>
-          tenterRecupererJoker(idxCombo, idxTuile, d));
       }
       groupe.appendChild(el);
     });
