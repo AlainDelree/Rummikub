@@ -84,19 +84,23 @@
     <label id="label-tri-auto"><input type="checkbox" id="chk-tri-auto"> Tri automatique</label>
   </div>
 
-  <!-- Overlay fin de manche : scores de la manche + accès à la suite -->
+  <!-- Overlay fin de manche (manche intermédiaire, non-finale) : scores de
+       la manche + accès à la suite. Quand la manche est la dernière de la
+       partie, cet overlay est sauté au profit direct du classement final
+       ci-dessous (issue #141), pour éviter un message redondant. -->
   <div id="overlay-fin" class="overlay-cache">
     <div class="carte">
       <h2 id="titre-fin"></h2>
       <table id="tableau-scores"></table>
       <button id="btn-nouvelle-manche" class="btn-primaire">Manche suivante</button>
-      <button id="btn-fin-partie" class="btn-primaire">Fin de partie</button>
       <button id="btn-fin-retour" class="btn-primaire">Retour au menu</button>
     </div>
   </div>
 
-  <!-- Overlay classement final (fin de partie) : rang par score_cumul -->
+  <!-- Overlay classement final (fin de partie) : rang par score_cumul,
+       avec animation de feu d'artifice (issue #141) -->
   <div id="overlay-classement" class="overlay-cache">
+    <div class="feu-artifice" id="feu-artifice" aria-hidden="true"></div>
     <div class="carte">
       <h2 id="titre-classement"></h2>
       <table id="tableau-classement"></table>

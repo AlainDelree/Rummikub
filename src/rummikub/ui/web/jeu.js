@@ -196,7 +196,7 @@ function rafraichirTout() {
   rafraichirBoutons();
   rafraichirHistorique();
   mettreAJourSac((etat.pioche || []).length);
-  if (etat.manche_terminee) afficherFinManche();
+  if (etat.manche_terminee) afficherFinDeManche();
   verifierAutoIA();
 }
 
@@ -1267,7 +1267,7 @@ async function onPiocher() {
       mettreAJourSac((etat.pioche || []).length);
       animerPiochee(t, () => {
         rafraichirChevalet();
-        if (etat.manche_terminee) afficherFinManche();
+        if (etat.manche_terminee) afficherFinDeManche();
         verifierAutoIA();
       });
     } else {
@@ -1450,17 +1450,25 @@ async function jouerIA() {
 }
 
 // ------------------------------------------------------------ fin de manche
-// Overlay récapitulatif de la manche : score_manche + score_cumul de chaque
-// joueur, gagnant mis en avant. Selon qu'il reste ou non des manches à jouer
-// (etat.terminee posé par le moteur), on propose « Manche suivante » ou
-// « Fin de partie » (issue #108).
+// Dispatcher appelé à chaque fin de manche : si c'est aussi la dernière
+// manche de la partie, le message de fin de manche serait redondant avec le
+// classement final qui affiche le même résultat — on saute donc directement
+// à ce dernier (issue #141). Sinon, overlay intermédiaire classique.
+function afficherFinDeManche() {
+  if (etat.terminee) {
+    afficherClassementFinal();
+  } else {
+    afficherFinManche();
+  }
+}
+
+// Overlay récapitulatif de la manche (non-finale) : score_manche + score_cumul
+// de chaque joueur, gagnant mis en avant, bouton « Manche suivante ».
 function afficherFinManche() {
   const overlay = document.getElementById("overlay-fin");
   const gi = etat.gagnant_manche_index;
   const gagnant = (gi != null && etat.joueurs[gi]) ? etat.joueurs[gi].nom : "—";
-  const finPartie = !!etat.terminee;
-  document.getElementById("titre-fin").textContent =
-    (finPartie ? "🏁 Dernière manche — " : "🏆 ") + gagnant + " remporte la manche";
+  document.getElementById("titre-fin").textContent = "🏆 " + gagnant + " remporte la manche";
 
   const table = document.getElementById("tableau-scores");
   let html = "<tr><th>Joueur</th><th>Manche</th><th>Total</th></tr>";
@@ -1472,22 +1480,11 @@ function afficherFinManche() {
   });
   table.innerHTML = html;
 
-  // Boutons contextuels : partie en cours → « Manche suivante » (+ retour menu) ;
-  // dernière manche → « Fin de partie » qui ouvre le classement final.
-  document.getElementById("btn-nouvelle-manche").style.display = finPartie ? "none" : "";
-  document.getElementById("btn-fin-retour").style.display      = finPartie ? "none" : "";
-  document.getElementById("btn-fin-partie").style.display      = finPartie ? "" : "none";
-
   overlay.className = "overlay-visible";
 }
 
-// Passage de l'overlay « fin de manche » au classement final de la partie.
-function onFinPartie() {
-  document.getElementById("overlay-fin").className = "overlay-cache";
-  afficherClassementFinal();
-}
-
-// Overlay de classement final : joueurs classés par score_cumul décroissant.
+// Overlay de classement final : joueurs classés par score_cumul décroissant,
+// accompagné d'une animation de feu d'artifice (issue #141).
 function afficherClassementFinal() {
   const overlay = document.getElementById("overlay-classement");
   const classement = etat.joueurs
@@ -1508,7 +1505,32 @@ function afficherClassementFinal() {
       j.nom + "</td><td>" + j.score + "</td></tr>";
   });
   table.innerHTML = html;
+  lancerFeuArtifice();
   overlay.className = "overlay-visible";
+}
+
+// Génère les particules du feu d'artifice affiché derrière la carte du
+// classement final : plusieurs bouquets, chacun formé de particules qui
+// jaillissent du centre du bouquet dans des directions aléatoires (CSS pour
+// le mouvement, JS seulement pour randomiser position/couleur/délai).
+function lancerFeuArtifice() {
+  const zone = document.getElementById("feu-artifice");
+  if (!zone) return;
+  const COULEURS_FEU = ["#fde047", "#f87171", "#60a5fa", "#4ade80", "#f472b6", "#fb923c"];
+  const BOUQUETS = [{ x: 18, y: 28 }, { x: 82, y: 22 }, { x: 50, y: 60 }, { x: 15, y: 70 }, { x: 85, y: 68 }];
+  let html = "";
+  BOUQUETS.forEach((bouquet, ib) => {
+    const delaiBouquet = ib * 0.35;
+    for (let i = 0; i < 14; i++) {
+      const angle = (360 / 14) * i;
+      const distance = 50 + (i % 3) * 15;
+      const couleur = COULEURS_FEU[(ib + i) % COULEURS_FEU.length];
+      html += `<span class="particule-feu" style="--fx:${bouquet.x}%; --fy:${bouquet.y}%; ` +
+        `--angle:${angle}deg; --distance:${distance}px; --couleur:${couleur}; ` +
+        `--delai:${delaiBouquet}s;"></span>`;
+    }
+  });
+  zone.innerHTML = html;
 }
 
 async function onNouvelleManche() {
@@ -1587,7 +1609,6 @@ function brancherEvenements() {
   // Le bouton #btn-piocher (fusion Piocher/Passer) reçoit son écouteur
   // dynamiquement dans rafraichirBoutons() selon le contexte (issue #28).
   document.getElementById("btn-nouvelle-manche").addEventListener("click", onNouvelleManche);
-  document.getElementById("btn-fin-partie").addEventListener("click", onFinPartie);
   document.getElementById("btn-fin-retour").addEventListener("click", onRetourAccueil);
   document.getElementById("btn-classement-retour").addEventListener("click", onRetourAccueil);
 
