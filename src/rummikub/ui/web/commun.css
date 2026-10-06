@@ -157,6 +157,15 @@ body {
   box-shadow: 0 0 5px rgba(34,197,94,0.6),
               0 3px 5px rgba(40,30,10,0.38);
 }
+/* Tuile déjà présente sur le tapis avant ce tour mais déplacée/réorganisée
+   pendant celui-ci (contrairement à .ce-tour, qui marque une tuile
+   réellement nouvelle issue de la main) : pourtour bleu plutôt que vert,
+   pour distinguer visuellement les deux origines (issue #136). */
+.tuile-jeu.deplacee-tapis {
+  border-color: #3b82f6;
+  box-shadow: 0 0 5px rgba(59,130,246,0.6),
+              0 3px 5px rgba(40,30,10,0.38);
+}
 
 /* --- Carte blanche centrale --- */
 .carte {

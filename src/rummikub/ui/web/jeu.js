@@ -38,9 +38,18 @@ let dragSourceId = null;      // id de la tuile en cours de glisser-déposer
 let dernierePositionSouris = { x: 0, y: 0 }; // dernière position connue du curseur (fantôme, issue #50)
 let triAutoActif = false;     // case "Tri automatique" (issue #126) : insère les tuiles piochées déjà triées
 let indexAutoIAProgramme = null; // index_joueur_actuel pour lequel un jeu auto de l'IA est déjà programmé (issue #126)
+// Signatures (listes d'ids jointes par "|") des combinaisons signalées comme
+// invalides par le dernier contrôle serveur (Vérifier/Jouer) — issue #136.
+// Une combinaison dont le contenu change (ajout/retrait d'une tuile) ne
+// correspond plus à sa signature et perd donc automatiquement le surlignage.
+let combosInvalidesSignatures = [];
 
 // ------------------------------------------------------------ utilitaires
 function clone(x) { return JSON.parse(JSON.stringify(x)); }
+
+// Signature d'une combinaison (liste de dicts tuile) pour la comparer aux
+// combos_invalides renvoyés par le serveur (issue #136).
+function signatureCombo(tuiles) { return tuiles.map((t) => t.id).join("|"); }
 
 function indexHumain() {
   if (!etat) return 0;
@@ -282,9 +291,11 @@ function rafraichirPlateau() {
   plateauLocal.forEach((combo, idxCombo) => {
     const groupe = document.createElement("div");
     groupe.className = "groupe-combinaison";
-    // Combinaison devenue invalide (<3 tuiles) suite à une manipulation :
-    // signalée en rouge jusqu'à ce que le joueur la complète ou annule.
-    if (combo.length < 3) groupe.classList.add("combi-invalide");
+    // Combinaison devenue invalide (<3 tuiles) suite à une manipulation, ou
+    // signalée invalide par le dernier contrôle serveur (issue #136) :
+    // signalée en rouge jusqu'à ce que le joueur la complète/corrige ou annule.
+    const estSignaleeInvalide = combosInvalidesSignatures.includes(signatureCombo(combo));
+    if (combo.length < 3 || estSignaleeInvalide) groupe.classList.add("combi-invalide");
 
     // En mode ciblé : cette combo est-elle celle qui montre ses zones ?
     const estActive = modeCible && comboActive === idxCombo;
@@ -345,8 +356,14 @@ function rafraichirPlateau() {
       // se réarrange avec EXACTEMENT le même mécanisme que les tuiles des
       // tours précédents (ci-dessous) — seule l'avant mise-initiale (où ce
       // mécanisme n'existe pas encore) garde un retour direct vers la main.
+      // Parmi ces tuiles du tour, celles qui étaient déjà sur le tapis avant
+      // ce tour et ont simplement été déplacées/réorganisées (tuilesOrigineTapis)
+      // reçoivent un pourtour bleu plutôt que vert, pour les distinguer des
+      // tuiles réellement nouvelles issues de la main (issue #136).
       const estCeTour = tuilesCeTour.includes(d.id);
-      if (estCeTour) el.classList.add("ce-tour");
+      const estDeplaceeDuTapis = tuilesOrigineTapis.includes(d.id);
+      if (estDeplaceeDuTapis) el.classList.add("deplacee-tapis");
+      else if (estCeTour) el.classList.add("ce-tour");
 
       // Détecteur de double-clic (issue #103/#133) : attaché à TOUTE tuile
       // manipulable, quel que soit le mode, AVANT le handler de clic simple
@@ -432,13 +449,20 @@ function rafraichirZoneTravail() {
     cont.innerHTML = "";
     wrap.classList.toggle("active", i === rangeeActive);
     wrap.classList.toggle("non-vide", rangee.length > 0);
+    // Rangée signalée invalide par le dernier contrôle serveur (issue #136),
+    // tant que son contenu n'a pas changé depuis (voir signatureCombo).
+    wrap.classList.toggle("combi-invalide",
+      combosInvalidesSignatures.includes(signatureCombo(rangee)));
     if (ind) ind.classList.toggle("actif", i === rangeeActive);
     // Zone d'insertion avant la première tuile (position 0), visible quand une
     // tuile est prête à être posée. Même système que sur le tapis (issue #27).
     if (tuileSel && rangee.length > 0) cont.appendChild(zoneInsertionRangee(i, 0));
     rangee.forEach((d, idx) => {
       const el = tuileDepuisDict(d);
-      el.classList.add("ce-tour");
+      // Tuile prise sur le tapis ce tour (déplacement) : pourtour bleu plutôt
+      // que vert, pour la distinguer d'une tuile venant réellement de la main
+      // ce tour-ci (issue #136).
+      el.classList.add(tuilesOrigineTapis.includes(d.id) ? "deplacee-tapis" : "ce-tour");
       if (d.id === tuileSelectionnee) el.classList.add("selectionnee");
       el.addEventListener("click", (e) => {
         e.stopPropagation();
@@ -1106,6 +1130,7 @@ function tenterRecupererJoker(idxCombo, idxTuile, dictJoker) {
 function reinitTour() {
   tuilesCeTour = [];
   tuilesOrigineTapis = [];
+  combosInvalidesSignatures = [];
   tuileSelectionnee = null;
   detruireFantome(); // pas de fantôme résiduel entre les tours (issue #50)
   comboActive = null;
@@ -1134,6 +1159,9 @@ async function onVerifierCalc() {
   const plateauComplet = [...plateauLocal, ...rangeesPosees];
   try {
     const res = await window.pywebview.api.jeu_verifier_plateau(plateauComplet);
+    // Surligne en rouge, directement sur le tapis/zones de pose, la ou les
+    // combinaisons fautives (issue #136) — remplacé à chaque nouveau contrôle.
+    combosInvalidesSignatures = (res.combos_invalides || []).map((ids) => ids.join("|"));
     if (res.valide) {
       zone.className = "ok";
       zone.textContent = "✓ Plateau valide — " + res.points_total + " points";
@@ -1141,6 +1169,8 @@ async function onVerifierCalc() {
       zone.className = "ko";
       zone.textContent = "✗ " + (res.erreurs || []).join(" ; ");
     }
+    rafraichirPlateau();
+    rafraichirZoneTravail();
   } catch (e) {
     zone.className = "ko";
     zone.textContent = "Erreur : " + e;
@@ -1164,6 +1194,11 @@ async function onJouer() {
       toast("Coup joué", "succes");
     } else {
       toast((res && res.erreur) || "Coup invalide", "erreur");
+      // Surligne en rouge la ou les combinaisons fautives signalées par le
+      // serveur, directement sur le tapis/zones de pose (issue #136).
+      combosInvalidesSignatures = (res && res.combos_invalides || []).map((ids) => ids.join("|"));
+      rafraichirPlateau();
+      rafraichirZoneTravail();
     }
   } catch (e) {
     toast("Erreur : " + e, "erreur");
