@@ -1081,6 +1081,7 @@ function valeurJokerDansCombo(combo, idxJoker) {
     return {
       valeur: valeur,
       couleur: couleurManquante,
+      couleursPresentes: couleursPresentes,
       type: "groupe",
     };
   }
@@ -1094,6 +1095,13 @@ function peutRemplacerJoker(tuileSel, infoJoker) {
   // Un joker ne peut pas en remplacer un autre (les jokers ont désormais une
   // couleur réelle : on teste est_joker, plus l'absence de couleur).
   if (infoJoker.type === "groupe" && tuileSel.est_joker)
+    return false;
+  // Groupe : refuser si la couleur proposée est déjà présente ailleurs dans
+  // le groupe (sinon le remplacement créerait un doublon de couleur, #142).
+  if (
+    infoJoker.type === "groupe" &&
+    infoJoker.couleursPresentes.includes(tuileSel.couleur)
+  )
     return false;
   return true;
 }
