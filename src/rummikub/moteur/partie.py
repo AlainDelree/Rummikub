@@ -159,7 +159,8 @@ def jouer_tour(etat: dict,
     validation = valider_plateau(plateau)
     if not validation["valide"]:
         return {"ok": False, "erreur": "Plateau invalide : "
-                + " ; ".join(validation["erreurs"])}
+                + " ; ".join(validation["erreurs"]),
+                "combos_invalides": validation["combos_invalides"]}
 
     joueur = etat["joueurs"][etat["index_joueur_actuel"]]
     ids_posees = set(ids_tuiles_posees)

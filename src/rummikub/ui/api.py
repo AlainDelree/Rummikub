@@ -111,6 +111,7 @@ class Api:
             if r["valide"]:
                 points_total += r["points"]
         return {"valide": res["valide"], "erreurs": res["erreurs"],
+                "combos_invalides": res["combos_invalides"],
                 "points_total": points_total}
 
     def jeu_verifier_combinaison(self, tuiles):

@@ -233,6 +233,14 @@ body { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
   border-color: #22c55e;
   background: rgba(34,197,94,0.1);
 }
+/* Rangée de pose signalée invalide par le dernier contrôle serveur (Vérifier
+   ou Jouer) : même traitement que .groupe-combinaison.combi-invalide sur le
+   tapis, pour repérer immédiatement la combinaison fautive (issue #136). */
+.rangee-travail.combi-invalide {
+  border: 2px solid #ef4444;
+  background: rgba(239,68,68,0.18);
+  animation: pulse-invalide 1s infinite alternate;
+}
 .rangee-indicateur {
   width: 20px; height: 20px;
   border-radius: 50%;
