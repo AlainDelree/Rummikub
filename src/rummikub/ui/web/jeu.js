@@ -17,7 +17,21 @@ let tuilesOrigineTapis = [];  // ids des tuiles PRISES sur le tapis ce tour
 let trouJoker = null;         // { combo, pos } : trou laissé par un joker pris (guidage)
 let comboActive = null;       // index de la combo ciblée pour l'insertion, ou null (issue #47)
 let dernierClicChevalet = { id: null, temps: 0 }; // détection du double-clic
-let dernierClicTapis = { id: null, temps: 0 };    // idem pour le tapis (issue #103)
+// Détection du double-clic sur une tuile du tapis (issue #103) : attachée à
+// TOUTE tuile manipulable, quel que soit le mode, elle compare l'id de la
+// tuile (donnée du modèle, pas la référence DOM — fiable même après un
+// rafraîchissement). Sur 2e clic détecté : prend la tuile (prendreTuileTapis)
+// ET finalise immédiatement (finaliserSelectionTapis), pour un dépôt en une
+// seule interaction, comme le double-clic sur le chevalet.
+let dernierClicTapis = { id: null, temps: 0 };
+// Cas particulier où le 1er clic lui-même prend déjà la tuile (aucune autre
+// tuile en attente, cf. branche « tapisManipulable » ci-dessous) : la tuile
+// quitte alors le DOM immédiatement, donc le 2e clic du geste ne peut plus
+// retrouver son id — il retombe sur sa combinaison source (le conteneur
+// « combo-cliquable »). On mémorise cette combinaison et l'horodatage pour
+// que ce 2e clic soit simplement absorbé (finaliserSelectionTapis) plutôt que
+// reciblé comme destination (issue #133).
+let derniereTuilePriseTapis = { idxCombo: null, temps: 0 };
 // Détection de l'appui long (500 ms) sur une tuile du chevalet → active la réorg
 let appuiLong = { timer: null, id: null, declenche: false };
 let dragSourceId = null;      // id de la tuile en cours de glisser-déposer
@@ -278,6 +292,17 @@ function rafraichirPlateau() {
       // Combo non ciblée : conteneur cliquable pour la désigner comme cible.
       groupe.classList.add("combo-cliquable");
       groupe.addEventListener("click", () => {
+        // Fin d'un double-clic sur une tuile de CETTE combo (issue #133) :
+        // le premier clic l'a déjà prise et envoyée en zone de travail ; ce
+        // second clic retombe ici (la tuile d'origine a disparu du DOM) et
+        // ne doit pas la recibler comme destination mais simplement
+        // finaliser le dépôt déjà effectué.
+        if (idxCombo === derniereTuilePriseTapis.idxCombo &&
+            Date.now() - derniereTuilePriseTapis.temps < 350) {
+          derniereTuilePriseTapis = { idxCombo: null, temps: 0 };
+          finaliserSelectionTapis();
+          return;
+        }
         comboActive = idxCombo;
         rafraichirPlateau();
       });
@@ -323,16 +348,18 @@ function rafraichirPlateau() {
       const estCeTour = tuilesCeTour.includes(d.id);
       if (estCeTour) el.classList.add("ce-tour");
 
-      // Double-clic sur une tuile déjà posée du tapis (issue #103, étendu aux
-      // tuiles du tour en cours par l'issue #128) : la retirer de sa
-      // combinaison et l'envoyer dans la zone de pose active, quel que soit
-      // le mode (même geste que le double-clic sur une tuile du chevalet).
-      // La combinaison source vidée est nettoyée par prendreTuileTapis.
-      // Détection manuelle : le re-rendu du plateau à chaque clic remplace les
-      // éléments DOM, donc le dblclick natif n'est pas fiable (même raison que
-      // le chevalet). Le handler est ajouté AVANT ceux du simple clic ; au 1er
-      // clic il ne fait qu'enregistrer l'horodatage et laisse le comportement
-      // existant intact, au 2e il prend la tuile et coupe les autres handlers.
+      // Détecteur de double-clic (issue #103/#133) : attaché à TOUTE tuile
+      // manipulable, quel que soit le mode, AVANT le handler de clic simple
+      // ci-dessous. Au 1er clic, il ne fait qu'enregistrer l'id/horodatage et
+      // laisse le clic simple suivre son cours normal. Au 2e clic (même id,
+      // moins de 350 ms : fiable même si le re-rendu a remplacé l'élément DOM,
+      // puisqu'on compare une donnée du modèle, pas une référence DOM), il
+      // coupe le clic simple (stopImmediatePropagation) et prend la tuile
+      // directement, puis finalise (pas de sélection/fantôme en attente).
+      // Seule exception : la branche « prise immédiate » plus bas, où le clic
+      // simple retire déjà la tuile du DOM — dans ce cas, le 2e clic du geste
+      // ne retombe plus sur cette tuile et est géré séparément (voir le
+      // conteneur « combo-cliquable » ci-dessus).
       if (tapisManipulable()) {
         el.addEventListener("click", (e) => {
           const maintenant = Date.now();
@@ -341,11 +368,13 @@ function rafraichirPlateau() {
             e.stopImmediatePropagation();
             dernierClicTapis = { id: null, temps: 0 };
             prendreTuileTapis(idxCombo, idxTuile);
+            finaliserSelectionTapis();
             return;
           }
           dernierClicTapis = { id: d.id, temps: maintenant };
         });
       }
+
       if (!tapisManipulable() && estCeTour) {
         // Avant la mise initiale, le réarrangement façon tapis n'est pas
         // encore proposé (tapisManipulable() faux) : seule la reprise directe
@@ -361,8 +390,16 @@ function rafraichirPlateau() {
         }
       } else if (tapisManipulable()) {
         // Tapis manipulable (aucune tuile prête) : toute tuile peut être « prise »
+        // (dès le 1er clic, elle rejoint directement la zone de travail active,
+        // voir prendreTuileTapis). Un double-clic produit donc déjà ce résultat
+        // dès son premier clic ; le second clic du geste, lui, retombe sur la
+        // combinaison source (la tuile d'origine a disparu du DOM) et est
+        // intercepté par le handler du conteneur ci-dessus (issue #133).
         el.classList.add("tapis-manipulable");
-        el.addEventListener("click", () => prendreTuileTapis(idxCombo, idxTuile));
+        el.addEventListener("click", () => {
+          derniereTuilePriseTapis = { idxCombo, temps: Date.now() };
+          prendreTuileTapis(idxCombo, idxTuile);
+        });
       } else if (d.est_joker && tuileSelectionnee !== null &&
                  etat.joueurs[indexHumain()].mise_initiale_faite) {
         el.classList.add("joker-recuperable");
@@ -957,6 +994,24 @@ function prendreTuileTapis(idxCombo, idxTuile) {
   rafraichirChevalet();
   rafraichirBoutons();
   majFantome(); // la tuile prise sur le tapis devient sélectionnée (issue #50)
+}
+
+// Fin d'un double-clic sur une tuile du tapis (issue #133) : le premier clic
+// l'a déjà prise et déposée dans la zone de travail active via
+// prendreTuileTapis (même résultat que poserTuileDirectement pour le
+// chevalet). Le second clic du geste ne retombe plus sur la tuile d'origine
+// (elle a quitté le DOM) mais sur sa combinaison source ; il ne doit donc pas
+// la recibler comme destination, seulement nettoyer la sélection en attente
+// (fantôme, cible d'insertion) pour terminer le geste en une seule interaction.
+function finaliserSelectionTapis() {
+  tuileSelectionnee = null;
+  comboActive = null;
+  trouJoker = null;
+  detruireFantome();
+  rafraichirPlateau();
+  rafraichirZoneTravail();
+  rafraichirChevalet();
+  rafraichirBoutons();
 }
 
 // ------------------------------------------------------------ récupération de joker
