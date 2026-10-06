@@ -49,11 +49,16 @@ body { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
 .fiche-joueur .badge-actif { font-size: 0.7rem; background: #22c55e;
   color: #fff; border-radius: 3px; padding: 1px 5px; }
 
-#details-historique { font-size: 0.8rem; }
-#details-historique summary { cursor: pointer; padding: 4px 0; }
-#liste-historique { display: flex; flex-direction: column; gap: 2px; }
-.entree-historique { font-size: 0.72rem; opacity: 0.85;
-  border-left: 2px solid rgba(255,255,255,0.2); padding-left: 6px; }
+/* Bouton « Dernier coup joué par l'ordinateur » : déclenche le rejeu animé
+   du dernier coup de l'IA (issue #144, remplace l'ancienne liste "Derniers
+   coups"). */
+.btn-rejouer-coup-ia {
+  width: 100%; text-align: left; font-size: 0.78rem; line-height: 1.3;
+  background: rgba(255,255,255,0.1); color: #fff; border: none;
+  border-radius: 6px; padding: 8px 10px; cursor: pointer;
+}
+.btn-rejouer-coup-ia:hover:not(:disabled) { background: rgba(255,255,255,0.18); }
+.btn-rejouer-coup-ia:disabled { opacity: 0.45; cursor: not-allowed; }
 
 .btn-jouer-ia {
   padding: 4px 12px; background: #2e7d32; color: #fff;

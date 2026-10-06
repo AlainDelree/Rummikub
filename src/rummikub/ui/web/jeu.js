@@ -194,7 +194,7 @@ function rafraichirTout() {
   rafraichirZoneTravail();
   rafraichirChevalet();
   rafraichirBoutons();
-  rafraichirHistorique();
+  rafraichirBoutonRejouerIA();
   mettreAJourSac((etat.pioche || []).length);
   if (etat.manche_terminee) afficherFinDeManche();
   verifierAutoIA();
@@ -599,18 +599,16 @@ function rafraichirBoutons() {
   handlerBoutonPioche = handler;
 }
 
-function rafraichirHistorique() {
-  const liste = document.getElementById("liste-historique");
-  liste.innerHTML = "";
-  const h = etat.historique || [];
-  document.getElementById("nb-coups").textContent = h.length;
-  h.slice(-5).reverse().forEach((e) => {
-    const div = document.createElement("div");
-    div.className = "entree-historique";
-    const pts = e.points ? " (" + (e.points > 0 ? "+" : "") + e.points + ")" : "";
-    div.textContent = "T" + e.tour + " · " + e.description + pts;
-    liste.appendChild(div);
-  });
+// Active/désactive le bouton de rejeu selon qu'un coup IA est disponible
+// (issue #144, remplace l'ancienne liste "Derniers coups").
+function rafraichirBoutonRejouerIA() {
+  const btn = document.getElementById("btn-rejouer-coup-ia");
+  if (!btn) return;
+  const coup = etat.dernier_coup_ia;
+  btn.disabled = !coup;
+  btn.textContent = coup
+    ? "▶ Dernier coup joué par " + coup.nom
+    : "▶ Dernier coup joué par l'ordinateur";
 }
 
 // ------------------------------------------------------------ sélection / placement
@@ -1284,7 +1282,7 @@ async function onPiocher() {
       rafraichirPlateau();
       rafraichirZoneTravail();
       rafraichirBoutons();
-      rafraichirHistorique();
+      rafraichirBoutonRejouerIA();
       mettreAJourSac((etat.pioche || []).length);
       animerPiochee(t, () => {
         rafraichirChevalet();
@@ -1316,6 +1314,18 @@ async function onPasser() {
 }
 
 // ------------------------------------------------------------ IA (déclenchée par l'humain)
+// Vitesse d'animation selon le réglage « Vitesse de l'ordinateur ».
+const VITESSES_IA = {
+  "Instantanée": { reflexion: 0,    tuile: 100 },
+  "Rapide":      { reflexion: 400,  tuile: 400 },
+  "Normale":     { reflexion: 800,  tuile: 700 },
+  "Lente":       { reflexion: 1500, tuile: 1200 },
+};
+function vitesseIA() {
+  return VITESSES_IA[(etat.config && etat.config.vitesse_ia) || "Normale"]
+    || VITESSES_IA["Normale"];
+}
+
 // Compare l'ancien et le nouveau plateau et retourne les tuiles nouvellement
 // posées par l'IA, dans l'ordre de pose (pour l'animation une par une).
 function trouverTuilesAjoutees(ancienPlateau, nouveauPlateau) {
@@ -1333,6 +1343,62 @@ function trouverTuilesAjoutees(ancienPlateau, nouveauPlateau) {
   return ajoutees;
 }
 
+// Anime l'apparition progressive sur le tapis des tuiles de `tuiAjoutees`
+// (une par une, surbrillance dorée) : d'abord affiche `plateauComplet` sans
+// elles, puis les révèle au rythme `delaiEntreTuiles`. Utilisé pour le coup
+// IA en direct (jouerIA) et pour son rejeu à la demande (issue #144).
+async function animerPoseTuiles(tuiAjoutees, plateauComplet, delaiEntreTuiles) {
+  const idsAjoutees = new Set(tuiAjoutees.map(t => t.dict.id));
+
+  plateauLocal = plateauComplet.map(combo =>
+    combo.filter(d => !idsAjoutees.has(d.id))
+  ).filter(c => c.length > 0);
+  rafraichirPlateau();
+
+  for (let i = 0; i < tuiAjoutees.length; i++) {
+    await new Promise(r =>
+      setTimeout(r, i === 0 ? 200 : delaiEntreTuiles));
+    const { dict } = tuiAjoutees[i];
+
+    // Reconstruire progressivement le plateau visible :
+    // tuiles originales + tuiles déjà animées jusqu'à i inclus
+    plateauLocal = plateauComplet.map(combo =>
+      combo.filter(d => {
+        const dejaPosee = tuiAjoutees.slice(0, i + 1)
+          .some(t => t.dict.id === d.id);
+        return !idsAjoutees.has(d.id) || dejaPosee;
+      })
+    ).filter(c => c.length > 0);
+
+    rafraichirPlateau();
+
+    // Appliquer l'animation sur la tuile qui vient d'apparaître
+    setTimeout(() => {
+      document.querySelectorAll("#zone-plateau .tuile-jeu").forEach(el => {
+        if (el.dataset.id === dict.id) {
+          el.classList.add("tuile-ia-posee");
+          setTimeout(() => {
+            el.classList.remove("tuile-ia-posee");
+            el.classList.add("tuile-ia-highlight");
+          }, 700);
+        }
+      });
+    }, 50);
+  }
+
+  // Attendre la fin de la dernière animation
+  await new Promise(r => setTimeout(r, 800));
+}
+
+// Efface les surbrillances dorées laissées par animerPoseTuiles.
+function effacerSurbrillanceIA() {
+  setTimeout(() => {
+    document.querySelectorAll(".tuile-ia-highlight").forEach(el => {
+      el.classList.remove("tuile-ia-highlight");
+    });
+  }, 2000);
+}
+
 // L'humain clique « Jouer » sur la fiche de l'IA active pour déclencher son coup.
 // Les tuiles posées par l'IA apparaissent une par une avec une animation lente
 // et visible (jeu destiné à des personnes âgées).
@@ -1340,16 +1406,7 @@ async function jouerIA() {
   const btnIA = document.querySelector(".btn-jouer-ia");
   if (btnIA) btnIA.disabled = true;
 
-  // Vitesse d'animation selon le réglage « Vitesse de l'ordinateur »
-  const VITESSES = {
-    "Instantanée": { reflexion: 0,    tuile: 100 },
-    "Rapide":      { reflexion: 400,  tuile: 400 },
-    "Normale":     { reflexion: 800,  tuile: 700 },
-    "Lente":       { reflexion: 1500, tuile: 1200 },
-  };
-  const vitesse = VITESSES[
-    (etat.config && etat.config.vitesse_ia) || "Normale"
-  ] || VITESSES["Normale"];
+  const vitesse = vitesseIA();
   const delaiReflexion     = vitesse.reflexion;
   const DELAI_ENTRE_TUILES = vitesse.tuile;
 
@@ -1403,53 +1460,13 @@ async function jouerIA() {
       return;
     }
 
-    // Afficher d'abord le tapis SANS les nouvelles tuiles
-    const idsAjoutees = new Set(tuiAjoutees.map(t => t.dict.id));
-    plateauLocal = (etat.plateau || []).map(combo =>
-      combo.filter(d => !idsAjoutees.has(d.id))
-    ).filter(c => c.length > 0);
-
     rafraichirFichesJoueurs();
-    rafraichirPlateau();
     rafraichirChevalet();
     rafraichirBoutons();
-    rafraichirHistorique();
+    rafraichirBoutonRejouerIA();
     mettreAJourSac((etat.pioche || []).length);
 
-    // Poser les tuiles une par une avec animation
-    for (let i = 0; i < tuiAjoutees.length; i++) {
-      await new Promise(r =>
-        setTimeout(r, i === 0 ? 200 : DELAI_ENTRE_TUILES));
-      const { dict } = tuiAjoutees[i];
-
-      // Reconstruire progressivement le plateau visible :
-      // tuiles originales + tuiles déjà animées jusqu'à i inclus
-      plateauLocal = clone(etat.plateau || []).map(combo =>
-        combo.filter(d => {
-          const dejaPosee = tuiAjoutees.slice(0, i + 1)
-            .some(t => t.dict.id === d.id);
-          return !idsAjoutees.has(d.id) || dejaPosee;
-        })
-      ).filter(c => c.length > 0);
-
-      rafraichirPlateau();
-
-      // Appliquer l'animation sur la tuile qui vient d'apparaître
-      setTimeout(() => {
-        document.querySelectorAll("#zone-plateau .tuile-jeu").forEach(el => {
-          if (el.dataset.id === dict.id) {
-            el.classList.add("tuile-ia-posee");
-            setTimeout(() => {
-              el.classList.remove("tuile-ia-posee");
-              el.classList.add("tuile-ia-highlight");
-            }, 700);
-          }
-        });
-      }, 50);
-    }
-
-    // Attendre la fin de la dernière animation
-    await new Promise(r => setTimeout(r, 800));
+    await animerPoseTuiles(tuiAjoutees, clone(etat.plateau || []), DELAI_ENTRE_TUILES);
 
     // Finaliser : plateau complet + rafraîchissement normal
     plateauLocal = clone(etat.plateau || []);
@@ -1457,17 +1474,45 @@ async function jouerIA() {
     rafraichirTout();
     autoZoomSiTapisDeborde(); // issue #104 : dézoome d'un cran si le tapis déborde
 
-    // Effacer les surbrillances dorées après 2 secondes
-    setTimeout(() => {
-      document.querySelectorAll(".tuile-ia-highlight").forEach(el => {
-        el.classList.remove("tuile-ia-highlight");
-      });
-    }, 2000);
+    effacerSurbrillanceIA();
 
   } catch (e) {
     toast("Erreur IA : " + e, "erreur");
     rafraichirTout();
   }
+}
+
+// Bouton « Dernier coup joué par l'ordinateur » : rejoue à la demande
+// l'animation du dernier coup de pose de l'IA, sans rien changer à l'état de
+// la partie. Si le tour en cours d'Alain a déjà des tuiles posées sur le
+// tapis (non validées), elles doivent d'abord retourner dans sa main pour
+// ne pas brouiller le rejeu — on prévient donc avant de les annuler
+// (issue #144).
+async function rejouerDernierCoupIA() {
+  const coup = etat.dernier_coup_ia;
+  if (!coup) return;
+
+  if (tuilesCeTour.length > 0) {
+    const ok = confirm(
+      "Votre tour en cours sera annulé pour rejouer ce coup — continuer ?");
+    if (!ok) return;
+    await onAnnuler(); // remet les tuiles du tour en cours dans la main
+  }
+
+  const tuiAjoutees = trouverTuilesAjoutees(
+    coup.plateau_avant, coup.plateau_apres);
+  if (tuiAjoutees.length === 0) return;
+
+  const btn = document.getElementById("btn-rejouer-coup-ia");
+  if (btn) btn.disabled = true;
+
+  await animerPoseTuiles(
+    tuiAjoutees, clone(etat.plateau || []), vitesseIA().tuile);
+
+  plateauLocal = clone(etat.plateau || []);
+  rafraichirPlateau();
+  if (btn) btn.disabled = false;
+  effacerSurbrillanceIA();
 }
 
 // ------------------------------------------------------------ fin de manche
@@ -1625,6 +1670,8 @@ function brancherEvenements() {
     window.pywebview.api.sauvegarder_reglages({ tri_auto: triAutoActif });
   });
   document.getElementById("btn-annuler").addEventListener("click", onAnnuler);
+  document.getElementById("btn-rejouer-coup-ia")
+    .addEventListener("click", rejouerDernierCoupIA);
   document.getElementById("btn-verifier-calc").addEventListener("click", onVerifierCalc);
   document.getElementById("btn-jouer").addEventListener("click", onJouer);
   // Le bouton #btn-piocher (fusion Piocher/Passer) reçoit son écouteur

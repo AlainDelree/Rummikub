@@ -66,6 +66,7 @@ def creer_partie(config_joueurs: list[dict], config_regles: dict) -> dict:
         "index_debut_tour": 0,
         "tour_debut_tour": 1,
         "historique": [],
+        "dernier_coup_ia": None,
         "manche_terminee": False,
         "gagnant_manche_index": None,
         "config": {
@@ -282,6 +283,7 @@ def nouvelle_manche(etat: dict) -> dict:
     etat["plateau_debut_tour"] = None
     etat["chevalet_debut_tour"] = []
     etat["historique"] = []
+    etat["dernier_coup_ia"] = None
     etat["manche_terminee"] = False
     etat["gagnant_manche_index"] = None
     etat["index_joueur_actuel"] = 0

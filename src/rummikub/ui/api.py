@@ -132,6 +132,7 @@ class Api:
         return {"ok": True, "etat": self._app.etat_jeu}
 
     def jeu_ia_jouer(self):
+        import copy
         from rummikub.moteur.ia import jouer_ia
         from rummikub.moteur.partie import (jouer_tour, piocher, passer_tour,
                                             backup_debut_tour, annuler_tour)
@@ -143,11 +144,15 @@ class Api:
         if not etat["joueurs"][idx]["est_ia"]:
             return {"ok": False, "erreur": "Pas le tour d'une IA"}
         backup_debut_tour(etat)
+        plateau_avant = copy.deepcopy(etat["plateau"])
         res_ia = jouer_ia(etat, idx)
+        coup_joue = False
         if res_ia["action"] == "jouer":
             res = jouer_tour(etat, res_ia["ids_tuiles"],
                              res_ia["nouveau_plateau"])
-            if not res["ok"]:
+            if res["ok"]:
+                coup_joue = True
+            else:
                 # L'IA a proposé un coup invalide → pioche de secours.
                 annuler_tour(etat)
                 res = piocher(etat)
@@ -155,6 +160,16 @@ class Api:
             res = piocher(etat)
         else:
             res = passer_tour(etat)
+        # Mémorise le dernier coup de pose de l'IA pour permettre son rejeu
+        # animé à la demande (issue #144) — uniquement une vraie pose, pas
+        # une pioche/passe (rien à rejouer dans ce cas).
+        if coup_joue:
+            etat["dernier_coup_ia"] = {
+                "joueur_index": idx,
+                "nom": etat["joueurs"][idx]["nom"],
+                "plateau_avant": plateau_avant,
+                "plateau_apres": copy.deepcopy(etat["plateau"]),
+            }
         self._app.etat_jeu = res["etat"]
         backup_debut_tour(self._app.etat_jeu)
         sauvegarder_partie(self._app.etat_jeu)
