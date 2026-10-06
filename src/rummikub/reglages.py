@@ -12,6 +12,7 @@ DEFAUTS = {
     "ia_auto": False,       # si True, le tour de l'IA se joue seul (sans clic sur "Jouer")
     "mode_reorg": "clic",   # "clic" (appui long + clic) ou "drag" (glisser-déposer)
     "log_parties": False,   # journal de partie (débogage) : voir config.LOG_PARTIES
+    "tri_auto": False,      # case "Tri automatique" du chevalet (issue #126/#130)
 }
 
 def charger():

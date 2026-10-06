@@ -46,8 +46,10 @@ class ApplicationRummikub:
         self.etat_jeu["config"]["ia_auto"] = \
             bool(config.get("regles", {}).get("ia_auto", False))
         # Mode de réorganisation du chevalet (préférence UI, lue depuis config.json).
-        self.etat_jeu["config"]["mode_reorg"] = \
-            Reglages.charger().get("mode_reorg", "clic")
+        cfg_nouvelle = Reglages.charger()
+        self.etat_jeu["config"]["mode_reorg"] = cfg_nouvelle.get("mode_reorg", "clic")
+        # Tri automatique à la pioche (préférence UI persistée, issue #130).
+        self.etat_jeu["config"]["tri_auto"] = bool(cfg_nouvelle.get("tri_auto", False))
         backup_debut_tour(self.etat_jeu)
         self._window.load_url(str(_WEB / "jeu.html"))
 
@@ -60,6 +62,7 @@ class ApplicationRummikub:
         self.etat_jeu.setdefault("config", {})["mode_reorg"] = \
             cfg.get("mode_reorg", "clic")
         self.etat_jeu["config"]["ia_auto"] = bool(cfg.get("ia_auto", False))
+        self.etat_jeu["config"]["tri_auto"] = bool(cfg.get("tri_auto", False))
         backup_debut_tour(self.etat_jeu)
         self._window.load_url(str(_WEB / "jeu.html"))
 

@@ -1445,14 +1445,15 @@ function trierChevalet() {
 }
 
 // Insère `tuile` dans chevaletLocal à sa place triée (issue #126, case "Tri
-// automatique"). Retire d'abord toute occurrence existante (cas de la tuile
-// piochée, déjà ajoutée en fin de liste par reconcilierChevalet).
+// automatique"). Le chevalet n'étant pas forcément déjà trié (distribution
+// initiale aléatoire, réorg manuelle), une simple recherche de position
+// linéaire ne garantit pas que la tuile finisse à sa VRAIE place triée
+// globale (issue #130) : on retrie donc tout le chevalet après l'ajout,
+// comme le fait le bouton « Trier ».
 function insererTrie(tuile) {
   const iExistant = chevaletLocal.findIndex((t) => t.id === tuile.id);
-  if (iExistant >= 0) chevaletLocal.splice(iExistant, 1);
-  let i = 0;
-  while (i < chevaletLocal.length && comparerTuiles(chevaletLocal[i], tuile) <= 0) i++;
-  chevaletLocal.splice(i, 0, tuile);
+  if (iExistant < 0) chevaletLocal.push(tuile);
+  chevaletLocal.sort(comparerTuiles);
 }
 
 // Tri d'une rangée de la zone de pose par valeur croissante (issue #66).
@@ -1472,6 +1473,7 @@ function brancherEvenements() {
   document.getElementById("btn-trier").addEventListener("click", trierChevalet);
   document.getElementById("chk-tri-auto").addEventListener("change", (e) => {
     triAutoActif = e.target.checked;
+    window.pywebview.api.sauvegarder_reglages({ tri_auto: triAutoActif });
   });
   document.getElementById("btn-annuler").addEventListener("click", onAnnuler);
   document.getElementById("btn-verifier-calc").addEventListener("click", onVerifierCalc);
@@ -1622,6 +1624,10 @@ async function init() {
   }
   reinitChevaletLocal();
   reinitTour();
+  // Restaure l'état de la case "Tri automatique" tel que persisté (issue #130).
+  triAutoActif = !!(etat.config && etat.config.tri_auto);
+  const chkTriAuto = document.getElementById("chk-tri-auto");
+  if (chkTriAuto) chkTriAuto.checked = triAutoActif;
   rafraichirTout();
 }
 
