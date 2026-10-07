@@ -389,6 +389,26 @@ body { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
   box-shadow: 0 0 8px rgba(255,220,50,0.4);
 }
 
+/* Réorganisation (issue #149) : tuile déjà présente sur le tapis qui change de
+   combinaison (ex. _coup_scission) — distincte visuellement (bleu) d'une
+   tuile neuve posée depuis la main (doré), pour que le rejeu soit clair. */
+@keyframes tuile-deplacee {
+  0%   { transform: scale(0) rotate(-15deg);
+         opacity: 0;
+         box-shadow: 0 0 0 rgba(90,170,255,0); }
+  50%  { transform: scale(1.25) rotate(3deg);
+         opacity: 1;
+         box-shadow: 0 0 20px rgba(90,170,255,0.9); }
+  75%  { transform: scale(0.95) rotate(-1deg); }
+  100% { transform: scale(1) rotate(0deg);
+         opacity: 1;
+         box-shadow: 0 0 8px rgba(90,170,255,0.4); }
+}
+.tuile-jeu.tuile-ia-deplacee {
+  animation: tuile-deplacee 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+  box-shadow: 0 0 8px rgba(90,170,255,0.4);
+}
+
 /* Surbrillance persistante sur les tuiles posées par l'IA ce tour */
 .tuile-jeu.tuile-ia-highlight {
   box-shadow: 0 0 6px rgba(255,220,50,0.5);
