@@ -435,6 +435,14 @@ body { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
   opacity: 0;
 }
 
+/* ------------------------------------------- Animation de pioche (IA, #145) */
+/* Variante dos visible : glisse du centre vers la fiche du joueur IA
+   concerné (déplacement --dx/--dy calculé en JS selon sa position réelle). */
+#overlay-pioche .tuile-piochee-grande.vers-ia {
+  transform: translate(var(--dx, 0), var(--dy, -42vh)) scale(0.35);
+  opacity: 0;
+}
+
 #barre-actions { display: flex; gap: 8px; padding: 8px 12px;
   background: var(--tapis-vert-fonce); justify-content: center; }
 #barre-actions button { padding: 12px 22px; border: none; border-radius: 6px;

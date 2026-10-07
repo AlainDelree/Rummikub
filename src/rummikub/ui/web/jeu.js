@@ -1267,6 +1267,38 @@ function animerPiochee(dict, apres) {
   }, 1000);
 }
 
+// Variante de animerPiochee() pour un joueur IA (issue #145) : la tuile est
+// montrée dos visible (valeur non révélée) et glisse du centre de l'écran
+// vers la fiche du joueur IA concerné (position calculée dynamiquement,
+// car elle dépend du nombre de joueurs et de la mise en page).
+function animerPiocheeIA(idxIA, apres) {
+  const overlay = document.createElement("div");
+  overlay.id = "overlay-pioche";
+
+  const el = creerTuileDos();
+  el.classList.add("tuile-piochee-grande");
+  overlay.appendChild(el);
+  document.body.appendChild(overlay);
+
+  const fiche = document.querySelectorAll(".fiche-joueur")[idxIA];
+  let dx = 0, dy = -42 * window.innerHeight / 100; // repli : vers le haut
+  if (fiche) {
+    const rFiche = fiche.getBoundingClientRect();
+    dx = rFiche.left + rFiche.width / 2 - window.innerWidth / 2;
+    dy = rFiche.top + rFiche.height / 2 - window.innerHeight / 2;
+  }
+  el.style.setProperty("--dx", dx + "px");
+  el.style.setProperty("--dy", dy + "px");
+
+  setTimeout(() => {
+    el.classList.add("vers-ia");
+    setTimeout(() => {
+      overlay.remove();
+      apres();
+    }, 500);
+  }, 1000);
+}
+
 async function onPiocher() {
   try {
     const res = await window.pywebview.api.jeu_piocher();
@@ -1450,12 +1482,17 @@ async function jouerIA() {
     // Cas « pioche » ou « passe » : aucune tuile ajoutée
     if (tuiAjoutees.length === 0) {
       rafraichirFichesJoueurs();
+      mettreAJourSac((etat.pioche || []).length);
       const h = nouvelEtat.historique || [];
       const action = (h.length ? h[h.length - 1].description : "") || "";
       const nomIA = (nouvelEtat.joueurs[idxIA] || {}).nom || "L'IA";
-      toast(nomIA + " " +
-        (action.includes("pioch") ? "pioche" : "passe son tour"));
-      await new Promise(r => setTimeout(r, 800));
+      const estPioche = action.includes("pioch");
+      toast(nomIA + " " + (estPioche ? "pioche" : "passe son tour"));
+      if (estPioche) {
+        await new Promise((r) => animerPiocheeIA(idxIA, r));
+      } else {
+        await new Promise(r => setTimeout(r, 800));
+      }
       rafraichirTout();
       return;
     }
