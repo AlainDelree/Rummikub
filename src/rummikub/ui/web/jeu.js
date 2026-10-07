@@ -1519,19 +1519,43 @@ async function jouerIA() {
   }
 }
 
+// Modale stylée (remplace confirm() natif, issue #147) demandant de
+// confirmer la remise en main des tuiles non validées du tour en cours
+// avant de rejouer le dernier coup de l'IA. Résout true/false selon le
+// bouton cliqué.
+function confirmerRejeuIA(nomIA) {
+  return new Promise((resolve) => {
+    const overlay = document.getElementById("overlay-confirm-rejeu");
+    document.getElementById("titre-confirm-rejeu").textContent =
+      "Dernier coup de " + nomIA;
+    const btnOui = document.getElementById("btn-confirm-rejeu-oui");
+    const btnNon = document.getElementById("btn-confirm-rejeu-non");
+    const conclure = (val) => {
+      overlay.className = "overlay-cache";
+      btnOui.removeEventListener("click", surOui);
+      btnNon.removeEventListener("click", surNon);
+      resolve(val);
+    };
+    const surOui = () => conclure(true);
+    const surNon = () => conclure(false);
+    btnOui.addEventListener("click", surOui);
+    btnNon.addEventListener("click", surNon);
+    overlay.className = "overlay-visible";
+  });
+}
+
 // Bouton « Dernier coup joué par l'ordinateur » : rejoue à la demande
 // l'animation du dernier coup de pose de l'IA, sans rien changer à l'état de
 // la partie. Si le tour en cours d'Alain a déjà des tuiles posées sur le
 // tapis (non validées), elles doivent d'abord retourner dans sa main pour
-// ne pas brouiller le rejeu — on prévient donc avant de les annuler
-// (issue #144).
+// ne pas brouiller le rejeu — on prévient donc avant de les y remettre
+// (issue #144, modale stylée en #147).
 async function rejouerDernierCoupIA() {
   const coup = etat.dernier_coup_ia;
   if (!coup) return;
 
   if (tuilesCeTour.length > 0) {
-    const ok = confirm(
-      "Votre tour en cours sera annulé pour rejouer ce coup — continuer ?");
+    const ok = await confirmerRejeuIA(coup.nom);
     if (!ok) return;
     await onAnnuler(); // remet les tuiles du tour en cours dans la main
   }

@@ -471,6 +471,22 @@ button:disabled { opacity: 0.4; cursor: not-allowed; }
 #overlay-classement .carte button { margin-top: 10px; padding: 14px 22px;
   font-size: 1.1rem; min-height: 44px; }
 
+/* Confirmation avant rejeu du dernier coup IA (issue #147) : carte plus
+   compacte que les overlays de fin de manche/partie, titre coloré comme les
+   fiches de joueur IA pour rappeler de qui il s'agit. */
+.carte-confirm { max-width: 420px; text-align: center; }
+.carte-confirm h2 { color: var(--couleur-ordinateur); margin-bottom: 14px; }
+.carte-confirm p { color: var(--couleur-texte); line-height: 1.4; margin-bottom: 20px; }
+.boutons-confirm { display: flex; gap: 12px; }
+.boutons-confirm button { flex: 1; margin-top: 0; }
+.btn-secondaire {
+  padding: 14px; background: #fff; color: var(--couleur-texte);
+  border: 2px solid var(--couleur-bordure); border-radius: 6px;
+  font-size: 1.05rem; font-weight: 700; cursor: pointer;
+  transition: background 0.15s;
+}
+.btn-secondaire:hover { background: #f0f0f0; }
+
 /* Animation de victoire (issue #141) : feu d'artifice derrière la carte du
    classement final. Chaque particule jaillit de son bouquet d'origine selon
    --angle/--distance puis s'évanouit ; position/couleur/délai randomisés

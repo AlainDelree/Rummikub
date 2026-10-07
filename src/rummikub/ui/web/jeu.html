@@ -108,6 +108,20 @@
     </div>
   </div>
 
+  <!-- Confirmation avant rejeu du dernier coup IA, si le tour en cours
+       d'Alain a des tuiles non validées à remettre en main (issue #147) -->
+  <div id="overlay-confirm-rejeu" class="overlay-cache">
+    <div class="carte carte-confirm">
+      <h2 id="titre-confirm-rejeu"></h2>
+      <p id="texte-confirm-rejeu">Vos tuiles pas encore validées pour ce tour
+        seront remises en main pour laisser la place au rejeu — continuer ?</p>
+      <div class="boutons-confirm">
+        <button id="btn-confirm-rejeu-non" class="btn-secondaire">Annuler</button>
+        <button id="btn-confirm-rejeu-oui" class="btn-primaire">Continuer</button>
+      </div>
+    </div>
+  </div>
+
   <div id="toast"></div>
   <script src="genres.js"></script>
   <script src="commun.js"></script>
