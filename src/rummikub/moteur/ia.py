@@ -290,6 +290,126 @@ def _coup_scission(etat, idx):
     return None
 
 
+def _jokers_recuperables(plateau, chevalet):
+    """Jokers du plateau échangeables contre une tuile identique de la main.
+
+    Un joker est « récupérable » si le chevalet contient exactement la tuile
+    qu'il représente dans sa combinaison (même valeur/couleur pour une suite,
+    même valeur et une couleur absente du groupe pour un groupe) : l'échanger
+    ne change ni la validité ni les points de la combinaison, et libère le
+    joker pour un usage ailleurs sur le plateau.
+
+    Retourne ``[{"combi_index", "position_index", "joker", "remplacement"}]``.
+    """
+    resultats = []
+    for ci, combo in enumerate(plateau):
+        r = valider_combinaison(combo)
+        if not r["valide"]:
+            continue
+        for pi, t in enumerate(combo):
+            if not t.est_joker:
+                continue
+            if r["type"] == "suite":
+                i0, t0 = next((i, tt) for i, tt in enumerate(combo)
+                              if not tt.est_joker)
+                valeur_attendue = t0.valeur - i0 + pi
+                couleur_attendue = t0.couleur
+                match = next((tt for tt in chevalet if not tt.est_joker
+                              and tt.valeur == valeur_attendue
+                              and tt.couleur == couleur_attendue), None)
+            else:  # groupe
+                valeur_attendue = next(tt.valeur for tt in combo
+                                       if not tt.est_joker)
+                couleurs_utilisees = {tt.couleur for tt in combo
+                                      if not tt.est_joker}
+                match = next((tt for tt in chevalet if not tt.est_joker
+                              and tt.valeur == valeur_attendue
+                              and tt.couleur not in couleurs_utilisees), None)
+            if match is not None:
+                resultats.append({"combi_index": ci, "position_index": pi,
+                                  "joker": t, "remplacement": match})
+    return resultats
+
+
+def _coup_avec_joker_recupere(etat, idx, ordre_points=False):
+    """Échange un joker récupérable contre sa tuile équivalente en main, puis
+    tente de replacer le joker libéré ailleurs (nouvelle combinaison ou
+    extension) pour un coup plus riche que la simple extension évidente.
+
+    Retourne le meilleur coup obtenu (ou ``None`` si aucun joker n'est
+    récupérable, ou si aucun ne peut être replacé ailleurs sur le plateau).
+    """
+    joueur = etat["joueurs"][idx]
+    if not joueur["mise_initiale_faite"]:
+        return None
+    base_plateau = plateau_depuis_dict(etat.get("plateau", []))
+    chevalet = _to_tuiles(joueur["chevalet"])
+    meilleur = None
+    for rec in _jokers_recuperables(base_plateau, chevalet):
+        ci, pi = rec["combi_index"], rec["position_index"]
+        joker, remplacement = rec["joker"], rec["remplacement"]
+
+        plateau = [list(c) for c in base_plateau]
+        combo = list(plateau[ci])
+        combo[pi] = remplacement
+        plateau[ci] = combo
+
+        disponibles = [t for t in chevalet if t.id != remplacement.id] + [joker]
+        resultats = trouver_combinaisons_depuis_chevalet(
+            [t.as_dict() for t in disponibles],
+            etat["config"]["mise_initiale_min"], True)
+        if ordre_points:
+            resultats = sorted(
+                resultats, key=lambda r: (r["points"], len(r["tuiles"])),
+                reverse=True)
+        choisis = _selection_disjointe(resultats)
+
+        ids = [remplacement.id]
+        utilises = {remplacement.id}
+        for r in choisis:
+            plateau.append(list(r["tuiles"]))
+            for t in r["tuiles"]:
+                ids.append(t.id)
+                utilises.add(t.id)
+
+        restantes = [t for t in disponibles if t.id not in utilises]
+        _appliquer_extensions(plateau, restantes, ids)
+
+        joker_place = any(t.id == joker.id for c in plateau for t in c)
+        if not joker_place:
+            continue
+
+        ids_reel = [i for i in ids if i != joker.id]
+        nouveau = _plateau_vers_dict(plateau)
+        if ids_reel and _coup_valide(etat, idx, nouveau, ids_reel):
+            coup = {"action": "jouer", "ids_tuiles": ids_reel,
+                    "nouveau_plateau": nouveau}
+            if meilleur is None or (_valeur_coup(etat, idx, coup)
+                                    > _valeur_coup(etat, idx, meilleur)):
+                meilleur = coup
+    return meilleur
+
+
+def _valeur_coup(etat, idx, coup):
+    """Valeur comparative d'un coup candidat : (nb tuiles jouées, points posés)."""
+    plateau = plateau_depuis_dict(coup["nouveau_plateau"])
+    ids = set(coup["ids_tuiles"])
+    return (len(ids), _points_tuiles_posees(plateau, ids))
+
+
+def _meilleur_coup_avec_joker(etat, idx, ordre_points=False):
+    """Compare l'extension/combinaison évidente et un coup exploitant un
+    joker récupérable du plateau ; retourne le meilleur des deux coups
+    trouvés (ou ``None`` si aucun des deux n'est jouable).
+    """
+    simple = _coup_maximal(etat, idx, ordre_points=ordre_points)
+    recupere = _coup_avec_joker_recupere(etat, idx, ordre_points=ordre_points)
+    candidats = [c for c in (simple, recupere) if c]
+    if not candidats:
+        return None
+    return max(candidats, key=lambda c: _valeur_coup(etat, idx, c))
+
+
 def _piocher_ou_passer(etat):
     """Pioche s'il reste des tuiles, sinon passe."""
     plateau = etat.get("plateau", [])
@@ -333,8 +453,10 @@ def jouer_niveau_intermediaire(etat, idx):
 
 
 def jouer_niveau_avance(etat, idx):
-    """Comme intermédiaire + peut scinder une suite longue pour libérer une tuile."""
-    coup = _coup_maximal(etat, idx, ordre_points=True)
+    """Comme intermédiaire + peut scinder une suite longue pour libérer une
+    tuile, et préfère récupérer un joker exploitable du plateau si cela donne
+    un coup plus riche que l'extension la plus évidente."""
+    coup = _meilleur_coup_avec_joker(etat, idx, ordre_points=True)
     if coup:
         return coup
     coup = _coup_scission(etat, idx)
@@ -348,7 +470,7 @@ def jouer_niveau_expert(etat, idx):
 
     (sauf si le coup vide son propre chevalet).
     """
-    coup = _coup_maximal(etat, idx, ordre_points=True) or _coup_scission(etat, idx)
+    coup = _meilleur_coup_avec_joker(etat, idx, ordre_points=True) or _coup_scission(etat, idx)
     if not coup:
         return _piocher_ou_passer(etat)
     joueur = etat["joueurs"][idx]
