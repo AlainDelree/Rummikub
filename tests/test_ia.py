@@ -123,3 +123,68 @@ def test_intermediaire_ne_recupere_pas_le_joker():
     coup = jouer_niveau_intermediaire(etat, 1)
     assert coup["action"] == "jouer"
     assert set(coup["ids_tuiles"]) == {"rouge_7_a"}
+
+
+def _etat_avec_joker_detachable(niveau):
+    """Plateau : suite rouge 3-4-(joker=5).
+
+    Chevalet du bot : un rouge 2 (allonge l'AUTRE bout, rendant 3-4 seul
+    valide une fois le joker détaché), un noir 9 et un bleu 9 (ne forment un
+    groupe complet qu'avec le joker libéré), et un rouge 6 qui permet
+    d'étendre la suite directement après le joker sans le détacher — Facile
+    et Intermédiaire se contentent d'étendre les deux bouts (rouge 2 et
+    rouge 6, 2 tuiles) sans jamais toucher au joker.
+    """
+    etat = _partie_2j(niveau)
+    etat["index_joueur_actuel"] = 1
+    bot = etat["joueurs"][1]
+    bot["mise_initiale_faite"] = True
+    etat["plateau"] = [[
+        {"id": "rouge_3_a", "valeur": 3, "couleur": "rouge", "est_joker": False},
+        {"id": "rouge_4_a", "valeur": 4, "couleur": "rouge", "est_joker": False},
+        {"id": "joker_1", "valeur": None, "couleur": None, "est_joker": True},
+    ]]
+    bot["chevalet"] = [
+        {"id": "rouge_2_a", "valeur": 2, "couleur": "rouge", "est_joker": False},
+        {"id": "noir_9_a", "valeur": 9, "couleur": "noir", "est_joker": False},
+        {"id": "bleu_9_a", "valeur": 9, "couleur": "bleu", "est_joker": False},
+        {"id": "rouge_6_a", "valeur": 6, "couleur": "rouge", "est_joker": False},
+    ]
+    return etat
+
+
+def test_avance_detache_le_joker_en_bout_de_suite():
+    """Avancé compare l'extension évidente au détachement du joker libéré
+    par l'extension de l'autre bout, et choisit ce dernier, meilleur ici
+    (3 tuiles posées contre 2)."""
+    etat = _etat_avec_joker_detachable("Avancé")
+    coup = jouer_niveau_avance(etat, 1)
+    assert coup["action"] == "jouer"
+    assert set(coup["ids_tuiles"]) == {"rouge_2_a", "noir_9_a", "bleu_9_a"}
+    plateau = [[tuile_depuis_dict(d) for d in c]
+               for c in coup["nouveau_plateau"]]
+    assert valider_plateau(plateau)["valide"]
+
+
+def test_expert_detache_le_joker_en_bout_de_suite():
+    etat = _etat_avec_joker_detachable("Expert")
+    coup = jouer_niveau_expert(etat, 1)
+    assert coup["action"] == "jouer"
+    assert set(coup["ids_tuiles"]) == {"rouge_2_a", "noir_9_a", "bleu_9_a"}
+
+
+def test_facile_ne_detache_pas_le_joker():
+    """Facile/Intermédiaire restent inchangés : étendent les deux bouts de
+    la suite (rouge 2 et rouge 6) sans jamais détacher le joker du plateau,
+    qui reste coincé entre les tuiles réelles."""
+    etat = _etat_avec_joker_detachable("Facile")
+    coup = jouer_niveau_facile(etat, 1)
+    assert coup["action"] == "jouer"
+    assert set(coup["ids_tuiles"]) == {"rouge_2_a", "rouge_6_a"}
+
+
+def test_intermediaire_ne_detache_pas_le_joker():
+    etat = _etat_avec_joker_detachable("Intermédiaire")
+    coup = jouer_niveau_intermediaire(etat, 1)
+    assert coup["action"] == "jouer"
+    assert set(coup["ids_tuiles"]) == {"rouge_2_a", "rouge_6_a"}
