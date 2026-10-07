@@ -390,6 +390,104 @@ def _coup_avec_joker_recupere(etat, idx, ordre_points=False):
     return meilleur
 
 
+def _jokers_detachables_par_extension(plateau, chevalet):
+    """Jokers en bout de suite détachables grâce à une extension du bout opposé.
+
+    Un joker à une extrémité d'une suite peut être détaché sans aucune tuile
+    de remplacement si une tuile réelle du chevalet, jouée à l'AUTRE
+    extrémité, allonge la portion de tuiles réelles (joker exclu) jusqu'à au
+    moins 3 tuiles : cette portion reste alors valide seule une fois le
+    joker retiré, qui devient libre pour un usage ailleurs sur le plateau.
+
+    Contrairement à :func:`_coup_scission` (tuile réelle en bout, retirable
+    sans rien y ajouter) et à :func:`_jokers_recuperables` (échange direct
+    joker/tuile identique), ce cas porte sur un joker en bout de suite et
+    nécessite de jouer une tuile à l'extrémité opposée pour y parvenir.
+
+    Retourne ``[{"combi_index", "joker", "tuile_extension", "nouveau_combo"}]``.
+    """
+    resultats = []
+    for ci, combo in enumerate(plateau):
+        r = valider_combinaison(combo)
+        if not r["valide"] or r["type"] != "suite" or len(combo) < 3:
+            continue
+        for bout_joker in ("debut", "fin"):
+            joker = combo[0] if bout_joker == "debut" else combo[-1]
+            if not joker.est_joker:
+                continue
+            reste = combo[1:] if bout_joker == "debut" else combo[:-1]
+            if any(t.est_joker for t in reste):
+                continue
+            for t in chevalet:
+                if t.est_joker:
+                    continue
+                nouveau_combo = [t] + reste if bout_joker == "fin" \
+                    else reste + [t]
+                if len(nouveau_combo) >= 3 \
+                        and valider_suite(nouveau_combo)["valide"]:
+                    resultats.append({"combi_index": ci, "joker": joker,
+                                      "tuile_extension": t,
+                                      "nouveau_combo": nouveau_combo})
+    return resultats
+
+
+def _coup_avec_joker_detache(etat, idx, ordre_points=False):
+    """Étend une suite d'un bout pour libérer le joker de l'autre bout, puis
+    tente de replacer ce joker ailleurs (nouvelle combinaison ou extension)
+    pour un coup plus riche que la simple extension évidente.
+
+    Retourne le meilleur coup obtenu (ou ``None`` si aucun joker n'est
+    détachable ainsi, ou si aucun ne peut être replacé ailleurs).
+    """
+    joueur = etat["joueurs"][idx]
+    if not joueur["mise_initiale_faite"]:
+        return None
+    base_plateau = plateau_depuis_dict(etat.get("plateau", []))
+    chevalet = _to_tuiles(joueur["chevalet"])
+    meilleur = None
+    for rec in _jokers_detachables_par_extension(base_plateau, chevalet):
+        ci = rec["combi_index"]
+        joker, t_ext = rec["joker"], rec["tuile_extension"]
+
+        plateau = [list(c) for c in base_plateau]
+        plateau[ci] = rec["nouveau_combo"]
+
+        disponibles = [t for t in chevalet if t.id != t_ext.id] + [joker]
+        resultats = trouver_combinaisons_depuis_chevalet(
+            [t.as_dict() for t in disponibles],
+            etat["config"]["mise_initiale_min"], True)
+        if ordre_points:
+            resultats = sorted(
+                resultats, key=lambda r: (r["points"], len(r["tuiles"])),
+                reverse=True)
+        choisis = _selection_disjointe(resultats)
+
+        ids = [t_ext.id]
+        utilises = {t_ext.id}
+        for r in choisis:
+            plateau.append(list(r["tuiles"]))
+            for t in r["tuiles"]:
+                ids.append(t.id)
+                utilises.add(t.id)
+
+        restantes = [t for t in disponibles if t.id not in utilises]
+        _appliquer_extensions(plateau, restantes, ids)
+
+        joker_place = any(t.id == joker.id for c in plateau for t in c)
+        if not joker_place:
+            continue
+
+        ids_reel = [i for i in ids if i != joker.id]
+        nouveau = _plateau_vers_dict(plateau)
+        if ids_reel and _coup_valide(etat, idx, nouveau, ids_reel):
+            coup = {"action": "jouer", "ids_tuiles": ids_reel,
+                    "nouveau_plateau": nouveau}
+            if meilleur is None or (_valeur_coup(etat, idx, coup)
+                                    > _valeur_coup(etat, idx, meilleur)):
+                meilleur = coup
+    return meilleur
+
+
 def _valeur_coup(etat, idx, coup):
     """Valeur comparative d'un coup candidat : (nb tuiles jouées, points posés)."""
     plateau = plateau_depuis_dict(coup["nouveau_plateau"])
@@ -398,13 +496,15 @@ def _valeur_coup(etat, idx, coup):
 
 
 def _meilleur_coup_avec_joker(etat, idx, ordre_points=False):
-    """Compare l'extension/combinaison évidente et un coup exploitant un
-    joker récupérable du plateau ; retourne le meilleur des deux coups
-    trouvés (ou ``None`` si aucun des deux n'est jouable).
+    """Compare l'extension/combinaison évidente à un coup récupérant un
+    joker par échange direct et à un coup détachant un joker en bout de
+    suite via une extension du bout opposé ; retourne le meilleur des coups
+    trouvés (ou ``None`` si aucun n'est jouable).
     """
     simple = _coup_maximal(etat, idx, ordre_points=ordre_points)
     recupere = _coup_avec_joker_recupere(etat, idx, ordre_points=ordre_points)
-    candidats = [c for c in (simple, recupere) if c]
+    detache = _coup_avec_joker_detache(etat, idx, ordre_points=ordre_points)
+    candidats = [c for c in (simple, recupere, detache) if c]
     if not candidats:
         return None
     return max(candidats, key=lambda c: _valeur_coup(etat, idx, c))
@@ -454,8 +554,9 @@ def jouer_niveau_intermediaire(etat, idx):
 
 def jouer_niveau_avance(etat, idx):
     """Comme intermédiaire + peut scinder une suite longue pour libérer une
-    tuile, et préfère récupérer un joker exploitable du plateau si cela donne
-    un coup plus riche que l'extension la plus évidente."""
+    tuile, et préfère récupérer (échange direct) ou détacher (extension du
+    bout opposé) un joker exploitable du plateau si cela donne un coup plus
+    riche que l'extension la plus évidente."""
     coup = _meilleur_coup_avec_joker(etat, idx, ordre_points=True)
     if coup:
         return coup
