@@ -1396,42 +1396,98 @@ function trouverTuilesAjoutees(ancienPlateau, nouveauPlateau) {
   return ajoutees;
 }
 
-// Anime l'apparition progressive sur le tapis des tuiles de `tuiAjoutees`
-// (une par une, surbrillance dorée) : d'abord affiche `plateauComplet` sans
-// elles, puis les révèle au rythme `delaiEntreTuiles`. Utilisé pour le coup
-// IA en direct (jouerIA) et pour son rejeu à la demande (issue #144).
-async function animerPoseTuiles(tuiAjoutees, plateauComplet, delaiEntreTuiles) {
-  const idsAjoutees = new Set(tuiAjoutees.map(t => t.dict.id));
+// Compare l'ancien et le nouveau plateau et retourne les tuiles déjà posées
+// (présentes dans l'ancien plateau) qui ont rejoint une combinaison
+// différente — cas du réarrangement par l'IA (ex. _coup_scission, qui
+// détache une tuile d'une suite pour former un groupe). Pour chaque
+// combinaison de l'ancien plateau, ses tuiles sont regroupées selon la
+// combinaison du nouveau plateau où elles se retrouvent ; le groupe
+// d'arrivée majoritaire est considéré comme la « continuation » de la
+// combinaison (une simple extension ou une scission qui raccourcit une
+// combinaison sans la vider reste ainsi sa propre continuation), les tuiles
+// parties dans un autre groupe d'arrivée sont, elles, comptées comme
+// déplacées. Une approche par simple différence de voisinage compterait à
+// tort les tuiles restées groupées (ex. le reste d'une suite scindée) comme
+// déplacées dès qu'une seule tuile quitte leur combinaison (issue #149).
+function trouverTuilesDeplacees(ancienPlateau, nouveauPlateau) {
+  const comboApresParId = new Map();
+  (nouveauPlateau || []).forEach((combo, idxCombo) => {
+    combo.forEach((d, idxTuile) => {
+      comboApresParId.set(d.id, { dict: d, idxCombo, idxTuile });
+    });
+  });
 
-  plateauLocal = plateauComplet.map(combo =>
-    combo.filter(d => !idsAjoutees.has(d.id))
-  ).filter(c => c.length > 0);
+  const idsDeplaces = new Set();
+  (ancienPlateau || []).forEach(comboAvant => {
+    const parCible = new Map();
+    comboAvant.map(d => d.id).forEach(id => {
+      const info = comboApresParId.get(id);
+      if (!info) return; // ne devrait pas arriver : une tuile posée n'est jamais retirée du plateau
+      if (!parCible.has(info.idxCombo)) parCible.set(info.idxCombo, []);
+      parCible.get(info.idxCombo).push(id);
+    });
+    if (parCible.size <= 1) return; // toutes les tuiles sont restées ensemble
+
+    let cibleContinuation = null, max = -1;
+    parCible.forEach((ids, cible) => {
+      if (ids.length > max) { max = ids.length; cibleContinuation = cible; }
+    });
+    parCible.forEach((ids, cible) => {
+      if (cible !== cibleContinuation) ids.forEach(id => idsDeplaces.add(id));
+    });
+  });
+
+  return [...idsDeplaces].map(id => comboApresParId.get(id));
+}
+
+// Anime sur le tapis, dans l'ordre : d'abord les tuiles déjà posées qui
+// changent de combinaison (`tuilesDeplacees`, surbrillance bleue — cas d'un
+// réarrangement comme _coup_scission), puis les tuiles neuves venues de la
+// main (`tuiAjoutees`, surbrillance dorée), une par une au rythme
+// `delaiEntreTuiles`. Part de `plateauAvant` (état initial, donc les tuiles
+// déplacées encore dans leur ancienne combinaison) et converge vers
+// `plateauApres`. Utilisé pour le coup IA en direct (jouerIA) et pour son
+// rejeu à la demande (issue #144 ; réarrangement + rythme : issue #149).
+async function animerPoseTuiles(tuiAjoutees, tuilesDeplacees, plateauAvant, plateauApres, delaiEntreTuiles) {
+  const etapes = [
+    ...tuilesDeplacees.map(t => ({ ...t, deplacee: true })),
+    ...tuiAjoutees.map(t => ({ ...t, deplacee: false })),
+  ];
+  const idsAReveler = new Set(etapes.map(e => e.dict.id));
+  const idsRevelees = new Set();
+
+  // Rythme : un coup à plusieurs tuiles défile trop vite pour être bien suivi
+  // visuellement — on ralentit le délai entre chaque tuile dès qu'il y en a
+  // plus de 3 à animer (issue #149).
+  const delaiEffectif = etapes.length > 3
+    ? Math.round(delaiEntreTuiles * 1.4)
+    : delaiEntreTuiles;
+
+  plateauLocal = clone(plateauAvant || []).filter(c => c.length > 0);
   rafraichirPlateau();
 
-  for (let i = 0; i < tuiAjoutees.length; i++) {
+  for (let i = 0; i < etapes.length; i++) {
     await new Promise(r =>
-      setTimeout(r, i === 0 ? 200 : delaiEntreTuiles));
-    const { dict } = tuiAjoutees[i];
+      setTimeout(r, i === 0 ? 200 : delaiEffectif));
+    idsRevelees.add(etapes[i].dict.id);
 
-    // Reconstruire progressivement le plateau visible :
-    // tuiles originales + tuiles déjà animées jusqu'à i inclus
-    plateauLocal = plateauComplet.map(combo =>
-      combo.filter(d => {
-        const dejaPosee = tuiAjoutees.slice(0, i + 1)
-          .some(t => t.dict.id === d.id);
-        return !idsAjoutees.has(d.id) || dejaPosee;
-      })
+    // Reconstruire progressivement le plateau visible à partir du plateau
+    // final : tuiles non concernées par l'animation + tuiles déjà révélées.
+    plateauLocal = (plateauApres || []).map(combo =>
+      combo.filter(d => !idsAReveler.has(d.id) || idsRevelees.has(d.id))
     ).filter(c => c.length > 0);
 
     rafraichirPlateau();
 
-    // Appliquer l'animation sur la tuile qui vient d'apparaître
+    const { dict } = etapes[i];
+    const classeApparition = etapes[i].deplacee ? "tuile-ia-deplacee" : "tuile-ia-posee";
+    // Appliquer l'animation sur la tuile qui vient d'apparaître / de bouger
     setTimeout(() => {
       document.querySelectorAll("#zone-plateau .tuile-jeu").forEach(el => {
         if (el.dataset.id === dict.id) {
-          el.classList.add("tuile-ia-posee");
+          el.classList.add(classeApparition);
           setTimeout(() => {
-            el.classList.remove("tuile-ia-posee");
+            el.classList.remove(classeApparition);
             el.classList.add("tuile-ia-highlight");
           }, 700);
         }
@@ -1489,10 +1545,12 @@ async function jouerIA() {
       return;
     }
 
-    // Calculer les tuiles ajoutées AVANT de mettre à jour l'état
-    const ancienPlateau = clone(etat.plateau || []);
-    const nouvelEtat    = res.etat;
-    const tuiAjoutees   = trouverTuilesAjoutees(
+    // Calculer les tuiles ajoutées / déplacées AVANT de mettre à jour l'état
+    const ancienPlateau   = clone(etat.plateau || []);
+    const nouvelEtat      = res.etat;
+    const tuiAjoutees     = trouverTuilesAjoutees(
+      ancienPlateau, nouvelEtat.plateau || []);
+    const tuilesDeplacees = trouverTuilesDeplacees(
       ancienPlateau, nouvelEtat.plateau || []);
 
     // Mettre à jour l'état (mais on reconstruit le plateau visible à la main)
@@ -1500,8 +1558,8 @@ async function jouerIA() {
     reconcilierChevalet(); // le tour d'une IA ne change pas l'ordre du chevalet humain
     reinitTour();
 
-    // Cas « pioche » ou « passe » : aucune tuile ajoutée
-    if (tuiAjoutees.length === 0) {
+    // Cas « pioche » ou « passe » : aucune tuile ajoutée ni déplacée
+    if (tuiAjoutees.length === 0 && tuilesDeplacees.length === 0) {
       rafraichirFichesJoueurs();
       mettreAJourSac((etat.pioche || []).length);
       const h = nouvelEtat.historique || [];
@@ -1524,7 +1582,9 @@ async function jouerIA() {
     rafraichirBoutonRejouerIA();
     mettreAJourSac((etat.pioche || []).length);
 
-    await animerPoseTuiles(tuiAjoutees, clone(etat.plateau || []), DELAI_ENTRE_TUILES);
+    await animerPoseTuiles(
+      tuiAjoutees, tuilesDeplacees,
+      ancienPlateau, clone(etat.plateau || []), DELAI_ENTRE_TUILES);
 
     // Finaliser : plateau complet + rafraîchissement normal
     plateauLocal = clone(etat.plateau || []);
@@ -1583,13 +1643,16 @@ async function rejouerDernierCoupIA() {
 
   const tuiAjoutees = trouverTuilesAjoutees(
     coup.plateau_avant, coup.plateau_apres);
-  if (tuiAjoutees.length === 0) return;
+  const tuilesDeplacees = trouverTuilesDeplacees(
+    coup.plateau_avant, coup.plateau_apres);
+  if (tuiAjoutees.length === 0 && tuilesDeplacees.length === 0) return;
 
   const btn = document.getElementById("btn-rejouer-coup-ia");
   if (btn) btn.disabled = true;
 
   await animerPoseTuiles(
-    tuiAjoutees, clone(etat.plateau || []), vitesseIA().tuile);
+    tuiAjoutees, tuilesDeplacees,
+    coup.plateau_avant, coup.plateau_apres, vitesseIA().tuile);
 
   plateauLocal = clone(etat.plateau || []);
   rafraichirPlateau();
