@@ -411,21 +411,34 @@ function rafraichirPlateau() {
         // évaluée avant l'ancienne branche « joker-recuperable » plus bas, qui
         // de ce fait ne peut en réalité jamais s'exécuter pendant son propre
         // tour — tapisManipulable() y est alors systématiquement vrai).
-        // Sur une autre combo, aucun handler par tuile : le clic remonte au
-        // conteneur qui la désigne comme cible.
-        if (estActive) {
-          const tuileSelDict = trouverDictTuile(tuileSelectionnee);
-          const estEchangeJoker = d.est_joker && tuileSelDict &&
-            chevaletLocal.some((t) => t.id === tuileSelDict.id) &&
-            peutRemplacerJoker(tuileSelDict, valeurJokerDansCombo(combo, idxTuile));
-          el.classList.add("tapis-manipulable");
-          if (estEchangeJoker) el.classList.add("joker-recuperable");
+        // L'échange est proposé dès le PREMIER clic, même si la combo n'est
+        // pas encore active (#146, suite #143 qui ne le proposait qu'une fois
+        // la combo activée) : activer une combo insère les zones d'extension
+        // internes (afficherZones), ce qui décale horizontalement les tuiles
+        // suivantes — un second clic de l'utilisateur au même endroit (geste
+        // naturel pour « cliquer deux fois sur le joker ») rate alors sa
+        // cible et retombe sur la tuile voisine, d'où l'ajout à côté au lieu
+        // de l'échange, constaté sur un groupe où le joker n'est pas en tête.
+        const tuileSelDict = trouverDictTuile(tuileSelectionnee);
+        const estEchangeJoker = d.est_joker && tuileSelDict &&
+          chevaletLocal.some((t) => t.id === tuileSelDict.id) &&
+          peutRemplacerJoker(tuileSelDict, valeurJokerDansCombo(combo, idxTuile));
+        if (estEchangeJoker) {
+          el.classList.add("tapis-manipulable", "joker-recuperable");
           el.addEventListener("click", (e) => {
             e.stopPropagation();
-            if (estEchangeJoker) tenterRecupererJoker(idxCombo, idxTuile, d);
-            else insererTuileTapis(idxCombo, idxTuile);
+            tenterRecupererJoker(idxCombo, idxTuile, d);
+          });
+        } else if (estActive) {
+          el.classList.add("tapis-manipulable");
+          el.addEventListener("click", (e) => {
+            e.stopPropagation();
+            insererTuileTapis(idxCombo, idxTuile);
           });
         }
+        // Sur une combo non active et sans échange possible pour cette tuile,
+        // aucun handler par tuile : le clic remonte au conteneur qui la
+        // désigne comme cible.
       } else if (tapisManipulable()) {
         // Tapis manipulable (aucune tuile prête) : toute tuile peut être « prise »
         // (dès le 1er clic, elle rejoint directement la zone de travail active,
@@ -1179,6 +1192,7 @@ function reinitTour() {
 
 // ------------------------------------------------------------ actions serveur
 async function onAnnuler() {
+  if (!estMonTour()) { toast("Ce n'est pas votre tour", "erreur"); return; }
   try {
     const res = await window.pywebview.api.jeu_annuler();
     if (res && res.etat) etat = res.etat;
@@ -1213,6 +1227,7 @@ async function onVerifierCalc() {
 }
 
 async function onJouer() {
+  if (!estMonTour()) { toast("Ce n'est pas votre tour", "erreur"); return; }
   const rangeesPosees = travail.filter((r) => r.length > 0);
   const nouveauPlateau = [...plateauLocal, ...rangeesPosees];
   try {
@@ -1300,6 +1315,11 @@ function animerPiocheeIA(idxIA, apres) {
 }
 
 async function onPiocher() {
+  // Garde client en plus du bouton désactivé (#146) : un clic en vol juste
+  // avant que rafraichirBoutons() ne désactive le bouton (ex. la fenêtre de
+  // latence avant le coup auto de l'IA) ne doit rien déclencher — le serveur
+  // refuse de toute façon l'action hors tour, mais autant l'éviter ici aussi.
+  if (!estMonTour()) { toast("Ce n'est pas votre tour", "erreur"); return; }
   try {
     const res = await window.pywebview.api.jeu_piocher();
     if (res && res.ok) {
@@ -1330,6 +1350,7 @@ async function onPiocher() {
 }
 
 async function onPasser() {
+  if (!estMonTour()) { toast("Ce n'est pas votre tour", "erreur"); return; }
   try {
     const res = await window.pywebview.api.jeu_passer();
     if (res && res.ok) {

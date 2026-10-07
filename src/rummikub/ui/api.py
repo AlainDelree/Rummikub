@@ -13,6 +13,18 @@ class Api:
     def __init__(self, app):
         self._app = app   # référence à ApplicationRummikub
 
+    def _tour_est_humain(self, etat):
+        """Vrai si c'est le tour du joueur humain dans `etat` (#146) : une
+        action de jeu (pioche, pose, passe, annulation) déclenchée côté client
+        pendant le tour de l'IA — bouton cliqué dans la fenêtre de latence
+        avant son coup auto, ou tout autre décalage client/serveur — doit être
+        ignorée ici, pas seulement masquée côté JS, sous peine de faire
+        avancer `index_joueur_actuel` deux fois (une fois pour cette action,
+        une fois pour le coup IA programmé) et de désynchroniser durablement
+        le client, qui ne revoit alors plus jamais la main."""
+        idx = etat["index_joueur_actuel"]
+        return not etat["joueurs"][idx]["est_ia"]
+
     def _differer_navigation(self, fn):
         """Exécute une navigation (load_url) hors du thread de l'appel API.
 
@@ -60,6 +72,8 @@ class Api:
         # data = {"ids_tuiles": [...], "nouveau_plateau": [[dict_tuile,...], ...]}
         from rummikub.moteur.partie import jouer_tour, backup_debut_tour
         etat = self._app.etat_jeu
+        if not self._tour_est_humain(etat):
+            return {"ok": False, "erreur": "Pas votre tour"}
         res = jouer_tour(etat, data["ids_tuiles"], data["nouveau_plateau"])
         if res["ok"]:
             self._app.etat_jeu = res["etat"]
@@ -72,6 +86,8 @@ class Api:
 
     def jeu_piocher(self):
         from rummikub.moteur.partie import piocher, backup_debut_tour
+        if not self._tour_est_humain(self._app.etat_jeu):
+            return {"ok": False, "erreur": "Pas votre tour"}
         res = piocher(self._app.etat_jeu)
         self._app.etat_jeu = res["etat"]
         backup_debut_tour(self._app.etat_jeu)
@@ -83,6 +99,8 @@ class Api:
 
     def jeu_passer(self):
         from rummikub.moteur.partie import passer_tour, backup_debut_tour
+        if not self._tour_est_humain(self._app.etat_jeu):
+            return {"ok": False, "erreur": "Pas votre tour"}
         res = passer_tour(self._app.etat_jeu)
         self._app.etat_jeu = res["etat"]
         backup_debut_tour(self._app.etat_jeu)
@@ -94,6 +112,8 @@ class Api:
 
     def jeu_annuler(self):
         from rummikub.moteur.partie import annuler_tour
+        if not self._tour_est_humain(self._app.etat_jeu):
+            return {"ok": False, "erreur": "Pas votre tour"}
         annuler_tour(self._app.etat_jeu)
         from rummikub.persistance.journal import logger_action
         logger_action(self._app.etat_jeu, "annulation")
