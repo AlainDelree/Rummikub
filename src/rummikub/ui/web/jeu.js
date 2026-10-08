@@ -38,6 +38,14 @@ let dragSourceId = null;      // id de la tuile en cours de glisser-déposer
 let dernierePositionSouris = { x: 0, y: 0 }; // dernière position connue du curseur (fantôme, issue #50)
 let triAutoActif = false;     // case "Tri automatique" (issue #126) : insère les tuiles piochées déjà triées
 let indexAutoIAProgramme = null; // index_joueur_actuel pour lequel un jeu auto de l'IA est déjà programmé (issue #126)
+// true pendant toute la durée du coup IA en direct (jouerIA), y compris
+// l'animation de pose tuile par tuile APRÈS que le serveur ait déjà avancé
+// le tour : le serveur a traité le coup dès que `etat` est mis à jour, donc
+// estMonTour() redeviendrait vrai avant la fin de l'animation visuelle sans
+// ce garde-fou — un clic sur "Piocher" pendant cette fenêtre serait alors
+// accepté par le serveur tout en désynchronisant l'animation en cours
+// (issue #151, suite de #146 qui ne couvrait que la latence AVANT le coup).
+let animationCoupIAEnCours = false;
 let dezoomAutoActif = true;     // réglage "Dé-zoom automatique du tapis" (issue #135) ;
                                   // persisté via Reglages
 
@@ -67,7 +75,7 @@ function joueurCourantEstIA() {
 
 function estMonTour() {
   return etat && etat.index_joueur_actuel === indexHumain() &&
-         !etat.manche_terminee;
+         !etat.manche_terminee && !animationCoupIAEnCours;
 }
 
 // Le tapis est manipulable dès que c'est le tour du joueur humain et que sa
@@ -1514,6 +1522,11 @@ function effacerSurbrillanceIA() {
 async function jouerIA() {
   const btnIA = document.querySelector(".btn-jouer-ia");
   if (btnIA) btnIA.disabled = true;
+  // Couvre toute la durée du coup IA, y compris l'animation de pose qui suit
+  // la réponse serveur : estMonTour() doit rester fausse jusqu'à la toute
+  // fin, sinon le bouton "Piocher" se réactive dès que `etat` est mis à jour
+  // (donc avant que l'animation visuelle n'ait fini) — issue #151.
+  animationCoupIAEnCours = true;
 
   const vitesse = vitesseIA();
   const delaiReflexion     = vitesse.reflexion;
@@ -1541,6 +1554,7 @@ async function jouerIA() {
     if (!res || !res.ok || !res.etat) {
       toast((res && res.erreur) || "Tour IA impossible", "erreur");
       if (ficheActive) ficheActive.classList.remove("ia-reflechit", "ia-joue");
+      animationCoupIAEnCours = false;
       rafraichirTout();
       return;
     }
@@ -1572,13 +1586,13 @@ async function jouerIA() {
       } else {
         await new Promise(r => setTimeout(r, 800));
       }
+      animationCoupIAEnCours = false;
       rafraichirTout();
       return;
     }
 
     rafraichirFichesJoueurs();
     rafraichirChevalet();
-    rafraichirBoutons();
     rafraichirBoutonRejouerIA();
     mettreAJourSac((etat.pioche || []).length);
 
@@ -1588,6 +1602,7 @@ async function jouerIA() {
 
     // Finaliser : plateau complet + rafraîchissement normal
     plateauLocal = clone(etat.plateau || []);
+    animationCoupIAEnCours = false;
     rafraichirPlateau();
     rafraichirTout();
     autoZoomSiTapisDeborde(); // issue #104 : dézoome d'un cran si le tapis déborde
@@ -1596,6 +1611,7 @@ async function jouerIA() {
 
   } catch (e) {
     toast("Erreur IA : " + e, "erreur");
+    animationCoupIAEnCours = false;
     rafraichirTout();
   }
 }
