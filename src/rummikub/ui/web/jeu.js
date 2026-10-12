@@ -1663,6 +1663,11 @@ async function rejouerDernierCoupIA() {
     const ok = await confirmerRejeuIA(coup.nom);
     if (!ok) return;
     await onAnnuler(); // remet les tuiles du tour en cours dans la main
+    // onAnnuler() repart de l'ordre serveur (reinitChevaletLocal), qui n'est
+    // pas trié : le tri du chevalet n'existe que côté client et est donc
+    // perdu à ce moment-là. On le réapplique ici si le tri automatique est
+    // actif, pour rester cohérent avec son réglage (issue #158).
+    if (triAutoActif) trierChevalet();
   }
 
   const tuiAjoutees = trouverTuilesAjoutees(
