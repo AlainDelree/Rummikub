@@ -146,4 +146,28 @@ icône `assets/rummikub.ico` (facultative, absente → aucune icône).
 - `tests/test_ia.py` : les 5 niveaux ne plantent pas et renvoient une action
   valide.
 - État actuel : **25 tests passent** (`pytest -q` → `25 passed`).
+
+## 7. Vérification empirique d'un comportement front-end
+
+- **Ne jamais lancer l'application pywebview réelle** (`python3 main.py`,
+  qui appelle `webview.start()`) **ni un navigateur piloté sur
+  l'application réelle** pour vérifier visuellement un comportement
+  front-end (`jeu.js`/`jeu.html`/`jeu.css`, `accueil.js`/`accueil.html`...).
+  Dans l'environnement headless sans affichage, ces commandes bloquent
+  indéfiniment et provoquent un dépassement de TIMEOUT (vécu sur #140,
+  #155 et d'autres issues avant elles).
+- **Méthode à utiliser systématiquement** (déjà appliquée avec succès sur
+  #128, #135, #140, #146, #151) : charger directement le fichier front
+  concerné (`src/rummikub/ui/web/jeu.html`, `accueil.html`, etc.) via
+  **Playwright**, en fournissant un **mock minimal de
+  `window.pywebview.api`** (objet JS injecté avant chargement de la page,
+  avec les méthodes utilisées par le script comme stubs/fausses promesses).
+- Si le scénario a besoin d'un état de partie réaliste (plateau, chevalets,
+  scores...), le **construire via le moteur réel** (`creer_partie`,
+  `jouer_tour`, etc., importés côté Python et sérialisés en JSON pour le
+  mock) plutôt que de bidouiller un DOM vide ou des données inventées à la
+  main.
+- Cette règle s'applique à **toute** vérification front-end future sur ce
+  projet, sans qu'il soit nécessaire de la rappeler dans la consigne de
+  l'issue.
 </content>
