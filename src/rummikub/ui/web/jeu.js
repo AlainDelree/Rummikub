@@ -628,16 +628,35 @@ function rafraichirBoutons() {
   handlerBoutonPioche = handler;
 }
 
-// Active/désactive le bouton de rejeu selon qu'un coup IA est disponible
-// (issue #144, remplace l'ancienne liste "Derniers coups").
+// Active/désactive le bouton de rejeu selon le TOUT DERNIER coup de l'IA,
+// quel qu'il soit (issue #144, remplace l'ancienne liste "Derniers coups").
+// Seule une vraie pose peut être rejouée en animation ; une pioche ou un
+// passage n'ont rien à rejouer, le bouton reste désactivé mais affiche quand
+// même fidèlement la nature de ce dernier coup (issue #157 : avant ce
+// correctif, une pioche/passe laissait affiché le rejeu d'une ancienne pose).
 function rafraichirBoutonRejouerIA() {
   const btn = document.getElementById("btn-rejouer-coup-ia");
   if (!btn) return;
   const coup = etat.dernier_coup_ia;
-  btn.disabled = !coup;
-  btn.textContent = coup
-    ? "▶ Dernier coup joué par " + coup.nom
-    : "▶ Dernier coup joué par l'ordinateur";
+  if (!coup) {
+    btn.disabled = true;
+    btn.textContent = "▶ Dernier coup joué par l'ordinateur";
+    return;
+  }
+  // Compat anciennes parties sauvegardées (avant #157) : le champ "type"
+  // n'existait pas encore et le coup mémorisé n'était alors jamais qu'une
+  // pose.
+  const type = coup.type || "pose";
+  if (type === "pose") {
+    btn.disabled = false;
+    btn.textContent = "▶ Dernier coup joué par " + coup.nom;
+  } else if (type === "piocher") {
+    btn.disabled = true;
+    btn.textContent = "⬇ " + coup.nom + " a pioché";
+  } else {
+    btn.disabled = true;
+    btn.textContent = "⏭ " + coup.nom + " a passé son tour";
+  }
 }
 
 // ------------------------------------------------------------ sélection / placement
@@ -1657,7 +1676,7 @@ function confirmerRejeuIA(nomIA) {
 // (issue #144, modale stylée en #147).
 async function rejouerDernierCoupIA() {
   const coup = etat.dernier_coup_ia;
-  if (!coup) return;
+  if (!coup || (coup.type || "pose") !== "pose") return; // rien à rejouer (pioche/passe)
 
   if (tuilesCeTour.length > 0) {
     const ok = await confirmerRejeuIA(coup.nom);

@@ -167,29 +167,33 @@ class Api:
         plateau_avant = copy.deepcopy(etat["plateau"])
         res_ia = jouer_ia(etat, idx)
         coup_joue = False
+        type_reel = res_ia["action"]
         if res_ia["action"] == "jouer":
             res = jouer_tour(etat, res_ia["ids_tuiles"],
                              res_ia["nouveau_plateau"])
             if res["ok"]:
                 coup_joue = True
+                type_reel = "pose"
             else:
                 # L'IA a proposé un coup invalide → pioche de secours.
                 annuler_tour(etat)
                 res = piocher(etat)
+                type_reel = "piocher"
         elif res_ia["action"] == "piocher":
             res = piocher(etat)
         else:
             res = passer_tour(etat)
-        # Mémorise le dernier coup de pose de l'IA pour permettre son rejeu
-        # animé à la demande (issue #144) — uniquement une vraie pose, pas
-        # une pioche/passe (rien à rejouer dans ce cas).
-        if coup_joue:
-            etat["dernier_coup_ia"] = {
-                "joueur_index": idx,
-                "nom": etat["joueurs"][idx]["nom"],
-                "plateau_avant": plateau_avant,
-                "plateau_apres": copy.deepcopy(etat["plateau"]),
-            }
+        # Mémorise le TOUT DERNIER coup de l'IA (pose, pioche ou passe) pour
+        # permettre son rejeu/affichage à la demande (issue #144, corrigé en
+        # #157 : avant ce correctif, seule une pose écrasait ce champ, si bien
+        # qu'une pioche/passe laissait figé un ancien rejeu de pose périmé).
+        etat["dernier_coup_ia"] = {
+            "type": type_reel,
+            "joueur_index": idx,
+            "nom": etat["joueurs"][idx]["nom"],
+            "plateau_avant": plateau_avant,
+            "plateau_apres": copy.deepcopy(etat["plateau"]),
+        }
         self._app.etat_jeu = res["etat"]
         backup_debut_tour(self._app.etat_jeu)
         sauvegarder_partie(self._app.etat_jeu)
