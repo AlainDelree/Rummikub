@@ -1454,6 +1454,17 @@ function vitesseIA() {
     || VITESSES_IA["Normale"];
 }
 
+// Vitesse du REJEU à la demande du dernier coup IA (réglage distinct de la
+// vitesse de l'ordinateur ci-dessus, issue #160) : multiplicateur appliqué au
+// délai entre tuiles. "Rapide" reproduit exactement le comportement livré
+// par #149 (aucun ralentissement additionnel) ; "Moyenne" et "Lente"
+// ralentissent le rythme proportionnellement.
+const MULTIPLICATEURS_REJEU_IA = { "Lente": 2.2, "Moyenne": 1.5, "Rapide": 1 };
+function multiplicateurRejeuIA() {
+  return MULTIPLICATEURS_REJEU_IA[(etat.config && etat.config.vitesse_rejeu_ia) || "Rapide"]
+    || 1;
+}
+
 // Compare l'ancien et le nouveau plateau et retourne les tuiles nouvellement
 // posées par l'IA, dans l'ordre de pose (pour l'animation une par une).
 function trouverTuilesAjoutees(ancienPlateau, nouveauPlateau) {
@@ -1738,9 +1749,10 @@ async function rejouerDernierCoupIA() {
   const btn = document.getElementById("btn-rejouer-coup-ia");
   if (btn) btn.disabled = true;
 
+  const delaiRejeu = Math.round(vitesseIA().tuile * multiplicateurRejeuIA());
   await animerPoseTuiles(
     tuiAjoutees, tuilesDeplacees,
-    coup.plateau_avant, coup.plateau_apres, vitesseIA().tuile);
+    coup.plateau_avant, coup.plateau_apres, delaiRejeu);
 
   plateauLocal = clone(etat.plateau || []);
   rafraichirPlateau();
