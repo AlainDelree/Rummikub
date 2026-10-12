@@ -1,5 +1,15 @@
 # Issue #67 — Réglages : « Vitesse de l'ordinateur » déplacée vers l'onglet Général
 
+# Changelog — issue #161
+
+- doc(contexte) : ajout d'une section §7 « Vérification empirique d'un
+  comportement front-end » à `CONTEXTE.md` — interdiction de lancer
+  l'application pywebview réelle (`main.py`) ou un navigateur piloté sur
+  l'application réelle pour vérifier un comportement front-end ; méthode
+  imposée : charger `jeu.html`/`accueil.html` directement via Playwright
+  avec un mock de `window.pywebview.api`, et un état de partie construit
+  via le moteur réel (`creer_partie`, etc.) si besoin plutôt qu'un DOM vide.
+
 # Issue #160 — Réglage de la vitesse du rejeu du dernier coup IA (lent/moyen/rapide)
 
 ## Contexte
