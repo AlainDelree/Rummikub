@@ -32,6 +32,11 @@ let dernierClicTapis = { id: null, temps: 0 };
 // que ce 2e clic soit simplement absorbé (finaliserSelectionTapis) plutôt que
 // reciblé comme destination (issue #133).
 let derniereTuilePriseTapis = { idxCombo: null, temps: 0 };
+// Minuteur de l'activation différée d'une combinaison du tapis comme cible,
+// quand le 1er clic qui la déclenche porte en réalité sur une tuile précise
+// (voir le commentaire détaillé dans rafraichirPlateau, branche modeCible) —
+// annulé si un 2e clic sur la même tuile survient avant son échéance (issue #156).
+let activationCombinaisonDifferee = null;
 // Détection de l'appui long (500 ms) sur une tuile du chevalet → active la réorg
 let appuiLong = { timer: null, id: null, declenche: false };
 let dragSourceId = null;      // id de la tuile en cours de glisser-déposer
@@ -442,6 +447,10 @@ function rafraichirPlateau() {
           if (dernierClicTapis.id === d.id &&
               maintenant - dernierClicTapis.temps < 350) {
             e.stopImmediatePropagation();
+            if (activationCombinaisonDifferee) {
+              clearTimeout(activationCombinaisonDifferee);
+              activationCombinaisonDifferee = null;
+            }
             dernierClicTapis = { id: null, temps: 0 };
             prendreTuileTapis(idxCombo, idxTuile);
             finaliserSelectionTapis();
@@ -491,10 +500,30 @@ function rafraichirPlateau() {
             e.stopPropagation();
             insererTuileTapis(idxCombo, idxTuile);
           });
+        } else {
+          // Combo non active et sans échange possible pour cette tuile (issue
+          // #156, même cause que le commentaire #146 ci-dessus mais pour la
+          // prise directe d'une tuile plutôt que l'échange d'un joker) : un
+          // clic ici active normalement la combo comme cible via le conteneur
+          // « combo-cliquable » (bulle), ce qui révèle ses zones d'insertion
+          // et décale les tuiles suivantes. Si ce clic est en réalité le 1er
+          // d'un double-clic visant à PRENDRE cette tuile précise (ex. un
+          // joker fraîchement libéré en bout de combinaison), le 2e clic — visé
+          // aux mêmes coordonnées écran — rate alors sa cible décalée et
+          // atterrit sur une zone d'insertion ou une tuile voisine : la prise
+          // échoue de façon intermittente selon la position de la tuile dans
+          // sa combinaison. On coupe la remontée au conteneur et on diffère
+          // l'activation de 350 ms (durée de la fenêtre de double-clic) ; le
+          // détecteur ci-dessus annule ce délai dès qu'il détecte le 2e clic.
+          el.addEventListener("click", (e) => {
+            e.stopPropagation();
+            activationCombinaisonDifferee = setTimeout(() => {
+              activationCombinaisonDifferee = null;
+              comboActive = idxCombo;
+              rafraichirPlateau();
+            }, 350);
+          });
         }
-        // Sur une combo non active et sans échange possible pour cette tuile,
-        // aucun handler par tuile : le clic remonte au conteneur qui la
-        // désigne comme cible.
       } else if (tapisManipulable()) {
         // Tapis manipulable (aucune tuile prête) : toute tuile peut être « prise »
         // (dès le 1er clic, elle rejoint directement la zone de travail active,
