@@ -28,6 +28,31 @@ body { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
 .sac-label { font-size: 0.7rem; color: rgba(255,255,255,0.6);
   text-align: center; margin-top: 2px; }
 
+/* Légende des pourtours de tuiles (issue #159), sous le sac de pioche :
+   de vraies tuiles miniatures (mêmes classes qu'en jeu) avec leur pourtour,
+   pour que la signification de chaque couleur soit immédiatement visible. */
+#legende-couleurs {
+  display: flex; flex-direction: column; gap: 6px;
+  width: 100%; margin-top: 8px; padding-top: 8px;
+  border-top: 1px solid rgba(255,255,255,0.15);
+}
+.legende-item { display: flex; align-items: center; gap: 8px; }
+.legende-item span { font-size: 0.68rem; line-height: 1.25;
+  color: rgba(255,255,255,0.75); }
+.legende-tuile-mini { --tw: 22px; cursor: default; flex-shrink: 0; }
+.legende-groupe-mini {
+  padding: 3px; gap: 2px; flex-shrink: 0;
+  animation: none; /* pas de clignotement permanent dans la légende */
+}
+/* Pourtour bleu (tuile de l'IA réarrangée pendant un rejeu, issue #149) :
+   figé (sans l'animation d'apparition) pour un affichage statique en légende. */
+.legende-tuile-mini.tuile-ia-deplacee {
+  animation: none;
+  border-color: rgba(90,170,255,0.9);
+  box-shadow: 0 0 6px rgba(90,170,255,0.7),
+              0 3px 5px rgba(40,30,10,0.38);
+}
+
 #corps-jeu { display: flex; flex: 1; overflow: hidden; gap: 0; }
 
 #colonne-gauche { width: 240px; min-width: 200px;

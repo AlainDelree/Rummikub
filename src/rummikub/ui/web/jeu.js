@@ -202,6 +202,46 @@ function mettreAJourSac(nb) {
     <div class="sac-label">tuiles</div>`;
 }
 
+// Légende des pourtours de tuiles (issue #159), affichée sous le sac de
+// pioche : de vraies tuiles miniatures (mêmes classes qu'en jeu, donc
+// toujours cohérentes avec les couleurs réelles) plutôt qu'une simple liste
+// de texte. Statique : ne dépend pas de l'état de la partie, construite une
+// seule fois à l'init.
+function afficherLegendeCouleurs() {
+  const cont = document.getElementById("legende-couleurs");
+  if (!cont) return;
+
+  const miniTuile = (valeur, classe) => {
+    const el = creerTuileJeu(valeur, "noir", false);
+    el.classList.add("legende-tuile-mini");
+    if (classe) el.classList.add(classe);
+    return el;
+  };
+
+  const item = (exemple, texte) => {
+    const div = document.createElement("div");
+    div.className = "legende-item";
+    div.appendChild(exemple);
+    const span = document.createElement("span");
+    span.textContent = texte;
+    div.appendChild(span);
+    return div;
+  };
+
+  cont.appendChild(item(miniTuile(7, "ce-tour"),
+    "Nouvelle tuile posée depuis la main ce tour"));
+  cont.appendChild(item(miniTuile(7, "deplacee-tapis"),
+    "Tuile du tapis déplacée ce tour"));
+  cont.appendChild(item(miniTuile(7, "tuile-ia-deplacee"),
+    "Tuile de l'IA réarrangée pendant un rejeu"));
+
+  const groupe = document.createElement("div");
+  groupe.className = "groupe-combinaison combi-invalide legende-groupe-mini";
+  groupe.appendChild(miniTuile(5, null));
+  groupe.appendChild(miniTuile(6, null));
+  cont.appendChild(item(groupe, "Combinaison invalide"));
+}
+
 // ------------------------------------------------------------ rafraîchissement
 function rafraichirTout() {
   if (!etat) return;
@@ -2040,6 +2080,7 @@ function autoZoomSiTapisDeborde() {
 // ------------------------------------------------------------ init
 async function init() {
   brancherEvenements();
+  afficherLegendeCouleurs();
   try {
     etat = await window.pywebview.api.jeu_get_etat();
   } catch (e) {
