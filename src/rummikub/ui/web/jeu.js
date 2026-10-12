@@ -48,6 +48,14 @@ let indexAutoIAProgramme = null; // index_joueur_actuel pour lequel un jeu auto 
 let animationCoupIAEnCours = false;
 let dezoomAutoActif = true;     // réglage "Dé-zoom automatique du tapis" (issue #135) ;
                                   // persisté via Reglages
+// issue #155 : dès que le joueur touche lui-même au zoom (clic sur 100/75/50%) une
+// seule fois pendant la partie en cours, il a compris le principe et gère lui-même —
+// le dé-zoom automatique ne doit plus RIEN imposer pour le reste de CETTE partie,
+// quel que soit l'état de débordement aux tours suivants. Contrairement à
+// `dezoomAutoActif` (réglage global persisté entre les parties), ce drapeau est propre
+// à la partie en cours : une simple variable JS, naturellement remise à false à chaque
+// chargement de jeu.html (nouvelle partie ou reprise), sans persistance côté serveur.
+let zoomModifieManuellementCettePartie = false;
 
 // Signatures (listes d'ids jointes par "|") des combinaisons signalées comme
 // invalides par le dernier contrôle serveur (Vérifier/Jouer) — issue #136.
@@ -1929,6 +1937,10 @@ function brancherZoomTapis() {
   appliquerZoomTapis(initial);
   boutons.forEach((b) => {
     b.addEventListener("click", () => {
+      // issue #155 : un clic manuel désactive définitivement le dé-zoom automatique
+      // pour le reste de cette partie (restauration du niveau mémorisé au chargement
+      // de la page, ci-dessus, n'est PAS un clic manuel et ne compte donc pas).
+      zoomModifieManuellementCettePartie = true;
       appliquerZoomTapis(b.dataset.zoom);
       try { localStorage.setItem(ZOOM_TAPIS_CLE, b.dataset.zoom); } catch (e) {}
     });
@@ -1939,9 +1951,17 @@ function brancherZoomTapis() {
 // contenu du tapis dépasse la zone visible (#zone-plateau-scroll : hauteur bornée
 // + défilement), on réduit le zoom d'UN cran (100% → 75% → 50%) pour rendre la
 // combinaison posée visible. On ne descend jamais sous le niveau minimal et on ne
-// fait rien si tout est déjà visible. Le joueur garde la main : il peut ensuite
-// zoomer/dézoomer librement, l'automatisme ne se redéclenche qu'à la pose suivante.
+// fait rien si tout est déjà visible.
 // Peut être désactivé via le réglage "Dé-zoom automatique du tapis" (issue #135).
+//
+// issue #155 : tant que le joueur n'a jamais touché lui-même au zoom pendant la
+// partie en cours, cet automatisme continue de s'appliquer à CHAQUE tour (il est
+// réévalué à chaque pose, cf. les appels dans jouerIA/onJouer) — un dé-zoom
+// automatique à 75% n'est donc plus "oublié" dès le tour suivant si le tapis déborde
+// encore. Mais dès que le joueur clique une seule fois sur un bouton de zoom
+// (`zoomModifieManuellementCettePartie`, cf. brancherZoomTapis), on considère qu'il a
+// compris le principe et veut gérer lui-même : l'automatisme n'impose plus RIEN pour
+// le reste de cette partie, quel que soit l'état de débordement aux tours suivants.
 //
 // issue #140 (suite #135) : ce niveau n'est PLUS mémorisé dans localStorage (contrairement
 // à un clic manuel sur un bouton de zoom, cf. brancherZoomTapis). Sinon, un dé-zoom
@@ -1954,12 +1974,29 @@ function brancherZoomTapis() {
 // retrouver le bon niveau pour une partie reprise dont le tapis est déjà chargé.
 function autoZoomSiTapisDeborde() {
   if (!dezoomAutoActif) return; // réglage désactivé (issue #135)
+  if (zoomModifieManuellementCettePartie) return; // issue #155 : main laissée au joueur
   const scroll = document.getElementById("zone-plateau-scroll");
   const plateau = document.getElementById("zone-plateau");
   if (!scroll || !plateau) return;
   // La lecture de scrollHeight/scrollWidth force un reflow : les dimensions
   // reflètent donc le contenu fraîchement rendu.
-  const deborde = scroll.scrollHeight > scroll.clientHeight
+  //
+  // issue #155 : un débordement vertical d'à peine quelques pixels (un simple filet
+  // dépassant du cadre) déclenchait déjà un cran de dé-zoom complet, alors qu'il
+  // restait visiblement encore de la place à l'écran. On tolère donc désormais une
+  // marge verticale avant de considérer que ça « déborde » vraiment — l'équivalent
+  // d'environ une ligne de tuiles supplémentaire au niveau de zoom actuel (hauteur de
+  // tuile ~56px + l'écart de 10px entre lignes, cf. jeu.css, mis à l'échelle du zoom
+  // courant). Aucune valeur exacte n'étant donnée par le besoin métier, cette marge a
+  // été choisie comme compromis raisonnable entre « déclenche encore trop tôt » et
+  // « laisse déborder visiblement » — voir le CHANGELOG pour le détail du choix. La
+  // largeur n'a pas cette tolérance : un débordement horizontal, même minime, coupe
+  // réellement des tuiles au bord du cadre et doit rester corrigé immédiatement.
+  const zoomActuelPourMarge = parseFloat(
+    (plateau.style.getPropertyValue("--zoom-tapis") || "1").trim()
+  ) || 1;
+  const MARGE_VERTICALE_PX = 66 * zoomActuelPourMarge;
+  const deborde = scroll.scrollHeight > scroll.clientHeight + MARGE_VERTICALE_PX
     || scroll.scrollWidth > scroll.clientWidth;
   if (!deborde) return;
   // Niveaux disponibles dans l'ordre des boutons (du plus grand au plus petit),
