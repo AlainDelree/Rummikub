@@ -331,65 +331,6 @@ def _jokers_recuperables(plateau, chevalet):
     return resultats
 
 
-def _coup_avec_joker_recupere(etat, idx, ordre_points=False):
-    """Échange un joker récupérable contre sa tuile équivalente en main, puis
-    tente de replacer le joker libéré ailleurs (nouvelle combinaison ou
-    extension) pour un coup plus riche que la simple extension évidente.
-
-    Retourne le meilleur coup obtenu (ou ``None`` si aucun joker n'est
-    récupérable, ou si aucun ne peut être replacé ailleurs sur le plateau).
-    """
-    joueur = etat["joueurs"][idx]
-    if not joueur["mise_initiale_faite"]:
-        return None
-    base_plateau = plateau_depuis_dict(etat.get("plateau", []))
-    chevalet = _to_tuiles(joueur["chevalet"])
-    meilleur = None
-    for rec in _jokers_recuperables(base_plateau, chevalet):
-        ci, pi = rec["combi_index"], rec["position_index"]
-        joker, remplacement = rec["joker"], rec["remplacement"]
-
-        plateau = [list(c) for c in base_plateau]
-        combo = list(plateau[ci])
-        combo[pi] = remplacement
-        plateau[ci] = combo
-
-        disponibles = [t for t in chevalet if t.id != remplacement.id] + [joker]
-        resultats = trouver_combinaisons_depuis_chevalet(
-            [t.as_dict() for t in disponibles],
-            etat["config"]["mise_initiale_min"], True)
-        if ordre_points:
-            resultats = sorted(
-                resultats, key=lambda r: (r["points"], len(r["tuiles"])),
-                reverse=True)
-        choisis = _selection_disjointe(resultats)
-
-        ids = [remplacement.id]
-        utilises = {remplacement.id}
-        for r in choisis:
-            plateau.append(list(r["tuiles"]))
-            for t in r["tuiles"]:
-                ids.append(t.id)
-                utilises.add(t.id)
-
-        restantes = [t for t in disponibles if t.id not in utilises]
-        _appliquer_extensions(plateau, restantes, ids)
-
-        joker_place = any(t.id == joker.id for c in plateau for t in c)
-        if not joker_place:
-            continue
-
-        ids_reel = [i for i in ids if i != joker.id]
-        nouveau = _plateau_vers_dict(plateau)
-        if ids_reel and _coup_valide(etat, idx, nouveau, ids_reel):
-            coup = {"action": "jouer", "ids_tuiles": ids_reel,
-                    "nouveau_plateau": nouveau}
-            if meilleur is None or (_valeur_coup(etat, idx, coup)
-                                    > _valeur_coup(etat, idx, meilleur)):
-                meilleur = coup
-    return meilleur
-
-
 def _jokers_detachables_par_extension(plateau, chevalet):
     """Jokers en bout de suite détachables grâce à une extension du bout opposé.
 
@@ -431,59 +372,122 @@ def _jokers_detachables_par_extension(plateau, chevalet):
     return resultats
 
 
-def _coup_avec_joker_detache(etat, idx, ordre_points=False):
-    """Étend une suite d'un bout pour libérer le joker de l'autre bout, puis
-    tente de replacer ce joker ailleurs (nouvelle combinaison ou extension)
-    pour un coup plus riche que la simple extension évidente.
+def _liberations_possibles(plateau, chevalet):
+    """Toutes les libérations de joker possibles, par échange direct ou par
+    détachement en bout de suite, sous une forme uniforme ::
 
-    Retourne le meilleur coup obtenu (ou ``None`` si aucun joker n'est
-    détachable ainsi, ou si aucun ne peut être replacé ailleurs).
+        [{"combi_index", "joker", "tuile_consommee", "appliquer"}, ...]
+
+    ``appliquer(combo)`` retourne la nouvelle version de la combinaison
+    ``combi_index`` une fois la libération effectuée ; ``tuile_consommee``
+    est la tuile du chevalet utilisée pour cela (remplacement ou tuile
+    d'extension). Chaque entrée correspond à UNE libération ; en combiner
+    plusieurs (sur des ``combi_index`` distincts) permet de récupérer
+    plusieurs jokers en un seul coup.
+    """
+    liberations = []
+    for rec in _jokers_recuperables(plateau, chevalet):
+        pi = rec["position_index"]
+        remplacement = rec["remplacement"]
+        liberations.append({
+            "combi_index": rec["combi_index"],
+            "joker": rec["joker"],
+            "tuile_consommee": remplacement,
+            "appliquer": lambda combo, pi=pi, remplacement=remplacement:
+                combo[:pi] + [remplacement] + combo[pi + 1:],
+        })
+    for rec in _jokers_detachables_par_extension(plateau, chevalet):
+        nouveau_combo = rec["nouveau_combo"]
+        liberations.append({
+            "combi_index": rec["combi_index"],
+            "joker": rec["joker"],
+            "tuile_consommee": rec["tuile_extension"],
+            "appliquer": lambda combo, nouveau_combo=nouveau_combo:
+                nouveau_combo,
+        })
+    return liberations
+
+
+def _coup_depuis_liberations(etat, idx, base_plateau, chevalet, liberations,
+                              ordre_points):
+    """Construit le coup résultant de l'application simultanée de
+    ``liberations`` (un sous-ensemble non conflictuel renvoyé par
+    :func:`_liberations_possibles`), puis tente de replacer chaque joker
+    ainsi libéré ailleurs sur le plateau (nouvelle combinaison ou
+    extension). Retourne ``None`` si un joker libéré ne peut être replacé.
+    """
+    plateau = [list(c) for c in base_plateau]
+    consommees = set()
+    jokers = []
+    for lib in liberations:
+        ci = lib["combi_index"]
+        plateau[ci] = lib["appliquer"](plateau[ci])
+        consommees.add(lib["tuile_consommee"].id)
+        jokers.append(lib["joker"])
+
+    disponibles = [t for t in chevalet if t.id not in consommees] + jokers
+    resultats = trouver_combinaisons_depuis_chevalet(
+        [t.as_dict() for t in disponibles],
+        etat["config"]["mise_initiale_min"], True)
+    if ordre_points:
+        resultats = sorted(
+            resultats, key=lambda r: (r["points"], len(r["tuiles"])),
+            reverse=True)
+    choisis = _selection_disjointe(resultats)
+
+    ids = list(consommees)
+    utilises = set(consommees)
+    for r in choisis:
+        plateau.append(list(r["tuiles"]))
+        for t in r["tuiles"]:
+            ids.append(t.id)
+            utilises.add(t.id)
+
+    restantes = [t for t in disponibles if t.id not in utilises]
+    _appliquer_extensions(plateau, restantes, ids)
+
+    places = {t.id for c in plateau for t in c}
+    if not all(j.id in places for j in jokers):
+        return None
+
+    ids_joker = {j.id for j in jokers}
+    ids_reel = [i for i in ids if i not in ids_joker]
+    nouveau = _plateau_vers_dict(plateau)
+    if ids_reel and _coup_valide(etat, idx, nouveau, ids_reel):
+        return {"action": "jouer", "ids_tuiles": ids_reel,
+                "nouveau_plateau": nouveau}
+    return None
+
+
+def _meilleur_coup_liberations(etat, idx, ordre_points=False):
+    """Essaie toutes les combinaisons non conflictuelles de libérations de
+    joker (échange direct et/ou détachement, sur des combinaisons
+    distinctes du plateau) et retourne la meilleure, afin de récupérer
+    plusieurs jokers en un seul coup quand c'est possible, plutôt que de
+    n'en considérer qu'un seul à la fois.
+
+    Retourne ``None`` si aucune combinaison de libérations n'est jouable.
     """
     joueur = etat["joueurs"][idx]
     if not joueur["mise_initiale_faite"]:
         return None
     base_plateau = plateau_depuis_dict(etat.get("plateau", []))
     chevalet = _to_tuiles(joueur["chevalet"])
+    liberations = _liberations_possibles(base_plateau, chevalet)
     meilleur = None
-    for rec in _jokers_detachables_par_extension(base_plateau, chevalet):
-        ci = rec["combi_index"]
-        joker, t_ext = rec["joker"], rec["tuile_extension"]
-
-        plateau = [list(c) for c in base_plateau]
-        plateau[ci] = rec["nouveau_combo"]
-
-        disponibles = [t for t in chevalet if t.id != t_ext.id] + [joker]
-        resultats = trouver_combinaisons_depuis_chevalet(
-            [t.as_dict() for t in disponibles],
-            etat["config"]["mise_initiale_min"], True)
-        if ordre_points:
-            resultats = sorted(
-                resultats, key=lambda r: (r["points"], len(r["tuiles"])),
-                reverse=True)
-        choisis = _selection_disjointe(resultats)
-
-        ids = [t_ext.id]
-        utilises = {t_ext.id}
-        for r in choisis:
-            plateau.append(list(r["tuiles"]))
-            for t in r["tuiles"]:
-                ids.append(t.id)
-                utilises.add(t.id)
-
-        restantes = [t for t in disponibles if t.id not in utilises]
-        _appliquer_extensions(plateau, restantes, ids)
-
-        joker_place = any(t.id == joker.id for c in plateau for t in c)
-        if not joker_place:
-            continue
-
-        ids_reel = [i for i in ids if i != joker.id]
-        nouveau = _plateau_vers_dict(plateau)
-        if ids_reel and _coup_valide(etat, idx, nouveau, ids_reel):
-            coup = {"action": "jouer", "ids_tuiles": ids_reel,
-                    "nouveau_plateau": nouveau}
-            if meilleur is None or (_valeur_coup(etat, idx, coup)
-                                    > _valeur_coup(etat, idx, meilleur)):
+    for taille in range(1, len(liberations) + 1):
+        for sous_ensemble in combinations(liberations, taille):
+            cis = [lib["combi_index"] for lib in sous_ensemble]
+            ids_consommees = [lib["tuile_consommee"].id
+                              for lib in sous_ensemble]
+            if len(set(cis)) != len(cis) \
+                    or len(set(ids_consommees)) != len(ids_consommees):
+                continue  # deux libérations qui se marchent dessus
+            coup = _coup_depuis_liberations(
+                etat, idx, base_plateau, chevalet, sous_ensemble,
+                ordre_points)
+            if coup and (meilleur is None or (_valeur_coup(etat, idx, coup)
+                                              > _valeur_coup(etat, idx, meilleur))):
                 meilleur = coup
     return meilleur
 
@@ -496,15 +500,15 @@ def _valeur_coup(etat, idx, coup):
 
 
 def _meilleur_coup_avec_joker(etat, idx, ordre_points=False):
-    """Compare l'extension/combinaison évidente à un coup récupérant un
-    joker par échange direct et à un coup détachant un joker en bout de
-    suite via une extension du bout opposé ; retourne le meilleur des coups
-    trouvés (ou ``None`` si aucun n'est jouable).
+    """Compare l'extension/combinaison évidente à la meilleure combinaison
+    de libérations de joker (échange direct et/ou détachement en bout de
+    suite, pouvant porter sur plusieurs jokers à la fois si le plateau en
+    propose plusieurs) ; retourne le meilleur des coups trouvés (ou
+    ``None`` si aucun n'est jouable).
     """
     simple = _coup_maximal(etat, idx, ordre_points=ordre_points)
-    recupere = _coup_avec_joker_recupere(etat, idx, ordre_points=ordre_points)
-    detache = _coup_avec_joker_detache(etat, idx, ordre_points=ordre_points)
-    candidats = [c for c in (simple, recupere, detache) if c]
+    liberation = _meilleur_coup_liberations(etat, idx, ordre_points=ordre_points)
+    candidats = [c for c in (simple, liberation) if c]
     if not candidats:
         return None
     return max(candidats, key=lambda c: _valeur_coup(etat, idx, c))
