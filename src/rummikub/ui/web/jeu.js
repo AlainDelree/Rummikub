@@ -2138,6 +2138,11 @@ async function init() {
   triAutoActif = !!(etat.config && etat.config.tri_auto);
   const chkTriAuto = document.getElementById("chk-tri-auto");
   if (chkTriAuto) chkTriAuto.checked = triAutoActif;
+  // Si actif, trie déjà la main dès l'affichage (distribution initiale en
+  // début de partie, ou reprise d'une partie sauvegardée) : ce init() est le
+  // point de passage commun aux deux cas (naviguer_vers_jeu / reprendre_jeu
+  // chargent tous deux jeu.html), sans attendre la première pioche (#166).
+  if (triAutoActif) chevaletLocal.sort(comparerTuiles);
   // Réglage "Dé-zoom automatique du tapis" (issue #135) : absent (vieille
   // partie reprise sans ce champ) ⇒ comportement historique conservé (actif).
   dezoomAutoActif = !(etat.config && etat.config.dezoom_auto === false);
