@@ -1316,13 +1316,17 @@ async function onVerifierCalc() {
   const rangeesPosees = travail.filter((r) => r.length > 0);
   const plateauComplet = [...plateauLocal, ...rangeesPosees];
   try {
-    const res = await window.pywebview.api.jeu_verifier_plateau(plateauComplet);
+    const res = await window.pywebview.api.jeu_verifier_plateau(plateauComplet, tuilesCeTour);
     // Surligne en rouge, directement sur le tapis/zones de pose, la ou les
     // combinaisons fautives (issue #136) — remplacé à chaque nouveau contrôle.
     combosInvalidesSignatures = (res.combos_invalides || []).map((ids) => ids.join("|"));
     if (res.valide) {
       zone.className = "ok";
-      zone.textContent = "✓ Plateau valide — " + res.points_total + " points";
+      // Une fois la mise initiale faite, le seuil de 30 points ne s'applique
+      // plus aux tours suivants : seule la validité importe (issue #173).
+      zone.textContent = tapisManipulable()
+        ? "✓ Plateau valide"
+        : "✓ Plateau valide — " + res.points_ce_tour + " points";
     } else {
       zone.className = "ko";
       zone.textContent = "✗ " + (res.erreurs || []).join(" ; ");

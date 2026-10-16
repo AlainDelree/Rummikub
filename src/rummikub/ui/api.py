@@ -119,20 +119,29 @@ class Api:
         logger_action(self._app.etat_jeu, "annulation")
         return {"ok": True, "etat": self._app.etat_jeu}
 
-    def jeu_verifier_plateau(self, plateau):
+    def jeu_verifier_plateau(self, plateau, ids_ce_tour=None):
         # plateau = [[dict_tuile, ...], ...] — valide chaque combinaison.
+        # ids_ce_tour (optionnel) = ids des tuiles posées PENDANT CE TOUR
+        # (issue #173) : permet de distinguer, dans points_ce_tour, les
+        # points des combinaisons nouvellement posées de ceux du reste du
+        # plateau (tours précédents).
         from rummikub.moteur.partie import plateau_depuis_dict
         from rummikub.moteur.validation import valider_plateau, valider_combinaison
         combos = plateau_depuis_dict(plateau or [])
         res = valider_plateau(combos)
+        ids_ce_tour = set(ids_ce_tour or [])
         points_total = 0
+        points_ce_tour = 0
         for combo in combos:
             r = valider_combinaison(combo)
             if r["valide"]:
                 points_total += r["points"]
+                if any(t.id in ids_ce_tour for t in combo):
+                    points_ce_tour += r["points"]
         return {"valide": res["valide"], "erreurs": res["erreurs"],
                 "combos_invalides": res["combos_invalides"],
-                "points_total": points_total}
+                "points_total": points_total,
+                "points_ce_tour": points_ce_tour}
 
     def jeu_verifier_combinaison(self, tuiles):
         # tuiles = [dict_tuile, ...]
