@@ -44,12 +44,31 @@ body { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
   padding: 3px; gap: 2px; flex-shrink: 0;
   animation: none; /* pas de clignotement permanent dans la légende */
 }
+/* Pourtours vert/orange/bleu nettement plus marqués que dans le jeu réel
+   (issue #167, retour sur #159) : à la petite taille des mini-tuiles de la
+   légende, la bordure 1px + léger halo utilisés en jeu passent inaperçus.
+   On épaissit la bordure et on renforce le halo UNIQUEMENT ici (via
+   .legende-tuile-mini en préfixe) pour ne pas rendre les pourtours trop
+   criards sur le vrai tapis. */
+.legende-tuile-mini.ce-tour {
+  border-width: 2.5px;
+  border-color: #22c55e;
+  box-shadow: 0 0 9px 2px rgba(34,197,94,0.9),
+              0 3px 5px rgba(40,30,10,0.38);
+}
+.legende-tuile-mini.deplacee-tapis {
+  border-width: 2.5px;
+  border-color: #f59e0b;
+  box-shadow: 0 0 9px 2px rgba(245,158,11,0.9),
+              0 3px 5px rgba(40,30,10,0.38);
+}
 /* Pourtour bleu (tuile de l'IA réarrangée pendant un rejeu, issue #149) :
    figé (sans l'animation d'apparition) pour un affichage statique en légende. */
 .legende-tuile-mini.tuile-ia-deplacee {
   animation: none;
+  border-width: 2.5px;
   border-color: rgba(90,170,255,0.9);
-  box-shadow: 0 0 6px rgba(90,170,255,0.7),
+  box-shadow: 0 0 9px 2px rgba(90,170,255,0.9),
               0 3px 5px rgba(40,30,10,0.38);
 }
 

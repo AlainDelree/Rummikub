@@ -216,8 +216,13 @@ function afficherLegendeCouleurs() {
   const cont = document.getElementById("legende-couleurs");
   if (!cont) return;
 
-  const miniTuile = (valeur, classe) => {
-    const el = creerTuileJeu(valeur, "noir", false);
+  // Chiffre tiré au hasard (1-13) pour chaque tuile d'exemple plutôt qu'une
+  // valeur fixe : rend la légende plus parlante (issue #167), une vraie
+  // tuile de jeu affiche toujours un chiffre.
+  const valeurAlea = () => 1 + Math.floor(Math.random() * 13);
+
+  const miniTuile = (classe) => {
+    const el = creerTuileJeu(valeurAlea(), "noir", false);
     el.classList.add("legende-tuile-mini");
     if (classe) el.classList.add(classe);
     return el;
@@ -233,17 +238,17 @@ function afficherLegendeCouleurs() {
     return div;
   };
 
-  cont.appendChild(item(miniTuile(7, "ce-tour"),
+  cont.appendChild(item(miniTuile("ce-tour"),
     "Nouvelle tuile posée depuis la main ce tour"));
-  cont.appendChild(item(miniTuile(7, "deplacee-tapis"),
+  cont.appendChild(item(miniTuile("deplacee-tapis"),
     "Tuile du tapis déplacée ce tour"));
-  cont.appendChild(item(miniTuile(7, "tuile-ia-deplacee"),
+  cont.appendChild(item(miniTuile("tuile-ia-deplacee"),
     "Tuile de l'IA réarrangée pendant un rejeu"));
 
   const groupe = document.createElement("div");
   groupe.className = "groupe-combinaison combi-invalide legende-groupe-mini";
-  groupe.appendChild(miniTuile(5, null));
-  groupe.appendChild(miniTuile(6, null));
+  groupe.appendChild(miniTuile(null));
+  groupe.appendChild(miniTuile(null));
   cont.appendChild(item(groupe, "Combinaison invalide"));
 }
 
