@@ -214,9 +214,19 @@ icône `assets/rummikub.ico` (facultative, absente → aucune icône).
   joker, pour former un nouveau groupe) afin de libérer une tuile ou un
   joker en position intérieure d'une suite. Mentionnée en discussion avec
   Alain, jamais formalisée en issue.
+- **Démantèlement complet d'une courte suite contenant un joker** (#175) :
+  retirer SES DEUX tuiles réelles (pas une seule comme dans les tactiques
+  ci-dessus), chacune recombinée avec des tuiles de la main pour former
+  deux NOUVELLES combinaisons (groupes ou suites) ailleurs sur le
+  plateau — le joker est ainsi isolé et libéré sans qu'aucune tuile ne le
+  remplace directement. Généralisable au cas sans joker : la même suite
+  démantelée autour d'une tuile réelle (plutôt qu'un joker), dont les deux
+  voisines sont recombinées ailleurs. Nettement plus complexe que les
+  tactiques ci-dessus — recherche de recombinaison globale sur plusieurs
+  combinaisons du plateau, pas un simple motif local — probablement une
+  issue à part entière une fois les cas plus simples en place.
 
 Note : `_coup_scission` existe déjà dans `ia.py` mais ne porte pas sur un
 joker (elle exclut explicitement les jokers en bout de suite) — elle est
 citée ici seulement comme mécanisme apparenté, pas comme tactique de
 joker au sens de cette liste.
-</content>
