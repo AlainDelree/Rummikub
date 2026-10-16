@@ -188,3 +188,67 @@ def test_intermediaire_ne_detache_pas_le_joker():
     coup = jouer_niveau_intermediaire(etat, 1)
     assert coup["action"] == "jouer"
     assert set(coup["ids_tuiles"]) == {"rouge_2_a", "rouge_6_a"}
+
+
+def _etat_avec_deux_jokers_recuperables(niveau):
+    """Plateau avec DEUX jokers récupérables par échange direct, sur deux
+    suites distinctes (régression #169).
+
+    Chevalet du bot : rouge 6 et bleu 9 (une tuile de reprise par joker),
+    plus noir 2/jaune 2/noir 3/jaune 3 qui, seuls, ne forment aucune
+    combinaison valide (2 couleurs par valeur seulement). Sans récupérer
+    ET replacer les DEUX jokers dans le même coup (noir 2 + noir 3 +
+    joker + joker formant une suite 1-2-3-4 en noir), l'IA ne peut rien
+    jouer du tout ici : aucune extension ni combinaison simple n'existe.
+    """
+    etat = _partie_2j(niveau)
+    etat["index_joueur_actuel"] = 1
+    bot = etat["joueurs"][1]
+    bot["mise_initiale_faite"] = True
+    etat["plateau"] = [
+        [
+            {"id": "rouge_4_a", "valeur": 4, "couleur": "rouge", "est_joker": False},
+            {"id": "rouge_5_a", "valeur": 5, "couleur": "rouge", "est_joker": False},
+            {"id": "joker_1", "valeur": None, "couleur": None, "est_joker": True},
+        ],
+        [
+            {"id": "bleu_7_a", "valeur": 7, "couleur": "bleu", "est_joker": False},
+            {"id": "bleu_8_a", "valeur": 8, "couleur": "bleu", "est_joker": False},
+            {"id": "joker_2", "valeur": None, "couleur": None, "est_joker": True},
+        ],
+    ]
+    bot["chevalet"] = [
+        {"id": "rouge_6_b", "valeur": 6, "couleur": "rouge", "est_joker": False},
+        {"id": "bleu_9_a", "valeur": 9, "couleur": "bleu", "est_joker": False},
+        {"id": "noir_2_a", "valeur": 2, "couleur": "noir", "est_joker": False},
+        {"id": "jaune_2_a", "valeur": 2, "couleur": "jaune", "est_joker": False},
+        {"id": "noir_3_a", "valeur": 3, "couleur": "noir", "est_joker": False},
+        {"id": "jaune_3_a", "valeur": 3, "couleur": "jaune", "est_joker": False},
+    ]
+    return etat
+
+
+def test_avance_recupere_les_deux_jokers_a_la_fois():
+    """Régression #169 : deux jokers récupérables par échange direct sur
+    deux suites distinctes doivent être récupérés dans le MÊME coup, et
+    pas seulement l'un des deux (seule façon de jouer ici)."""
+    etat = _etat_avec_deux_jokers_recuperables("Avancé")
+    coup = jouer_niveau_avance(etat, 1)
+    assert coup["action"] == "jouer"
+    assert {"rouge_6_b", "bleu_9_a"} <= set(coup["ids_tuiles"])
+    plateau = [[tuile_depuis_dict(d) for d in c]
+               for c in coup["nouveau_plateau"]]
+    assert valider_plateau(plateau)["valide"]
+    combo_rouge = next(c for c in plateau
+                       if any(t.id == "rouge_6_b" for t in c))
+    combo_bleu = next(c for c in plateau
+                      if any(t.id == "bleu_9_a" for t in c))
+    assert not any(t.est_joker for t in combo_rouge)
+    assert not any(t.est_joker for t in combo_bleu)
+
+
+def test_expert_recupere_les_deux_jokers_a_la_fois():
+    etat = _etat_avec_deux_jokers_recuperables("Expert")
+    coup = jouer_niveau_expert(etat, 1)
+    assert coup["action"] == "jouer"
+    assert {"rouge_6_b", "bleu_9_a"} <= set(coup["ids_tuiles"])
