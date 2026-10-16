@@ -37,7 +37,13 @@ body { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
   border-top: 1px solid rgba(255,255,255,0.15);
 }
 .legende-item { display: flex; align-items: center; gap: 8px; }
-.legende-item span { font-size: 0.68rem; line-height: 1.25;
+/* Combinateur d'enfant direct (> span) et non descendant (span) : issue #168
+   (suite #167) — le sélecteur descendant capturait aussi le <span
+   class="tuile-num"> imbriqué dans chaque mini-tuile d'exemple, lui imposant
+   ce blanc quasi transparent et rendant le chiffre de la légende invisible
+   sur le fond ivoire de la tuile (chiffre bien généré et injecté en DOM,
+   simplement invisible visuellement). */
+.legende-item > span { font-size: 0.68rem; line-height: 1.25;
   color: rgba(255,255,255,0.75); }
 .legende-tuile-mini { --tw: 22px; cursor: default; flex-shrink: 0; }
 .legende-groupe-mini {
