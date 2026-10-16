@@ -85,6 +85,19 @@ body { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
 .btn-rejouer-coup-ia:hover:not(:disabled) { background: rgba(255,255,255,0.18); }
 .btn-rejouer-coup-ia:disabled { opacity: 0.45; cursor: not-allowed; }
 
+/* Vitesse du rejeu du dernier coup IA (issue #164) : accessible directement
+   depuis l'écran de jeu, juste sous le bouton de rejeu, sur le même modèle
+   que le contrôle de zoom du tapis (#zoom-tapis). */
+#vitesse-rejeu-ia { display: flex; align-items: center; gap: 3px;
+  flex-wrap: wrap; }
+#vitesse-rejeu-ia .vitesse-rejeu-icone { font-size: 0.8rem; opacity: 0.8;
+  margin-right: 1px; }
+#vitesse-rejeu-ia .btn-vitesse-rejeu { border: none; cursor: pointer;
+  background: rgba(255,255,255,0.12); color: #fff;
+  font-size: 0.72rem; font-weight: 600; padding: 3px 7px; border-radius: 4px; }
+#vitesse-rejeu-ia .btn-vitesse-rejeu:hover { background: rgba(255,255,255,0.25); }
+#vitesse-rejeu-ia .btn-vitesse-rejeu.actif { background: #22c55e; color: #0d2a1a; }
+
 .btn-jouer-ia {
   padding: 4px 12px; background: #2e7d32; color: #fff;
   border: none; border-radius: 4px; cursor: pointer;

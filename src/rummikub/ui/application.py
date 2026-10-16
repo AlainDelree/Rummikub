@@ -53,7 +53,7 @@ class ApplicationRummikub:
         # Dé-zoom automatique du tapis s'il déborde (préférence UI, issue #135).
         self.etat_jeu["config"]["dezoom_auto"] = bool(cfg_nouvelle.get("dezoom_auto", True))
         # Vitesse du rejeu à la demande du dernier coup IA (préférence UI, issue #160).
-        self.etat_jeu["config"]["vitesse_rejeu_ia"] = cfg_nouvelle.get("vitesse_rejeu_ia", "Rapide")
+        self.etat_jeu["config"]["vitesse_rejeu_ia"] = cfg_nouvelle.get("vitesse_rejeu_ia", "Moyenne")
         backup_debut_tour(self.etat_jeu)
         self._window.load_url(str(_WEB / "jeu.html"))
 
@@ -68,7 +68,7 @@ class ApplicationRummikub:
         self.etat_jeu["config"]["ia_auto"] = bool(cfg.get("ia_auto", False))
         self.etat_jeu["config"]["tri_auto"] = bool(cfg.get("tri_auto", False))
         self.etat_jeu["config"]["dezoom_auto"] = bool(cfg.get("dezoom_auto", True))
-        self.etat_jeu["config"]["vitesse_rejeu_ia"] = cfg.get("vitesse_rejeu_ia", "Rapide")
+        self.etat_jeu["config"]["vitesse_rejeu_ia"] = cfg.get("vitesse_rejeu_ia", "Moyenne")
         backup_debut_tour(self.etat_jeu)
         self._window.load_url(str(_WEB / "jeu.html"))
 

@@ -9,7 +9,13 @@ DEFAUTS = {
     "nb_manches": 1,
     "valeur_joker_penalite": 30,
     "vitesse_ia": "Lente",
-    "vitesse_rejeu_ia": "Rapide",  # vitesse du rejeu à la demande du dernier coup IA (issue #160)
+    # Vitesse du rejeu à la demande du dernier coup IA (issue #160, échelle
+    # décalée vers le bas par #164 : "Lente"/"Moyenne"/"Rapide" sont les mêmes
+    # libellés qu'avant #164, mais associés à des multiplicateurs plus lents
+    # — voir MULTIPLICATEURS_REJEU_IA dans jeu.js. Une préférence déjà
+    # enregistrée sous un de ces 3 libellés reste donc valide telle quelle
+    # après la mise à jour, sans conversion de valeur nécessaire.
+    "vitesse_rejeu_ia": "Moyenne",
     "ia_auto": False,       # si True, le tour de l'IA se joue seul (sans clic sur "Jouer")
     "mode_reorg": "clic",   # "clic" (appui long + clic) ou "drag" (glisser-déposer)
     "log_parties": False,   # journal de partie (débogage) : voir config.LOG_PARTIES

@@ -221,7 +221,6 @@ function remplirChampsReglages() {
   document.getElementById("rgl-mise30").checked = (r.mise_initiale_min || 30) >= 30;
   document.getElementById("rgl-manches").value = r.nb_manches || 1;
   document.getElementById("rgl-vitesse").value = r.vitesse_ia || "Normale";
-  document.getElementById("rgl-vitesse-rejeu").value = r.vitesse_rejeu_ia || "Rapide";
   document.getElementById("rgl-ia-auto").checked = !!r.ia_auto;
   document.getElementById("rgl-dezoom-auto").checked = r.dezoom_auto !== false;
   const jokerVal = String(r.valeur_joker_penalite || 30);
@@ -262,7 +261,6 @@ async function sauvegarderReglages() {
     nb_manches: parseInt(document.getElementById("rgl-manches").value, 10) || 1,
     valeur_joker_penalite: jokerEl ? parseInt(jokerEl.value, 10) : 30,
     vitesse_ia: document.getElementById("rgl-vitesse").value,
-    vitesse_rejeu_ia: document.getElementById("rgl-vitesse-rejeu").value,
     ia_auto: document.getElementById("rgl-ia-auto").checked,
     mode_reorg: reorgEl ? reorgEl.value : "clic",
     dezoom_auto: document.getElementById("rgl-dezoom-auto").checked,

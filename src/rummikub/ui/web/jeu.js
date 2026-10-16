@@ -1485,13 +1485,17 @@ function vitesseIA() {
 
 // Vitesse du REJEU à la demande du dernier coup IA (réglage distinct de la
 // vitesse de l'ordinateur ci-dessus, issue #160) : multiplicateur appliqué au
-// délai entre tuiles. "Rapide" reproduit exactement le comportement livré
-// par #149 (aucun ralentissement additionnel) ; "Moyenne" et "Lente"
-// ralentissent le rythme proportionnellement.
-const MULTIPLICATEURS_REJEU_IA = { "Lente": 2.2, "Moyenne": 1.5, "Rapide": 1 };
+// délai entre tuiles. Échelle décalée vers le bas par #164 (globalement plus
+// lente qu'à l'origine) : l'ancien "Rapide" (1×, comportement #149) est
+// supprimé ; les anciens "Moyenne" et "Lente" deviennent les nouveaux
+// "Rapide" et "Moyenne", et un nouveau palier "Lente" encore plus lent est
+// ajouté. Une préférence enregistrée sous l'ancien "Rapide" reste un
+// libellé valide (la clé existe toujours dans cette table), elle bascule
+// donc automatiquement vers le nouveau "Rapide" (ex-"Moyenne", 1.5×).
+const MULTIPLICATEURS_REJEU_IA = { "Lente": 3.2, "Moyenne": 2.2, "Rapide": 1.5 };
 function multiplicateurRejeuIA() {
-  return MULTIPLICATEURS_REJEU_IA[(etat.config && etat.config.vitesse_rejeu_ia) || "Rapide"]
-    || 1;
+  return MULTIPLICATEURS_REJEU_IA[(etat.config && etat.config.vitesse_rejeu_ia) || "Moyenne"]
+    || 2.2;
 }
 
 // Compare l'ancien et le nouveau plateau et retourne les tuiles nouvellement
@@ -1955,6 +1959,7 @@ function brancherEvenements() {
   document.getElementById("btn-classement-retour").addEventListener("click", onRetourAccueil);
 
   brancherZoomTapis();
+  brancherVitesseRejeuIA();
 
   // Zone de travail : clic sur une rangée (fond ou numéro) = placer / activer
   document.querySelectorAll(".rangee-travail").forEach((rangeeEl) => {
@@ -2052,6 +2057,34 @@ function brancherZoomTapis() {
   });
 }
 
+// --------------------------------------------- vitesse du rejeu (écran de jeu)
+// Contrôle directement accessible pendant la partie (issue #164, déplacé
+// depuis l'écran Réglages). La préférence reste persistée dans config.json
+// via la même API que les autres réglages modifiables en jeu (tri_auto...).
+// Les écouteurs sont branchés ici (avant le chargement de `etat`, comme pour
+// le zoom) ; la mise en surbrillance du niveau courant est appliquée plus
+// tard par restaurerVitesseRejeuIA(), une fois `etat.config` disponible.
+function brancherVitesseRejeuIA() {
+  const boutons = document.querySelectorAll("#vitesse-rejeu-ia .btn-vitesse-rejeu");
+  if (!boutons.length) return;
+  boutons.forEach((b) => {
+    b.addEventListener("click", () => {
+      const valeur = b.dataset.vitesse;
+      etat.config = etat.config || {};
+      etat.config.vitesse_rejeu_ia = valeur;
+      boutons.forEach((bb) => bb.classList.toggle("actif", bb === b));
+      window.pywebview.api.sauvegarder_reglages({ vitesse_rejeu_ia: valeur });
+    });
+  });
+}
+
+function restaurerVitesseRejeuIA() {
+  const boutons = document.querySelectorAll("#vitesse-rejeu-ia .btn-vitesse-rejeu");
+  if (!boutons.length) return;
+  const actuel = (etat.config && etat.config.vitesse_rejeu_ia) || "Moyenne";
+  boutons.forEach((b) => b.classList.toggle("actif", b.dataset.vitesse === actuel));
+}
+
 // Zoom automatique au débordement (issue #104) : après une pose de tuiles, si le
 // contenu du tapis dépasse la zone visible (#zone-plateau-scroll : hauteur bornée
 // + défilement), on réduit le zoom d'UN cran (100% → 75% → 50%) pour rendre la
@@ -2138,6 +2171,8 @@ async function init() {
   triAutoActif = !!(etat.config && etat.config.tri_auto);
   const chkTriAuto = document.getElementById("chk-tri-auto");
   if (chkTriAuto) chkTriAuto.checked = triAutoActif;
+  // Restaure le niveau de vitesse du rejeu tel que persisté (issue #164).
+  restaurerVitesseRejeuIA();
   // Réglage "Dé-zoom automatique du tapis" (issue #135) : absent (vieille
   // partie reprise sans ce champ) ⇒ comportement historique conservé (actif).
   dezoomAutoActif = !(etat.config && etat.config.dezoom_auto === false);
