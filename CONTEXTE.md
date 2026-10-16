@@ -41,7 +41,8 @@ src/rummikub/
     validation.py           valider_suite/groupe/combinaison/plateau.
     partie.py               État de partie, tours, pioche, backup, manches.
     score.py                calculer_scores_manche, trouver_gagnant_manche.
-    ia.py                   5 niveaux d'IA (voir §5).
+    ia.py                   5 niveaux d'IA (voir §5) + tactiques de
+                            récupération de joker (voir §8).
   ui/
     application.py          ApplicationRummikub : fenêtre pywebview, etat_jeu (public),
                             naviguer_vers_jeu/accueil, reprendre_jeu, load_url.
@@ -170,4 +171,52 @@ icône `assets/rummikub.ico` (facultative, absente → aucune icône).
 - Cette règle s'applique à **toute** vérification front-end future sur ce
   projet, sans qu'il soit nécessaire de la rappeler dans la consigne de
   l'issue.
+
+## 8. Tactiques de récupération/libération de joker de l'IA (`moteur/ia.py`)
+
+> Liste à tenir à jour par toute future issue qui ajoute ou modifie une
+> tactique de joker (objectif : pouvoir un jour revoir les niveaux de
+> difficulté de l'IA — jugés trop faibles actuellement — une fois
+> l'ensemble des tactiques couvert).
+
+**Implémentées :**
+
+- **Échange direct** (#148) — `_jokers_recuperables` : un joker posé dans
+  une suite ou un groupe est remplacé par la tuile réelle identique déjà
+  en main (même valeur/couleur pour une suite ; même valeur + couleur
+  absente du groupe pour un groupe). Validité et points de la combinaison
+  inchangés ; le joker est libéré pour un usage ailleurs sur le plateau.
+- **Détachement en bout de suite** (#150) — `_jokers_detachables_par_extension` :
+  un joker à une extrémité d'une suite est détaché *sans* tuile de
+  remplacement, quand une tuile de la main jouée à l'extrémité OPPOSÉE
+  allonge la portion de tuiles réelles restante à au moins 3 — celle-ci
+  reste alors valide seule une fois le joker retiré.
+- **Combinaison de plusieurs libérations dans le même coup** (#169) —
+  `_liberations_possibles` / `_meilleur_coup_liberations` /
+  `_coup_depuis_liberations` : les deux mécanismes ci-dessus sont
+  recherchés simultanément sur des combinaisons distinctes du plateau,
+  pour récupérer plusieurs jokers en un seul coup plutôt qu'un seul à la
+  fois (corrige un bug où le second joker récupérable d'un même tour était
+  systématiquement ignoré). Limite assumée : deux libérations sur la MÊME
+  combinaison du plateau (ex. deux jokers dans une même suite) ne sont pas
+  combinées — cas rare, laissé de côté pour borner la complexité.
+
+**Identifiées mais pas encore implémentées :**
+
+- **Réduction de groupe de 4 à 3** : retirer le joker d'un groupe de 4
+  tuiles (3 réelles + 1 joker) *sans* tuile de remplacement — le groupe
+  réduit à ses 3 tuiles réelles reste valide tel quel, contrairement à
+  l'échange direct (#148) qui exige une tuile identique en main. Aucune
+  issue dédiée ouverte à ce jour ; non couvert par `_jokers_recuperables`
+  (qui ne traite que le remplacement).
+- **Scission en milieu de suite** : étendre `_coup_scission` (qui ne
+  détache aujourd'hui qu'une tuile réelle en BOUT de suite, jamais un
+  joker, pour former un nouveau groupe) afin de libérer une tuile ou un
+  joker en position intérieure d'une suite. Mentionnée en discussion avec
+  Alain, jamais formalisée en issue.
+
+Note : `_coup_scission` existe déjà dans `ia.py` mais ne porte pas sur un
+joker (elle exclut explicitement les jokers en bout de suite) — elle est
+citée ici seulement comme mécanisme apparenté, pas comme tactique de
+joker au sens de cette liste.
 </content>
