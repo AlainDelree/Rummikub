@@ -204,36 +204,31 @@ body { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
   box-shadow: 0 0 8px rgba(59,130,246,0.35);
 }
 
-/* Mode manipulation du tapis : tuiles « prenables » à l'intérieur des combis */
+/* Mode manipulation du tapis : tuiles « prenables » à l'intérieur des combis.
+   Le contour pointillé bleu générique a été retiré (issue #172) : une fois la
+   mise initiale faite, TOUTES les tuiles du tapis deviennent manipulables en
+   permanence, donc ce contour ne distinguait plus rien et créait de la
+   confusion avec les vrais indicateurs de tour (vert/orange/bleu ci-dessous).
+   Seul le curseur « move » subsiste comme affordance de prise en main. */
 .tuile-jeu.tapis-manipulable {
   cursor: move;
-  outline: 2px dashed rgba(59,130,246,0.7);
 }
-.tuile-jeu.tapis-manipulable:hover {
-  outline: 2px solid #3b82f6;
-  box-shadow: 0 0 8px rgba(59,130,246,0.6);
-}
-/* Une tuile du tour en cours (issue #128) reste manipulable comme les autres
-   dès la mise initiale faite : sans cette règle, le contour pointillé bleu
-   de .tapis-manipulable écrase visuellement le pourtour vert de .ce-tour
-   (issue #129) et la tuile posée par extension directe d'une combinaison
-   semblait ne plus avoir de pourtour. Le contour reprend la couleur verte
-   pour rester cohérent avec le pourtour plutôt que de le masquer. */
+/* Tuile du tour en cours (issue #128), neuve depuis la main : pourtour vert.
+   Indépendant du statut « manipulable » (toujours visible une fois posée). */
 .tuile-jeu.ce-tour.tapis-manipulable {
-  outline-color: rgba(34,197,94,0.8);
+  outline: 2px dashed rgba(34,197,94,0.8);
 }
 .tuile-jeu.ce-tour.tapis-manipulable:hover {
-  outline-color: #22c55e;
+  outline: 2px solid #22c55e;
   box-shadow: 0 0 8px rgba(34,197,94,0.6);
 }
-/* Même collision que ci-dessus mais pour une tuile déplacée depuis le tapis
-   (issue #139, suite #136/#129) : sans cette règle, le contour pointillé
-   bleu de .tapis-manipulable écrase le pourtour orange de .deplacee-tapis. */
+/* Tuile déplacée depuis le tapis pendant le tour en cours (issue #139, suite
+   #136/#129) : pourtour orange, même principe que ci-dessus. */
 .tuile-jeu.deplacee-tapis.tapis-manipulable {
-  outline-color: rgba(245,158,11,0.8);
+  outline: 2px dashed rgba(245,158,11,0.8);
 }
 .tuile-jeu.deplacee-tapis.tapis-manipulable:hover {
-  outline-color: #f59e0b;
+  outline: 2px solid #f59e0b;
   box-shadow: 0 0 8px rgba(245,158,11,0.6);
 }
 
