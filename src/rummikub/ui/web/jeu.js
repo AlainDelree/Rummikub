@@ -1670,13 +1670,23 @@ async function jouerIA() {
       return;
     }
 
-    // Calculer les tuiles ajoutées / déplacées AVANT de mettre à jour l'état
-    const ancienPlateau   = clone(etat.plateau || []);
-    const nouvelEtat      = res.etat;
-    const tuiAjoutees     = trouverTuilesAjoutees(
-      ancienPlateau, nouvelEtat.plateau || []);
-    const tuilesDeplacees = trouverTuilesDeplacees(
-      ancienPlateau, nouvelEtat.plateau || []);
+    // Calculer les tuiles ajoutées / déplacées AVANT de mettre à jour l'état.
+    // Un dernier coup de type "piocher"/"passer" (#157) n'a par définition
+    // rien ajouté ni déplacé sur le tapis : on l'exclut explicitement via le
+    // champ fiable `dernier_coup_ia.type` plutôt que de se fier uniquement à
+    // une comparaison de plateaux avant/après pour le détecter — garantit
+    // qu'aucune tuile ne reçoive à tort le pourtour bleu/doré de l'IA après
+    // une simple pioche ou un passage (issue #165).
+    const ancienPlateau = clone(etat.plateau || []);
+    const nouvelEtat    = res.etat;
+    const typeCoupIA    = (nouvelEtat.dernier_coup_ia &&
+      nouvelEtat.dernier_coup_ia.type) || "pose";
+    const tuiAjoutees     = typeCoupIA === "pose"
+      ? trouverTuilesAjoutees(ancienPlateau, nouvelEtat.plateau || [])
+      : [];
+    const tuilesDeplacees = typeCoupIA === "pose"
+      ? trouverTuilesDeplacees(ancienPlateau, nouvelEtat.plateau || [])
+      : [];
 
     // Mettre à jour l'état (mais on reconstruit le plateau visible à la main)
     etat = nouvelEtat;
@@ -1684,13 +1694,11 @@ async function jouerIA() {
     reinitTour();
 
     // Cas « pioche » ou « passe » : aucune tuile ajoutée ni déplacée
-    if (tuiAjoutees.length === 0 && tuilesDeplacees.length === 0) {
+    if (typeCoupIA !== "pose") {
       rafraichirFichesJoueurs();
       mettreAJourSac((etat.pioche || []).length);
-      const h = nouvelEtat.historique || [];
-      const action = (h.length ? h[h.length - 1].description : "") || "";
       const nomIA = (nouvelEtat.joueurs[idxIA] || {}).nom || "L'IA";
-      const estPioche = action.includes("pioch");
+      const estPioche = typeCoupIA === "piocher";
       toast(nomIA + " " + (estPioche ? "pioche" : "passe son tour"));
       if (estPioche) {
         await new Promise((r) => animerPiocheeIA(idxIA, r));
