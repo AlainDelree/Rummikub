@@ -51,15 +51,26 @@ REM  ETAPE 0 : localiser ISCC.exe
 REM ===========================================================================
 echo.
 echo [0/8] Recherche de ISCC.exe ^(Inno Setup 6^)...
-set "ISCC=%ORIGDIR%\.tools\InnoSetup6\ISCC.exe"
+set "ISCC_CCW=C:\CCW\tools\InnoSetup6\ISCC.exe"
+set "ISCC_LOCAL=%ORIGDIR%\.tools\InnoSetup6\ISCC.exe"
 
 REM  Aucun fallback reseau (issue #111) : l'ancien partage \\VBOXSVR\CCW_Share\...
 REM  n'existe plus sur le PC fixe physique et faisait boucler robocopy en retry
-REM  infini. Le binaire DOIT etre present localement dans .tools\InnoSetup6\ ;
-REM  sinon on echoue immediatement et proprement (cf. rebuild_scrabble.bat).
-if not exist "%ISCC%" (
-    echo [ERREUR] ISCC.exe introuvable : %ISCC%
-    echo          Installez Inno Setup 6 dans .tools\InnoSetup6\ avant de relancer le build.
+REM  infini. Depuis l'issue #176, on cherche D'ABORD C:\CCW\tools\InnoSetup6\
+REM  (installe hors des depots, donc accessible depuis n'importe quel worktree
+REM  CCW frais ou .tools\ n'existe pas), puis on se rabat sur l'ancien chemin
+REM  local .tools\InnoSetup6\ (utile hors d'un worktree CCW, ex. build local
+REM  par Alain). Si aucun des deux n'existe, on echoue immediatement et
+REM  proprement (cf. rebuild_scrabble.bat).
+if exist "%ISCC_CCW%" (
+    set "ISCC=%ISCC_CCW%"
+) else if exist "%ISCC_LOCAL%" (
+    set "ISCC=%ISCC_LOCAL%"
+) else (
+    echo [ERREUR] ISCC.exe introuvable dans aucun des emplacements suivants :
+    echo            - %ISCC_CCW%
+    echo            - %ISCC_LOCAL%
+    echo          Installez Inno Setup 6 dans l'un de ces deux dossiers avant de relancer le build.
     exit /b 1
 )
 echo       ISCC : %ISCC%
