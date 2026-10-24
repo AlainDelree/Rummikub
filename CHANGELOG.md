@@ -1,5 +1,16 @@
 # Issue #67 — Réglages : « Vitesse de l'ordinateur » déplacée vers l'onglet Général
 
+# Issue #176 — build\rebuild_rummikub.bat : chercher Inno Setup dans C:\CCW\tools\InnoSetup6 avant .tools\InnoSetup6
+
+- `build\rebuild_rummikub.bat` (étape 0) : recherche désormais `ISCC.exe`
+  d'abord dans `C:\CCW\tools\InnoSetup6\ISCC.exe` (installé hors des dépôts,
+  accessible depuis n'importe quel worktree CCW frais), puis seulement en
+  repli dans l'ancien chemin `%ORIGDIR%\.tools\InnoSetup6\ISCC.exe` (utile
+  pour un build lancé hors d'un worktree CCW, ex. en local par Alain).
+- Si aucun des deux chemins n'existe, le script échoue toujours
+  immédiatement et proprement, avec un message mentionnant les deux chemins
+  recherchés.
+
 ## Issue #175 — Tenir à jour dans CONTEXTE.md la liste des tactiques de récupération de joker de l'IA
 
 - `CONTEXTE.md` (§8) : ajout de la tactique « démantèlement complet d'une
