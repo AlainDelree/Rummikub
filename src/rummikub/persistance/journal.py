@@ -1,6 +1,7 @@
 """Journal de partie optionnel : trace chaque action de jeu dans un fichier
-JSON horodaté afin de pouvoir rejouer une partie et identifier à quel coup une
-tuile (ex. un joker) a été perdue.
+JSON horodaté afin de pouvoir rejouer une partie, identifier à quel coup une
+tuile (ex. un joker) a été perdue, et établir un bilan par niveau d'IA (issue
+#185, voir ``persistance/bilan.py`` et ``scripts/bilan_parties.py``).
 
 Activé uniquement si ``config.LOG_PARTIES`` est ``True``. Quand il est ``False``
 (défaut), :func:`logger_action` retourne immédiatement : aucun fichier n'est
@@ -12,8 +13,30 @@ Au plus :data:`MAX_FICHIERS` fichiers sont conservés — le plus ancien est
 supprimé au-delà.
 
 Remarque : seules les actions qui transitent par le back-end Python sont
-tracées (pose, pioche, fin de tour, annulation, tour IA). Le tri du chevalet est
+tracées (pose, pioche, passe, annulation, tour IA). Le tri du chevalet est
 purement côté JS et ne remonte jamais au serveur : il n'est donc pas journalisé.
+
+Format d'un fichier (clés au niveau racine) :
+    ``partie_id``, ``debut`` (ISO), ``joueurs`` (liste de
+    ``{"nom", "est_ia", "niveau"}``), ``actions`` (liste d'entrées, voir
+    :func:`logger_action`).
+
+Chaque entrée de ``actions`` porte, en plus des champs de débogage déjà
+existants (mains, plateau, pioche...) :
+    ``auteur_index`` : index du joueur qui a pris la décision de ce tour.
+    ``action`` : ``"pose"``, ``"pioche"``, ``"passe"`` ou ``"annulation"``.
+    ``nb_tuiles_posees`` : nombre de tuiles posées (0 sauf pour ``"pose"``).
+    ``termine`` : ``True`` si la partie est terminée après cette action.
+    ``gagnant_index`` : index du gagnant de la manche si ``termine``, sinon
+    ``None``.
+
+Une partie dont la DERNIÈRE action enregistrée n'a pas ``termine: True`` a été
+abandonnée en cours (ou est toujours en cours) : ``persistance/bilan.py``
+l'exclut du bilan sur ce seul critère. Les fichiers écrits par une version
+antérieure du journal (sans ces champs) restent lisibles : les champs absents
+sont traités comme ``None``/``False``, ce qui les range naturellement parmi
+les parties non exploitables pour le bilan plutôt que de faire planter sa
+lecture.
 """
 
 import copy
@@ -37,8 +60,12 @@ def _dossier_logs() -> Path:
     return config.RACINE_DATA / "logs_parties"
 
 
-def _noms_joueurs(etat: dict) -> list:
-    return [j.get("nom") for j in etat.get("joueurs", [])]
+def _joueurs_info(etat: dict) -> list:
+    """Identité des joueurs pour l'en-tête du journal (issue #185) : nom,
+    statut IA et niveau — nécessaires au bilan par niveau d'IA sans avoir à
+    rouvrir la base SQLite (qui ne garde que les 5 dernières parties)."""
+    return [{"nom": j.get("nom"), "est_ia": bool(j.get("est_ia")),
+             "niveau": j.get("niveau")} for j in etat.get("joueurs", [])]
 
 
 def _main_humain(etat: dict) -> list:
@@ -82,17 +109,23 @@ def _creer_journal(etat: dict) -> dict:
     data = {
         "partie_id": etat.get("id"),
         "debut": debut.isoformat(timespec="seconds"),
-        "joueurs": _noms_joueurs(etat),
+        "joueurs": _joueurs_info(etat),
         "actions": [],
     }
     return {"chemin": dossier / nom, "data": data}
 
 
-def logger_action(etat: dict, action: str) -> None:
+def logger_action(etat: dict, action: str, *,
+                   auteur_index: int = None, nb_tuiles_posees: int = 0) -> None:
     """Enregistre une action de jeu dans le journal de la partie courante.
 
-    ``action`` : type d'action (ex. ``"pose"``, ``"pioche"``, ``"fin_de_tour"``,
-    ``"annulation"``, ``"tour_ia"``).
+    ``action`` : type de décision prise (``"pose"``, ``"pioche"``, ``"passe"``
+    ou ``"annulation"``).
+    ``auteur_index`` : index (dans ``etat["joueurs"]``) du joueur qui a pris
+    cette décision — à distinguer de ``etat["index_joueur_actuel"]``, déjà
+    avancé au joueur suivant au moment de l'appel.
+    ``nb_tuiles_posees`` : nombre de tuiles posées par cette décision (0 pour
+    ``"pioche"``/``"passe"``/``"annulation"``).
 
     No-op immédiat si ``config.LOG_PARTIES`` est ``False``. Toute erreur d'écriture
     est silencieusement ignorée : le journal ne doit jamais interrompre le jeu.
@@ -112,6 +145,10 @@ def logger_action(etat: dict, action: str) -> None:
             "action": action,
             "tour": etat.get("tour_numero"),
             "joueur_actuel": etat.get("index_joueur_actuel"),
+            "auteur_index": auteur_index,
+            "nb_tuiles_posees": nb_tuiles_posees,
+            "termine": bool(etat.get("terminee")),
+            "gagnant_index": etat.get("gagnant_manche_index"),
             "main_humain": _main_humain(etat),
             "mains_joueurs": _mains_joueurs(etat),
             "plateau": copy.deepcopy(etat.get("plateau", [])),

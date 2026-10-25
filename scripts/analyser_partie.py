@@ -184,9 +184,14 @@ def analyser_partie(chemin: Path) -> int:
         pid = data.get("partie_id")
         joueurs = data.get("joueurs")
         if pid is not None:
+            # ``joueurs`` est une liste de noms (ancien format) ou de dicts
+            # {"nom", "est_ia", "niveau"} (issue #185) : on affiche le nom
+            # dans les deux cas plutôt que le dict brut.
+            noms = [j.get("nom") if isinstance(j, dict) else j
+                    for j in (joueurs or [])]
             print(f"Partie #{pid}"
-                  + (f" — joueurs : {', '.join(str(j) for j in joueurs)}"
-                     if joueurs else ""))
+                  + (f" — joueurs : {', '.join(str(n) for n in noms)}"
+                     if noms else ""))
         print(f"Tuiles de référence : {len(reference)}  "
               f"| jokers suivis : {', '.join(jokers)}")
     print(f"Coups enregistrés : {len(actions)}")

@@ -36,6 +36,8 @@ src/rummikub/
   reglages.py               charger()/sauvegarder(data) de config.json (fusion DEFAUTS).
   persistance/stockage.py   SQLite : sauvegarder_partie, charger_parties(5 derniers),
                             charger_partie, marquer_terminee, supprimer_partie.
+  persistance/journal.py   Journal JSON optionnel par partie (debug + bilan, voir §9).
+  persistance/bilan.py      Lecture des journaux + calcul du bilan par niveau d'IA (§9).
   moteur/                   Logique de jeu pure (voir §3).
     tuiles.py               Dataclass Tuile + création/mélange/distribution.
     validation.py           valider_suite/groupe/combinaison/plateau.
@@ -146,7 +148,9 @@ icône `assets/rummikub.ico` (facultative, absente → aucune icône).
   plateau, mise initiale, tours, pioche, backup/annulation.
 - `tests/test_ia.py` : les 5 niveaux ne plantent pas et renvoient une action
   valide.
-- État actuel : **25 tests passent** (`pytest -q` → `25 passed`).
+- `tests/test_bilan.py` : lecture des journaux de parties et calcul du bilan
+  par niveau d'IA (voir §9).
+- État actuel : **75 tests passent** (`pytest -q` → `75 passed`).
 
 ## 7. Vérification empirique d'un comportement front-end
 
@@ -261,3 +265,34 @@ Note : `_coup_scission` (`ia.py`) couvre le cas « tuile réelle » (bout ou
 milieu de suite, #181) ; elle n'est plus limitée aux seuls bouts de suite,
 mais reste étrangère aux jokers (dont la libération, bout ou milieu, passe
 par `_liberations_possibles`).
+
+## 9. Journal de parties et bilan par niveau d'IA (issue #185)
+
+- **Journal** (`persistance/journal.py`) : optionnel, activé par la clé
+  `log_parties` de `config.json` (défaut `False` → aucun overhead, aucun
+  fichier créé). Une fois activé, chaque coup transitant par `api.py`
+  (pose/pioche/passe/annulation/tour IA) est ajouté au fichier
+  `RACINE_DATA/logs_parties/partie_AAAAMMJJ_HHMMSS.json` de la partie en
+  cours (au plus `MAX_FICHIERS` fichiers conservés). En-tête : `joueurs`
+  (liste de `{nom, est_ia, niveau}`). Chaque action porte désormais
+  `auteur_index` (qui a décidé), `action` (`"pose"|"pioche"|"passe"|
+  "annulation"`), `nb_tuiles_posees`, `termine` et `gagnant_index` — une
+  partie dont la DERNIÈRE action n'a pas `termine: True` est abandonnée (ou
+  encore en cours) et ignorée du bilan. Les journaux écrits avant #185
+  (joueurs = liste de noms, pas de `termine`) restent lisibles : ils sont
+  juste exclus du bilan plutôt que de faire planter sa lecture.
+- **Lecture/calcul** (`persistance/bilan.py`, pur, sans pywebview) :
+  `charger_toutes_parties(dossier)` → parties terminées normalisées ;
+  `calculer_bilan(parties, nom_joueur=None, depuis=None, jusqu=None)` →
+  stats par niveau d'IA (victoires/défaites humain, taux, marge moyenne en
+  tuiles restantes, tours moyens, part des tours IA pioche/passe et leur
+  répartition début/milieu/fin de partie).
+- **Script CLI** : `python scripts/bilan_parties.py [--joueur NOM]
+  [--depuis AAAA-MM-JJ] [--jusqu AAAA-MM-JJ] [--dossier CHEMIN]`. Lit
+  `RACINE_DATA/logs_parties` par défaut. Pour générer des journaux à
+  analyser, activer `log_parties` dans les réglages (pas d'UI dédiée : clé à
+  ajouter à la main dans `config.json`) puis jouer des parties jusqu'à leur
+  terme.
+- Tests : `tests/test_bilan.py` (lecture tolérante aux formats anciens/
+  corrompus, dédoublonnage après annulation, calcul du bilan, intégration
+  réelle `journal.logger_action` → `bilan`).

@@ -74,6 +74,7 @@ class Api:
         etat = self._app.etat_jeu
         if not self._tour_est_humain(etat):
             return {"ok": False, "erreur": "Pas votre tour"}
+        idx = etat["index_joueur_actuel"]
         res = jouer_tour(etat, data["ids_tuiles"], data["nouveau_plateau"])
         if res["ok"]:
             self._app.etat_jeu = res["etat"]
@@ -81,42 +82,49 @@ class Api:
             from rummikub.persistance.stockage import sauvegarder_partie
             sauvegarder_partie(self._app.etat_jeu)
             from rummikub.persistance.journal import logger_action
-            logger_action(self._app.etat_jeu, "pose")
+            logger_action(self._app.etat_jeu, "pose", auteur_index=idx,
+                         nb_tuiles_posees=len(data["ids_tuiles"]))
         return res
 
     def jeu_piocher(self):
         from rummikub.moteur.partie import piocher, backup_debut_tour
-        if not self._tour_est_humain(self._app.etat_jeu):
+        etat = self._app.etat_jeu
+        if not self._tour_est_humain(etat):
             return {"ok": False, "erreur": "Pas votre tour"}
-        res = piocher(self._app.etat_jeu)
+        idx = etat["index_joueur_actuel"]
+        res = piocher(etat)
         self._app.etat_jeu = res["etat"]
         backup_debut_tour(self._app.etat_jeu)
         from rummikub.persistance.stockage import sauvegarder_partie
         sauvegarder_partie(self._app.etat_jeu)
         from rummikub.persistance.journal import logger_action
-        logger_action(self._app.etat_jeu, "pioche")
+        logger_action(self._app.etat_jeu, "pioche", auteur_index=idx)
         return res
 
     def jeu_passer(self):
         from rummikub.moteur.partie import passer_tour, backup_debut_tour
-        if not self._tour_est_humain(self._app.etat_jeu):
+        etat = self._app.etat_jeu
+        if not self._tour_est_humain(etat):
             return {"ok": False, "erreur": "Pas votre tour"}
-        res = passer_tour(self._app.etat_jeu)
+        idx = etat["index_joueur_actuel"]
+        res = passer_tour(etat)
         self._app.etat_jeu = res["etat"]
         backup_debut_tour(self._app.etat_jeu)
         from rummikub.persistance.stockage import sauvegarder_partie
         sauvegarder_partie(self._app.etat_jeu)
         from rummikub.persistance.journal import logger_action
-        logger_action(self._app.etat_jeu, "fin_de_tour")
+        logger_action(self._app.etat_jeu, "passe", auteur_index=idx)
         return res
 
     def jeu_annuler(self):
         from rummikub.moteur.partie import annuler_tour
-        if not self._tour_est_humain(self._app.etat_jeu):
+        etat = self._app.etat_jeu
+        if not self._tour_est_humain(etat):
             return {"ok": False, "erreur": "Pas votre tour"}
-        annuler_tour(self._app.etat_jeu)
+        idx = etat["index_joueur_actuel"]
+        annuler_tour(etat)
         from rummikub.persistance.journal import logger_action
-        logger_action(self._app.etat_jeu, "annulation")
+        logger_action(etat, "annulation", auteur_index=idx)
         return {"ok": True, "etat": self._app.etat_jeu}
 
     def jeu_verifier_plateau(self, plateau, ids_ce_tour=None):
@@ -207,7 +215,15 @@ class Api:
         backup_debut_tour(self._app.etat_jeu)
         sauvegarder_partie(self._app.etat_jeu)
         from rummikub.persistance.journal import logger_action
-        logger_action(self._app.etat_jeu, "tour_ia")
+        # Canonise le libellé pour qu'il rejoigne celui des coups humains
+        # (pose/pioche/passe), nécessaire au bilan par niveau d'IA (#185) :
+        # ``type_reel`` reprend ici les libellés internes de l'IA ("piocher",
+        # "passer") plutôt que ceux du journal.
+        action_journal = {"piocher": "pioche", "passer": "passe"}.get(
+            type_reel, type_reel)
+        nb_posees = len(res_ia.get("ids_tuiles") or []) if coup_joue else 0
+        logger_action(self._app.etat_jeu, action_journal, auteur_index=idx,
+                     nb_tuiles_posees=nb_posees)
         return {"ok": True, "etat": self._app.etat_jeu}
 
     def jeu_retour_accueil(self):
