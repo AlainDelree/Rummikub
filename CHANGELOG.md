@@ -1,5 +1,150 @@
 # Issue #67 — Réglages : « Vitesse de l'ordinateur » déplacée vers l'onglet Général
 
+# Issue #184 — Script de simulation : départager deux niveaux d'IA sur un grand nombre de parties
+
+On ne savait pas si le niveau Expert est réellement plus fort qu'Avancé, sa
+seule différence étant une règle qui lui fait piocher au lieu de poser
+quand un adversaire n'a plus que 3 tuiles ou moins — ce qui pourrait le
+désavantager autant que l'avantager. But : mesurer, sans toucher à l'IA ni
+au moteur (voir #134 pour les scripts de simulation historiques).
+
+## Ajout
+
+`scripts/comparer_niveaux_ia.py` (nouveau script, aux côtés de
+`scripts/simulation_ia.py` déjà existant) :
+
+- CLI : `--niveau-a`, `--niveau-b` (obligatoires, un des 5 niveaux
+  connus), `--donnes` (défaut 50), `--seed` (défaut 0, reproductible),
+  `--max-tours` (garde-fou anti-blocage, défaut 300), `-v/--verbose`.
+- Utilise uniquement le moteur Python (`rummikub.moteur.*`), jamais
+  pywebview, conformément à `CONTEXTE.md` §7.
+- **Parties à 2 joueurs jouées en miroir** : pour chaque donne, `random.seed`
+  est réinitialisée à la même graine avant chaque partie du couple, ce qui
+  produit exactement la même distribution de tuiles (`distribuer`
+  consomme le module `random` global dans cet ordre) ; seules les places
+  des deux niveaux sont échangées entre les deux parties du couple. 50
+  donnes → 100 parties. Avec la même `--seed`, la campagne est reproductible
+  à l'identique.
+- **Fin de partie** : suit les règles du moteur (`_terminer_tour`) —
+  chevalet vidé ou pioche épuisée (ce second cas, dit « bloqué », est déjà
+  géré par `calculer_scores_manche`/`trouver_gagnant_manche` : le joueur
+  avec le moins de pénalité l'emporte). Garde-fou `--max-tours` : les
+  parties qui l'atteignent sont **comptées à part** (bucket
+  `garde_fou`), exclues des statistiques de victoire/durée/pénalité plutôt
+  que silencieusement ignorées ou faussement comptées comme décisives.
+- **Résultats affichés** : victoires et taux par niveau avec marge d'erreur
+  (IC 95 %, approximation normale de Wald) et verdict « significatif / NON
+  significatif » par rapport à 50/50 ; nombre moyen de tuiles restantes et
+  de points de pénalité du perdant ; durée moyenne en tours des parties
+  décidées ; répartition des fins de partie (chevalet vidé / pioche
+  épuisée / arrêtées par le garde-fou) ; temps de calcul moyen et maximal
+  d'un tour de décision IA par niveau (chronométré autour de `jouer_ia`
+  uniquement, pour repérer un emballement de la recherche combinatoire des
+  libérations de joker, cf. `CONTEXTE.md` §8).
+- Aucune modification de `moteur/ia.py` ni du reste du moteur : le script
+  ne fait qu'orchestrer les fonctions publiques déjà exposées
+  (`creer_partie`, `jouer_tour`, `piocher`, `passer_tour`,
+  `backup_debut_tour`, `annuler_tour`, `jouer_ia`), à l'identique de
+  `scripts/simulation_ia.py`.
+
+## Première campagne : Avancé vs Expert
+
+Lancée avec les valeurs par défaut (`--niveau-a Avancé --niveau-b Expert`,
+50 donnes, graine 0, max-tours 300) :
+
+```
+COMPARAISON : Avancé (camp A) vs Expert (camp B)
+50 donne(s) x 2 (miroir) = 100 partie(s) demandée(s), 100 partie(s) décidée(s)
+----------------------------------------------------------------------
+  Avancé (camp A) : 53/100 victoires — taux 53.0 % ± 9.8 pt (IC 95 %)
+  Expert (camp B) : 47/100 victoires — taux 47.0 % ± 9.8 pt (IC 95 %)
+  Écart par rapport à 50/50 NON significatif au seuil de confiance 95 %.
+----------------------------------------------------------------------
+  Fins de partie : 71 par chevalet vidé, 29 par pioche épuisée (bloqué),
+  0 arrêtée(s) par le garde-fou (max tours).
+  Durée moyenne d'une partie décidée : 113.9 tour(s).
+  Perdant (parties décidées) : en moyenne 6.0 tuile(s) restante(s),
+  43.8 point(s) de pénalité.
+----------------------------------------------------------------------
+  Temps de calcul par tour (décision IA), par niveau :
+    Avancé          : moyenne 2.1 ms, max 26.9 ms, sur 5687 tour(s)
+    Expert          : moyenne 3.0 ms, max 71.6 ms, sur 5702 tour(s)
+======================================================================
+Temps total de la campagne : 34.5s.
+```
+
+**Conclusion** : sur 100 parties, Avancé gagne 53 % contre 47 % pour
+Expert, mais l'écart (± 9.8 pt) n'est PAS statistiquement significatif à
+95 % — rien ne permet de conclure qu'Expert est plus fort ou plus faible
+qu'Avancé. La règle « piocher au lieu de poser face à un adversaire à ≤3
+tuiles » ne semble donc pas le désavantager de façon mesurable sur cet
+échantillon ; aucun emballement de temps de calcul détecté (max 71.6 ms
+pour Expert, cohérent avec la recherche combinatoire de libération de
+joker, sans dérive). Aucune partie bloquée par le garde-fou.
+
+## Documentation
+
+`CONTEXTE.md` : nouvelle section §9 « Scripts de simulation IA vs IA »,
+décrivant `scripts/simulation_ia.py` et `scripts/comparer_niveaux_ia.py`
+(usage, options, résultats affichés, résumé de la première campagne).
+
+# Issue #183 — Suite #181 : IA : retirer un joker d'un groupe de 4 sans tuile de remplacement
+
+Dernière tactique simple identifiée dans `CONTEXTE.md` §8 (« Réduction de
+groupe de 4 à 3 (joker retiré) »). Un groupe de 4 tuiles du plateau
+contenant un joker (3 tuiles réelles de couleurs distinctes + 1 joker)
+reste un groupe valide une fois le joker retiré : les 3 tuiles réelles
+suffisent seules. Contrairement à l'échange direct (#148, qui exige une
+tuile identique en main) et à #180 (qui retire une tuile RÉELLE, jamais le
+joker, pour l'échanger ailleurs), ici le joker est retiré sans qu'aucune
+tuile ne le remplace.
+
+## Ajout
+
+`src/rummikub/moteur/ia.py` :
+
+- `_jokers_liberables_par_groupe4_sans_remplacement(plateau)` (nouvelle
+  fonction) : détecte, pour tout groupe de 4 tuiles du plateau, un joker
+  dont le retrait laisse un groupe de 3 valide. Ne consomme aucune tuile
+  du chevalet.
+- `_liberations_possibles` : intègre cette nouvelle tactique au même
+  format unifié que #169/#180/#181 (`combis`, `joker`, `tuiles_consommees`
+  vide, `appliquer`), pour qu'elle puisse se combiner avec les autres
+  libérations dans la même recherche combinatoire (`_meilleur_coup_liberations`).
+
+Comme pour les autres tactiques de joker, limité aux niveaux Avancé et
+Expert (`_meilleur_coup_avec_joker`, déjà réservé à ces niveaux) ; le
+joker libéré doit être rejoué dans le même tour avec des tuiles de la main,
+sinon le coup n'est pas retenu. S'applique uniquement aux groupes de 4 :
+un groupe de 3 avec joker (2 réelles + 1 joker) ne peut pas perdre son
+joker sans tomber sous le minimum de 3 tuiles.
+
+## Tests
+
+`tests/test_ia.py` :
+
+- `test_avance_libere_un_joker_de_groupe4_sans_remplacement` /
+  `test_expert_libere_un_joker_de_groupe4_sans_remplacement` : groupe
+  plateau de trois 9 (rouge, bleu, jaune) + joker, chevalet avec 12 rouge
+  et 12 jaune — le joker est retiré du groupe (réduit à 3, toujours
+  valide) et rejoué dans un nouveau groupe de 12.
+- `test_facile_ne_libere_pas_le_joker_de_groupe4` : non-régression, Facile
+  ne tente pas cette tactique (aucun coup jouable avec les mêmes données).
+- `test_avance_ne_reduit_pas_un_groupe_de_3_avec_joker` : un groupe de
+  SEULEMENT 3 tuiles avec joker (2 réelles + 1 joker) ne peut pas perdre
+  son joker — la réduction est impossible, le coup n'est pas proposé.
+
+Tous les tests existants (48 au total sur le dépôt) passent sans
+modification de leurs assertions.
+
+## Documentation
+
+`CONTEXTE.md` §8 : la tactique « Réduction de groupe de 4 à 3 (joker
+retiré) » est déplacée des tactiques identifiées mais non implémentées
+vers les tactiques implémentées, avec le numéro #183 et une description
+courte. Il ne reste plus que le démantèlement complet d'une courte suite
+(#175) dans les tactiques identifiées mais non implémentées.
+
 # Issue #182 — Suite #181 : Tests de non-régression de la scission en bout de suite
 
 Suite #181 : la scission en BOUT de suite (`_coup_scission`, cas le plus
