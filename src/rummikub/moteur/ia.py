@@ -456,6 +456,41 @@ def _jokers_liberables_par_reduction_groupe4(plateau, chevalet):
     return resultats
 
 
+def _jokers_liberables_par_groupe4_sans_remplacement(plateau):
+    """Joker libérable en retirant un groupe de 4 tuiles à 3, SANS aucune
+    tuile de remplacement.
+
+    Un groupe de 4 tuiles du plateau contenant un joker (3 tuiles réelles de
+    couleurs distinctes + 1 joker) reste un groupe valide une fois le joker
+    retiré : les 3 tuiles réelles suffisent seules. Contrairement à
+    :func:`_jokers_recuperables` (qui exige une tuile identique en main pour
+    remplacer le joker) et à :func:`_jokers_liberables_par_reduction_groupe4`
+    (#180, qui retire une tuile RÉELLE, jamais le joker, pour l'échanger
+    ailleurs), ici le joker est retiré sans qu'aucune tuile ne le remplace :
+    le groupe de 4 devient simplement un groupe de 3, sans consommer de
+    tuile du chevalet. Le joker ainsi libéré doit ensuite être rejoué
+    ailleurs avec des tuiles de la main (cf. :func:`_liberations_possibles`).
+
+    Retourne ``[{"combi_index", "joker", "nouveau_groupe"}, ...]``.
+    """
+    resultats = []
+    for gi, groupe in enumerate(plateau):
+        if len(groupe) != 4:
+            continue
+        r = valider_combinaison(groupe)
+        if not r["valide"] or r["type"] != "groupe":
+            continue
+        for pi, joker in enumerate(groupe):
+            if not joker.est_joker:
+                continue
+            nouveau_groupe = groupe[:pi] + groupe[pi + 1:]
+            if not valider_combinaison(nouveau_groupe)["valide"]:
+                continue
+            resultats.append({"combi_index": gi, "joker": joker,
+                              "nouveau_groupe": nouveau_groupe})
+    return resultats
+
+
 def _jokers_liberables_par_scission_milieu(plateau, chevalet):
     """Jokers en position INTÉRIEURE d'une suite, libérables en scindant
     celle-ci en deux suites valides (chacune d'au moins 3 tuiles) de part et
@@ -497,8 +532,10 @@ def _jokers_liberables_par_scission_milieu(plateau, chevalet):
 
 def _liberations_possibles(plateau, chevalet):
     """Toutes les libérations de joker possibles — échange direct,
-    détachement en bout de suite, réduction d'un groupe de 4 à 3, ou
-    scission en milieu de suite — sous une forme uniforme ::
+    détachement en bout de suite, réduction d'un groupe de 4 à 3 (tuile
+    réelle échangée contre un joker ailleurs, ou joker retiré sans
+    remplacement), ou scission en milieu de suite — sous une forme
+    uniforme ::
 
         [{"combis", "joker", "tuiles_consommees", "appliquer"}, ...]
 
@@ -563,6 +600,19 @@ def _liberations_possibles(plateau, chevalet):
             "combis": [ci_groupe, ci_joker],
             "joker": rec["joker"],
             "tuiles_consommees": [tuile_hand] if tuile_hand is not None else [],
+            "appliquer": appliquer,
+        })
+    for rec in _jokers_liberables_par_groupe4_sans_remplacement(plateau):
+        ci = rec["combi_index"]
+        nouveau_groupe = rec["nouveau_groupe"]
+
+        def appliquer(plateau_, ci=ci, nouveau_groupe=nouveau_groupe):
+            plateau_[ci] = nouveau_groupe
+
+        liberations.append({
+            "combis": [ci],
+            "joker": rec["joker"],
+            "tuiles_consommees": [],
             "appliquer": appliquer,
         })
     for rec in _jokers_liberables_par_scission_milieu(plateau, chevalet):

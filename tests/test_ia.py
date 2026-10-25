@@ -648,3 +648,85 @@ def test_expert_ne_scinde_pas_en_bout_sans_mise_initiale_faite():
     etat["joueurs"][1]["mise_initiale_faite"] = False
     coup = jouer_niveau_expert(etat, 1)
     assert coup["action"] != "jouer"
+
+
+def _etat_avec_groupe4_joker_sans_remplacement(niveau):
+    """Issue #183 : groupe plateau de trois 9 (rouge, bleu, jaune) plus un
+    joker (groupe de 4 valide). Retirer le joker laisse les trois 9 seuls,
+    toujours un groupe valide — sans aucune tuile de remplacement. Chevalet
+    du bot : 12 rouge et 12 jaune, pour rejouer le joker libéré dans un
+    nouveau groupe de 12 (rouge/jaune/joker)."""
+    etat = _partie_2j(niveau)
+    etat["index_joueur_actuel"] = 1
+    bot = etat["joueurs"][1]
+    bot["mise_initiale_faite"] = True
+    etat["plateau"] = [[
+        {"id": "rouge_9_a", "valeur": 9, "couleur": "rouge", "est_joker": False},
+        {"id": "bleu_9_a", "valeur": 9, "couleur": "bleu", "est_joker": False},
+        {"id": "jaune_9_a", "valeur": 9, "couleur": "jaune", "est_joker": False},
+        {"id": "joker_1", "valeur": None, "couleur": None, "est_joker": True},
+    ]]
+    bot["chevalet"] = [
+        {"id": "rouge_12_a", "valeur": 12, "couleur": "rouge", "est_joker": False},
+        {"id": "jaune_12_a", "valeur": 12, "couleur": "jaune", "est_joker": False},
+    ]
+    return etat
+
+
+def test_avance_libere_un_joker_de_groupe4_sans_remplacement():
+    """Issue #183 : Avancé retire le joker du groupe de 9 (réduit à 3,
+    toujours valide, aucune tuile de remplacement) et le rejoue dans un
+    nouveau groupe de 12 avec la main — seule façon de jouer les deux
+    tuiles de la main ici."""
+    etat = _etat_avec_groupe4_joker_sans_remplacement("Avancé")
+    coup = jouer_niveau_avance(etat, 1)
+    assert coup["action"] == "jouer"
+    assert set(coup["ids_tuiles"]) == {"rouge_12_a", "jaune_12_a"}
+    plateau = [[tuile_depuis_dict(d) for d in c]
+               for c in coup["nouveau_plateau"]]
+    assert valider_plateau(plateau)["valide"]
+    groupe_9 = next(c for c in plateau if any(t.id == "rouge_9_a" for t in c))
+    assert len(groupe_9) == 3
+    assert not any(t.est_joker for t in groupe_9)
+    groupe_12 = next(c for c in plateau
+                     if any(t.id == "rouge_12_a" for t in c))
+    assert any(t.est_joker for t in groupe_12)
+
+
+def test_expert_libere_un_joker_de_groupe4_sans_remplacement():
+    etat = _etat_avec_groupe4_joker_sans_remplacement("Expert")
+    coup = jouer_niveau_expert(etat, 1)
+    assert coup["action"] == "jouer"
+    assert set(coup["ids_tuiles"]) == {"rouge_12_a", "jaune_12_a"}
+
+
+def test_facile_ne_libere_pas_le_joker_de_groupe4():
+    """Non-régression : Facile/Intermédiaire ne savent pas retirer un joker
+    d'un groupe de 4 sans remplacement (seuls Avancé/Expert le tentent) —
+    avec seulement deux tuiles de valeur 12 en main et un groupe de 4 déjà
+    plein sur le plateau, aucun coup n'est jouable."""
+    etat = _etat_avec_groupe4_joker_sans_remplacement("Facile")
+    coup = jouer_niveau_facile(etat, 1)
+    assert coup["action"] != "jouer"
+
+
+def test_avance_ne_reduit_pas_un_groupe_de_3_avec_joker():
+    """Un groupe de SEULEMENT 3 tuiles (2 réelles + 1 joker) ne peut pas
+    perdre son joker : il ne resterait que 2 tuiles réelles, insuffisant
+    pour un groupe valide. La réduction sans remplacement ne s'applique
+    qu'aux groupes de 4 ; ici, le coup ne doit pas être proposé."""
+    etat = _partie_2j("Avancé")
+    etat["index_joueur_actuel"] = 1
+    bot = etat["joueurs"][1]
+    bot["mise_initiale_faite"] = True
+    etat["plateau"] = [[
+        {"id": "rouge_9_a", "valeur": 9, "couleur": "rouge", "est_joker": False},
+        {"id": "bleu_9_a", "valeur": 9, "couleur": "bleu", "est_joker": False},
+        {"id": "joker_1", "valeur": None, "couleur": None, "est_joker": True},
+    ]]
+    bot["chevalet"] = [
+        {"id": "rouge_12_a", "valeur": 12, "couleur": "rouge", "est_joker": False},
+        {"id": "jaune_12_a", "valeur": 12, "couleur": "jaune", "est_joker": False},
+    ]
+    coup = jouer_niveau_avance(etat, 1)
+    assert coup["action"] != "jouer"
