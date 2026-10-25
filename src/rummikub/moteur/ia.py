@@ -290,6 +290,25 @@ def _coup_scission(etat, idx):
     return None
 
 
+def _tuile_correspond_au_joker(combo, r, position_index, tuile):
+    """Vrai si ``tuile`` peut remplacer directement le joker en
+    ``position_index`` de ``combo`` (même valeur/couleur pour une suite,
+    même valeur et une couleur absente du groupe pour un groupe), sans
+    changer la validité ni les points de la combinaison."""
+    if tuile.est_joker:
+        return False
+    if r["type"] == "suite":
+        i0, t0 = next((i, tt) for i, tt in enumerate(combo)
+                      if not tt.est_joker)
+        valeur_attendue = t0.valeur - i0 + position_index
+        return tuile.valeur == valeur_attendue and tuile.couleur == t0.couleur
+    else:  # groupe
+        valeur_attendue = next(tt.valeur for tt in combo if not tt.est_joker)
+        couleurs_utilisees = {tt.couleur for tt in combo if not tt.est_joker}
+        return (tuile.valeur == valeur_attendue
+                and tuile.couleur not in couleurs_utilisees)
+
+
 def _jokers_recuperables(plateau, chevalet):
     """Jokers du plateau échangeables contre une tuile identique de la main.
 
@@ -309,22 +328,9 @@ def _jokers_recuperables(plateau, chevalet):
         for pi, t in enumerate(combo):
             if not t.est_joker:
                 continue
-            if r["type"] == "suite":
-                i0, t0 = next((i, tt) for i, tt in enumerate(combo)
-                              if not tt.est_joker)
-                valeur_attendue = t0.valeur - i0 + pi
-                couleur_attendue = t0.couleur
-                match = next((tt for tt in chevalet if not tt.est_joker
-                              and tt.valeur == valeur_attendue
-                              and tt.couleur == couleur_attendue), None)
-            else:  # groupe
-                valeur_attendue = next(tt.valeur for tt in combo
-                                       if not tt.est_joker)
-                couleurs_utilisees = {tt.couleur for tt in combo
-                                      if not tt.est_joker}
-                match = next((tt for tt in chevalet if not tt.est_joker
-                              and tt.valeur == valeur_attendue
-                              and tt.couleur not in couleurs_utilisees), None)
+            match = next((tt for tt in chevalet
+                          if _tuile_correspond_au_joker(combo, r, pi, tt)),
+                         None)
             if match is not None:
                 resultats.append({"combi_index": ci, "position_index": pi,
                                   "joker": t, "remplacement": match})
@@ -372,38 +378,138 @@ def _jokers_detachables_par_extension(plateau, chevalet):
     return resultats
 
 
+def _jokers_liberables_par_reduction_groupe4(plateau, chevalet):
+    """Tuile libérée en réduisant un groupe de 4 à un groupe de 3 valide,
+    utilisée pour échanger directement un joker récupérable ailleurs sur
+    le plateau.
+
+    Un groupe de 4 tuiles de couleurs distinctes — déjà présent sur le
+    plateau, ou obtenu en y ajoutant une tuile de la main de la 4e couleur
+    manquante — peut perdre l'une de ses tuiles réelles tout en restant un
+    groupe valide de 3. Si la tuile ainsi libérée correspond exactement au
+    joker d'une AUTRE combinaison du plateau (même critère que
+    :func:`_jokers_recuperables`), elle sert à l'échanger directement,
+    libérant ce joker pour un usage ailleurs.
+
+    Exemple : groupe plateau (11 bleu, 11 jaune, 11 noir) + 11 rouge de la
+    main → groupe de 4 ; le 11 noir libéré (groupe restant : bleu/jaune/
+    rouge, valide) correspond au joker d'une suite noire 10-joker-12-13
+    ailleurs sur le plateau.
+
+    Retourne ``[{"combi_index_groupe", "nouveau_groupe",
+                "tuile_hand_utilisee", "tuile_liberee", "combi_index_joker",
+                "position_index_joker", "joker"}, ...]``.
+    """
+    resultats = []
+    for gi, groupe in enumerate(plateau):
+        r = valider_combinaison(groupe)
+        if not r["valide"] or r["type"] != "groupe":
+            continue
+        if len(groupe) == 4:
+            candidats = [(groupe, None)]
+        elif len(groupe) == 3 and not any(t.est_joker for t in groupe):
+            valeur = groupe[0].valeur
+            couleurs_utilisees = {t.couleur for t in groupe}
+            candidats = [(groupe + [t], t) for t in chevalet
+                         if not t.est_joker and t.valeur == valeur
+                         and t.couleur not in couleurs_utilisees]
+        else:
+            continue
+        for groupe4, tuile_hand in candidats:
+            for libre in groupe4:
+                if libre.est_joker or libre is tuile_hand:
+                    continue
+                nouveau_groupe = [t for t in groupe4 if t is not libre]
+                if not valider_combinaison(nouveau_groupe)["valide"]:
+                    continue
+                for cj, combo_j in enumerate(plateau):
+                    if cj == gi:
+                        continue
+                    rj = valider_combinaison(combo_j)
+                    if not rj["valide"]:
+                        continue
+                    for pj, tj in enumerate(combo_j):
+                        if not tj.est_joker:
+                            continue
+                        if _tuile_correspond_au_joker(combo_j, rj, pj, libre):
+                            resultats.append({
+                                "combi_index_groupe": gi,
+                                "nouveau_groupe": nouveau_groupe,
+                                "tuile_hand_utilisee": tuile_hand,
+                                "tuile_liberee": libre,
+                                "combi_index_joker": cj,
+                                "position_index_joker": pj,
+                                "joker": tj,
+                            })
+    return resultats
+
+
 def _liberations_possibles(plateau, chevalet):
-    """Toutes les libérations de joker possibles, par échange direct ou par
-    détachement en bout de suite, sous une forme uniforme ::
+    """Toutes les libérations de joker possibles — échange direct,
+    détachement en bout de suite, ou réduction d'un groupe de 4 à 3 — sous
+    une forme uniforme ::
 
-        [{"combi_index", "joker", "tuile_consommee", "appliquer"}, ...]
+        [{"combis", "joker", "tuiles_consommees", "appliquer"}, ...]
 
-    ``appliquer(combo)`` retourne la nouvelle version de la combinaison
-    ``combi_index`` une fois la libération effectuée ; ``tuile_consommee``
-    est la tuile du chevalet utilisée pour cela (remplacement ou tuile
-    d'extension). Chaque entrée correspond à UNE libération ; en combiner
-    plusieurs (sur des ``combi_index`` distincts) permet de récupérer
+    ``combis`` est la liste des ``combi_index`` du plateau modifiés par
+    cette libération (un seul pour les deux premiers mécanismes ; deux
+    pour la réduction de groupe, qui modifie à la fois le groupe réduit et
+    la combinaison du joker échangé). ``appliquer(plateau)`` modifie ces
+    combinaisons en place pour effectuer la libération. ``tuiles_consommees``
+    liste les tuiles du CHEVALET utilisées (remplacement, tuile d'extension,
+    ou tuile complétant un groupe à 4 ; éventuellement aucune). Chaque
+    entrée correspond à UNE libération ; en combiner plusieurs (sur des
+    ``combis`` et ``tuiles_consommees`` disjoints) permet de récupérer
     plusieurs jokers en un seul coup.
     """
     liberations = []
     for rec in _jokers_recuperables(plateau, chevalet):
+        ci = rec["combi_index"]
         pi = rec["position_index"]
         remplacement = rec["remplacement"]
+
+        def appliquer(plateau_, ci=ci, pi=pi, remplacement=remplacement):
+            plateau_[ci] = plateau_[ci][:pi] + [remplacement] \
+                + plateau_[ci][pi + 1:]
+
         liberations.append({
-            "combi_index": rec["combi_index"],
+            "combis": [ci],
             "joker": rec["joker"],
-            "tuile_consommee": remplacement,
-            "appliquer": lambda combo, pi=pi, remplacement=remplacement:
-                combo[:pi] + [remplacement] + combo[pi + 1:],
+            "tuiles_consommees": [remplacement],
+            "appliquer": appliquer,
         })
     for rec in _jokers_detachables_par_extension(plateau, chevalet):
+        ci = rec["combi_index"]
         nouveau_combo = rec["nouveau_combo"]
+
+        def appliquer(plateau_, ci=ci, nouveau_combo=nouveau_combo):
+            plateau_[ci] = nouveau_combo
+
         liberations.append({
-            "combi_index": rec["combi_index"],
+            "combis": [ci],
             "joker": rec["joker"],
-            "tuile_consommee": rec["tuile_extension"],
-            "appliquer": lambda combo, nouveau_combo=nouveau_combo:
-                nouveau_combo,
+            "tuiles_consommees": [rec["tuile_extension"]],
+            "appliquer": appliquer,
+        })
+    for rec in _jokers_liberables_par_reduction_groupe4(plateau, chevalet):
+        ci_groupe = rec["combi_index_groupe"]
+        nouveau_groupe = rec["nouveau_groupe"]
+        ci_joker = rec["combi_index_joker"]
+        pj = rec["position_index_joker"]
+        libre = rec["tuile_liberee"]
+        tuile_hand = rec["tuile_hand_utilisee"]
+
+        def appliquer(plateau_, ci_groupe=ci_groupe, nouveau_groupe=nouveau_groupe,
+                      ci_joker=ci_joker, pj=pj, libre=libre):
+            plateau_[ci_groupe] = nouveau_groupe
+            plateau_[ci_joker] = plateau_[ci_joker][:pj] + [libre] \
+                + plateau_[ci_joker][pj + 1:]
+
+        liberations.append({
+            "combis": [ci_groupe, ci_joker],
+            "joker": rec["joker"],
+            "tuiles_consommees": [tuile_hand] if tuile_hand is not None else [],
+            "appliquer": appliquer,
         })
     return liberations
 
@@ -420,9 +526,9 @@ def _coup_depuis_liberations(etat, idx, base_plateau, chevalet, liberations,
     consommees = set()
     jokers = []
     for lib in liberations:
-        ci = lib["combi_index"]
-        plateau[ci] = lib["appliquer"](plateau[ci])
-        consommees.add(lib["tuile_consommee"].id)
+        lib["appliquer"](plateau)
+        for t in lib["tuiles_consommees"]:
+            consommees.add(t.id)
         jokers.append(lib["joker"])
 
     disponibles = [t for t in chevalet if t.id not in consommees] + jokers
@@ -461,10 +567,10 @@ def _coup_depuis_liberations(etat, idx, base_plateau, chevalet, liberations,
 
 def _meilleur_coup_liberations(etat, idx, ordre_points=False):
     """Essaie toutes les combinaisons non conflictuelles de libérations de
-    joker (échange direct et/ou détachement, sur des combinaisons
-    distinctes du plateau) et retourne la meilleure, afin de récupérer
-    plusieurs jokers en un seul coup quand c'est possible, plutôt que de
-    n'en considérer qu'un seul à la fois.
+    joker (échange direct, détachement, et/ou réduction de groupe de 4,
+    sur des combinaisons distinctes du plateau) et retourne la meilleure,
+    afin de récupérer plusieurs jokers en un seul coup quand c'est
+    possible, plutôt que de n'en considérer qu'un seul à la fois.
 
     Retourne ``None`` si aucune combinaison de libérations n'est jouable.
     """
@@ -477,9 +583,9 @@ def _meilleur_coup_liberations(etat, idx, ordre_points=False):
     meilleur = None
     for taille in range(1, len(liberations) + 1):
         for sous_ensemble in combinations(liberations, taille):
-            cis = [lib["combi_index"] for lib in sous_ensemble]
-            ids_consommees = [lib["tuile_consommee"].id
-                              for lib in sous_ensemble]
+            cis = [ci for lib in sous_ensemble for ci in lib["combis"]]
+            ids_consommees = [t.id for lib in sous_ensemble
+                              for t in lib["tuiles_consommees"]]
             if len(set(cis)) != len(cis) \
                     or len(set(ids_consommees)) != len(ids_consommees):
                 continue  # deux libérations qui se marchent dessus
@@ -501,10 +607,10 @@ def _valeur_coup(etat, idx, coup):
 
 def _meilleur_coup_avec_joker(etat, idx, ordre_points=False):
     """Compare l'extension/combinaison évidente à la meilleure combinaison
-    de libérations de joker (échange direct et/ou détachement en bout de
-    suite, pouvant porter sur plusieurs jokers à la fois si le plateau en
-    propose plusieurs) ; retourne le meilleur des coups trouvés (ou
-    ``None`` si aucun n'est jouable).
+    de libérations de joker (échange direct, détachement en bout de suite,
+    et/ou réduction de groupe de 4, pouvant porter sur plusieurs jokers à
+    la fois si le plateau en propose plusieurs) ; retourne le meilleur des
+    coups trouvés (ou ``None`` si aucun n'est jouable).
     """
     simple = _coup_maximal(etat, idx, ordre_points=ordre_points)
     liberation = _meilleur_coup_liberations(etat, idx, ordre_points=ordre_points)
@@ -558,9 +664,10 @@ def jouer_niveau_intermediaire(etat, idx):
 
 def jouer_niveau_avance(etat, idx):
     """Comme intermédiaire + peut scinder une suite longue pour libérer une
-    tuile, et préfère récupérer (échange direct) ou détacher (extension du
-    bout opposé) un joker exploitable du plateau si cela donne un coup plus
-    riche que l'extension la plus évidente."""
+    tuile, et préfère récupérer (échange direct), détacher (extension du
+    bout opposé), ou libérer en réduisant un groupe de 4 à 3, un joker
+    exploitable du plateau si cela donne un coup plus riche que l'extension
+    la plus évidente."""
     coup = _meilleur_coup_avec_joker(etat, idx, ordre_points=True)
     if coup:
         return coup

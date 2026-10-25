@@ -252,3 +252,75 @@ def test_expert_recupere_les_deux_jokers_a_la_fois():
     coup = jouer_niveau_expert(etat, 1)
     assert coup["action"] == "jouer"
     assert {"rouge_6_b", "bleu_9_a"} <= set(coup["ids_tuiles"])
+
+
+def _etat_avec_reduction_groupe4(niveau):
+    """Reprend l'exemple de l'issue #180 : un groupe de trois 11 (bleu,
+    jaune, noir) plus le 11 rouge de la main devient un groupe de quatre ;
+    le 11 noir libéré correspond exactement au joker d'une suite noire
+    10-joker-12-13 présente ailleurs sur le plateau.
+
+    Chevalet du bot : 11 rouge (complète le groupe à 4 et libère le 11
+    noir), 1 et 2 noirs (pour rejouer le joker libéré dans une nouvelle
+    suite 1-2-3(joker) noire) — sans cette combinaison, l'IA ne peut rien
+    jouer d'autre ici.
+    """
+    etat = _partie_2j(niveau)
+    etat["index_joueur_actuel"] = 1
+    bot = etat["joueurs"][1]
+    bot["mise_initiale_faite"] = True
+    etat["plateau"] = [
+        [
+            {"id": "bleu_11_a", "valeur": 11, "couleur": "bleu", "est_joker": False},
+            {"id": "jaune_11_a", "valeur": 11, "couleur": "jaune", "est_joker": False},
+            {"id": "noir_11_a", "valeur": 11, "couleur": "noir", "est_joker": False},
+        ],
+        [
+            {"id": "noir_10_a", "valeur": 10, "couleur": "noir", "est_joker": False},
+            {"id": "joker_1", "valeur": None, "couleur": None, "est_joker": True},
+            {"id": "noir_12_a", "valeur": 12, "couleur": "noir", "est_joker": False},
+            {"id": "noir_13_a", "valeur": 13, "couleur": "noir", "est_joker": False},
+        ],
+    ]
+    bot["chevalet"] = [
+        {"id": "rouge_11_a", "valeur": 11, "couleur": "rouge", "est_joker": False},
+        {"id": "noir_1_a", "valeur": 1, "couleur": "noir", "est_joker": False},
+        {"id": "noir_2_a", "valeur": 2, "couleur": "noir", "est_joker": False},
+    ]
+    return etat
+
+
+def test_avance_libere_une_tuile_de_groupe4_pour_echanger_un_joker():
+    """Issue #180 : Avancé complète le groupe à 4 (11 rouge), libère le 11
+    noir, l'échange contre le joker noir, et rejoue ce dernier dans une
+    nouvelle suite 1-2-3(joker) noire — seule façon de poser les 3 tuiles
+    de la main ici."""
+    etat = _etat_avec_reduction_groupe4("Avancé")
+    coup = jouer_niveau_avance(etat, 1)
+    assert coup["action"] == "jouer"
+    assert set(coup["ids_tuiles"]) == {"rouge_11_a", "noir_1_a", "noir_2_a"}
+    plateau = [[tuile_depuis_dict(d) for d in c]
+               for c in coup["nouveau_plateau"]]
+    assert valider_plateau(plateau)["valide"]
+    combo_groupe = next(c for c in plateau
+                        if any(t.id == "rouge_11_a" for t in c))
+    assert len(combo_groupe) == 3
+    assert not any(t.id == "noir_11_a" for t in combo_groupe)
+    assert not any(t.est_joker for c in plateau for t in c
+                   if any(tt.id == "noir_10_a" for tt in c))
+
+
+def test_expert_libere_une_tuile_de_groupe4_pour_echanger_un_joker():
+    etat = _etat_avec_reduction_groupe4("Expert")
+    coup = jouer_niveau_expert(etat, 1)
+    assert coup["action"] == "jouer"
+    assert set(coup["ids_tuiles"]) == {"rouge_11_a", "noir_1_a", "noir_2_a"}
+
+
+def test_facile_ne_libere_pas_de_tuile_de_groupe4():
+    """Facile/Intermédiaire restent inchangés : complète le groupe à 4 avec
+    le 11 rouge sans jamais tenter d'échanger un joker ailleurs."""
+    etat = _etat_avec_reduction_groupe4("Facile")
+    coup = jouer_niveau_facile(etat, 1)
+    assert coup["action"] == "jouer"
+    assert set(coup["ids_tuiles"]) == {"rouge_11_a"}

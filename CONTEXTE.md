@@ -200,15 +200,33 @@ icône `assets/rummikub.ico` (facultative, absente → aucune icône).
   systématiquement ignoré). Limite assumée : deux libérations sur la MÊME
   combinaison du plateau (ex. deux jokers dans une même suite) ne sont pas
   combinées — cas rare, laissé de côté pour borner la complexité.
+- **Libération par réduction de groupe de 4 à 3** (#180) —
+  `_jokers_liberables_par_reduction_groupe4` : un groupe de 4 tuiles de
+  couleurs distinctes — déjà présent sur le plateau, ou complété à 4 par
+  une tuile de la main de la 4e couleur manquante — perd une de ses
+  tuiles RÉELLES (le groupe réduit à 3 reste valide) ; cette tuile libérée
+  sert alors de remplacement pour un échange direct avec un joker
+  récupérable ailleurs sur le plateau (même critère que
+  `_jokers_recuperables`). Le joker ainsi libéré doit être rejoué dans le
+  même tour. Intégré au même format unifié que #169
+  (`_liberations_possibles`), qu'il a fallu généraliser pour supporter des
+  libérations modifiant DEUX combinaisons du plateau à la fois (le groupe
+  réduit et la combinaison du joker échangé), au lieu d'une seule pour les
+  deux mécanismes précédents. À ne pas confondre avec la « réduction de
+  groupe de 4 à 3 (joker retiré) » ci-dessous : ici on retire une tuile
+  RÉELLE pour s'en servir comme remplaçante ailleurs, jamais le joker
+  lui-même sans remplacement.
 
 **Identifiées mais pas encore implémentées :**
 
-- **Réduction de groupe de 4 à 3** : retirer le joker d'un groupe de 4
-  tuiles (3 réelles + 1 joker) *sans* tuile de remplacement — le groupe
-  réduit à ses 3 tuiles réelles reste valide tel quel, contrairement à
-  l'échange direct (#148) qui exige une tuile identique en main. Aucune
-  issue dédiée ouverte à ce jour ; non couvert par `_jokers_recuperables`
-  (qui ne traite que le remplacement).
+- **Réduction de groupe de 4 à 3 (joker retiré)** : retirer le joker d'un
+  groupe de 4 tuiles (3 réelles + 1 joker) *sans* tuile de remplacement —
+  le groupe réduit à ses 3 tuiles réelles reste valide tel quel,
+  contrairement à l'échange direct (#148) qui exige une tuile identique
+  en main. Aucune issue dédiée ouverte à ce jour ; non couvert par
+  `_jokers_recuperables` (qui ne traite que le remplacement) ni par #180
+  (qui retire une tuile réelle, jamais le joker, pour l'utiliser
+  ailleurs).
 - **Scission en milieu de suite** : étendre `_coup_scission` (qui ne
   détache aujourd'hui qu'une tuile réelle en BOUT de suite, jamais un
   joker, pour former un nouveau groupe) afin de libérer une tuile ou un
