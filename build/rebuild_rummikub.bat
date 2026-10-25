@@ -1,36 +1,67 @@
 @echo off
 REM ============================================================================
 REM  rebuild_rummikub.bat  --  Reconstruction complete de Rummikub (Windows)
-REM  Calque sur rebuild_scrabble.bat. 9 etapes (0 a 8) :
-REM    0. Localiser ISCC.exe (Inno Setup 6)
-REM    1. Copier le projet vers C:\Temp\RummikubBuild
-REM    2. Environnement virtuel .venv_build + dependances
-REM    3. Fermer Rummikub.exe si en cours
-REM    4. PyInstaller (rummikub.spec)
-REM    5. Verifier dist\Rummikub\Rummikub.exe + taille (dossier non compresse)
-REM    6. ISCC (installeur) + copie du Setup (local + partage) + garde-fou taille
-REM    7. manifest.json + zip (dist + manifest) + copie + garde-fou taille
-REM       (rummikub-vN.zip en --publier, rummikub.zip sinon)
-REM    8. Nettoyage %BUILDDIR% + reset git du clone CCW
+REM  Calque sur rebuild_scrabble.bat / rebuild_actualise.bat. 10 etapes (0 a 9) :
+REM    0.    Localiser ISCC.exe (Inno Setup 6)
+REM    0bis. Determiner et valider le numero de build (garde-fou, issue #178)
+REM    1.    Copier le projet vers C:\Temp\RummikubBuild
+REM    2.    Environnement virtuel .venv_build + dependances
+REM    3.    Fermer Rummikub.exe si en cours
+REM    4.    PyInstaller (rummikub.spec)
+REM    5.    Verifier dist\Rummikub\Rummikub.exe + taille (dossier non compresse)
+REM    6.    ISCC (installeur) + copie du Setup (local + worktree) + garde-fou taille
+REM    7.    manifest.json + zip (dist + manifest) + copie vers le worktree + garde-fou taille
+REM    8.    Copie de l'installeur et du zip vers le dossier fixe hors worktree
+REM          (issue #178), dans tous les modes -- --publier ajoute en plus la
+REM          mise a jour de version.json (build + SHA-256) et un commit local.
+REM    9.    Nettoyage de %BUILDDIR%
+REM  Le script construit entierement dans un dossier local (%BUILDDIR%) puis
+REM  n'ecrit que dans le worktree courant (%ORIGDIR%) et dans le dossier fixe
+REM  hors worktree ci-dessus : il n'a plus aucune notion de clone partage.
 REM ============================================================================
 setlocal EnableExtensions EnableDelayedExpansion
 
 REM --- Analyse des arguments ------------------------------------------------
-REM  Sans argument : comportement historique inchange (aucune publication).
-REM  --publier      : apres l'etape 7, met a jour version.json (build + SHA-256)
-REM                   et fait un commit local dans le clone partage. Jamais de
-REM                   git push ni de gh release create (ces deux etapes restent
-REM                   manuelles, cf. rappel en fin de script).
-REM  --build N      : force le numero de build (sinon = build de version.json + 1).
+REM  Syntaxe : build\rebuild_rummikub.bat [--publier] [--build N]
+REM  Sans argument : construit l'installeur et l'archive (build de test, non
+REM  publie) et les copie quand meme vers le dossier fixe hors worktree.
+REM  --publier      : en plus de la construction, met a jour version.json
+REM                   (build + SHA-256 de l'archive) et fait un commit local
+REM                   dans le worktree. Jamais de git push ni de
+REM                   gh release create (etapes manuelles, cf. rappel final).
+REM  --build N      : force le numero de build (sinon = build de version.json
+REM                   + 1), dans tous les modes. N doit etre un entier
+REM                   strictement superieur au build courant de version.json :
+REM                   refuse sinon, avant toute copie, construction ou
+REM                   ecriture (garde-fou, issue #178), car la copie vers le
+REM                   dossier fixe a lieu dans tous les modes, --publier ou
+REM                   non. --build sans valeur, ou tout argument inconnu, est
+REM                   egalement refuse (plus d'avertissement silencieux).
 set "PUBLIER=0"
 set "BUILD_OVERRIDE="
 :parse_args
 if "%~1"=="" goto args_done
 if /i "%~1"=="--publier" ( set "PUBLIER=1" & shift /1 & goto parse_args )
-if /i "%~1"=="--build" ( set "BUILD_OVERRIDE=%~2" & shift /1 & shift /1 & goto parse_args )
-echo [ATTENTION] Argument inconnu ignore : %~1
-shift /1
-goto parse_args
+if /i "%~1"=="--build" (
+    if "%~2"=="" (
+        echo [ERREUR] --build necessite une valeur numerique ^(exemple : --build 42^).
+        echo           Arguments acceptes : --publier, --build N
+        exit /b 1
+    )
+    echo %~2| findstr /r "^[0-9][0-9]*$" >nul
+    if errorlevel 1 (
+        echo [ERREUR] --build necessite un entier positif ; recu : %~2
+        echo           Arguments acceptes : --publier, --build N
+        exit /b 1
+    )
+    set "BUILD_OVERRIDE=%~2"
+    shift /1
+    shift /1
+    goto parse_args
+)
+echo [ERREUR] Argument inconnu : %~1
+echo           Arguments acceptes : --publier, --build N
+exit /b 1
 :args_done
 
 REM --- Racine du depot = dossier parent de ce .bat (build\ -> ..) -------------
@@ -40,6 +71,7 @@ popd
 
 set "BUILDDIR=C:\Temp\RummikubBuild"
 set "OUTPUTDIR=C:\Temp\RummikubOutput"
+set "FIXEDSHARE=C:\CCW_Share\_derniers_builds\rummikub"
 
 echo ============================================================================
 echo   Reconstruction de Rummikub
@@ -50,7 +82,7 @@ REM ===========================================================================
 REM  ETAPE 0 : localiser ISCC.exe
 REM ===========================================================================
 echo.
-echo [0/8] Recherche de ISCC.exe ^(Inno Setup 6^)...
+echo [0/9] Recherche de ISCC.exe ^(Inno Setup 6^)...
 set "ISCC_CCW=C:\CCW\tools\InnoSetup6\ISCC.exe"
 set "ISCC_LOCAL=%ORIGDIR%\.tools\InnoSetup6\ISCC.exe"
 
@@ -76,10 +108,45 @@ if exist "%ISCC_CCW%" (
 echo       ISCC : %ISCC%
 
 REM ===========================================================================
+REM  ETAPE 0bis : determiner et valider le numero de build (garde-fou, issue #178)
+REM  Lu AVANT toute copie/construction/ecriture, car la copie vers le dossier
+REM  fixe hors worktree (etape 8) a lieu dans tous les modes, --publier ou non.
+REM  N (fourni via --build, deja valide numerique a l'analyse des arguments, ou
+REM  build courant + 1 par defaut) doit toujours etre strictement superieur au
+REM  build courant de version.json.
+REM ===========================================================================
+echo.
+echo [0bis/9] Determination et validation du numero de build...
+set "CURBUILD="
+for /f "usebackq delims=" %%B in (`powershell -NoProfile -Command "try { [int]((ConvertFrom-Json (Get-Content -Raw '%ORIGDIR%\version.json')).build) } catch { '' }"`) do set "CURBUILD=%%B"
+if not defined CURBUILD (
+    echo [ERREUR] Lecture du build courant impossible depuis %ORIGDIR%\version.json
+    exit /b 1
+)
+echo       Build courant ^(version.json^) : !CURBUILD!
+
+if defined BUILD_OVERRIDE (
+    set "EXEBUILD=%BUILD_OVERRIDE%"
+) else (
+    set /a EXEBUILD=CURBUILD+1
+)
+
+if not !EXEBUILD! gtr !CURBUILD! (
+    echo [ERREUR] Numero de build demande ^(!EXEBUILD!^) invalide.
+    echo          Build courant de version.json : !CURBUILD!.
+    echo          Regle : le numero de build doit toujours etre strictement
+    echo          superieur au build courant de version.json, --publier ou
+    echo          non, car la copie vers le dossier fixe a lieu dans tous les
+    echo          modes.
+    exit /b 1
+)
+echo       Numero de build retenu : !EXEBUILD!
+
+REM ===========================================================================
 REM  ETAPE 1 : copie du projet vers le repertoire de build temporaire
 REM ===========================================================================
 echo.
-echo [1/8] Copie du projet vers %BUILDDIR% ...
+echo [1/9] Copie du projet vers %BUILDDIR% ...
 robocopy "%ORIGDIR%" "%BUILDDIR%" /MIR /XD .git venv .venv_build dist build __pycache__ .pytest_cache logs /NFL /NDL /NJH /NJS /NC /NS /NP
 if errorlevel 8 (
     echo [ERREUR] Echec de la copie du projet vers %BUILDDIR%
@@ -92,7 +159,7 @@ REM ===========================================================================
 REM  ETAPE 2 : environnement virtuel + dependances
 REM ===========================================================================
 echo.
-echo [2/8] Preparation de l'environnement virtuel .venv_build ...
+echo [2/9] Preparation de l'environnement virtuel .venv_build ...
 if not exist ".venv_build\Scripts\python.exe" (
     python -m venv .venv_build
     if errorlevel 1 (
@@ -111,7 +178,7 @@ REM ===========================================================================
 REM  ETAPE 3 : fermer Rummikub.exe si en cours d'execution
 REM ===========================================================================
 echo.
-echo [3/8] Fermeture de Rummikub.exe si necessaire...
+echo [3/9] Fermeture de Rummikub.exe si necessaire...
 taskkill /im Rummikub.exe /f >nul 2>&1
 if errorlevel 1 (
     echo       Aucune instance de Rummikub.exe en cours.
@@ -127,26 +194,12 @@ REM  Proprietes -> Details -> Version du fichier). Le fichier versionne du depot
 REM  contient le jeton « BUILD » ; on le remplace ICI, dans la COPIE de build
 REM  (%BUILDDIR%, ou l'on est deja positionne via pushd), par le numero de build
 REM  reel AVANT l'appel a PyInstaller. Le depot d'origine garde le jeton intact.
-REM  Numero retenu = meme regle que MANIFESTBUILD : build courant de
-REM  version.json, +1 en mode --publier, ou --build N s'il est fourni.
+REM  Numero retenu = !EXEBUILD!, deja determine et valide a l'etape 0bis.
 REM  Remplacement via String.Replace (.NET) = sensible a la casse : seul le
 REM  jeton « BUILD » en majuscules est substitue, pas le mot « build ».
 REM ===========================================================================
 echo.
-echo [3bis/8] Injection du numero de build dans version_info.txt...
-set "EXEBUILD="
-for /f "usebackq delims=" %%B in (`powershell -NoProfile -Command "[int]((ConvertFrom-Json (Get-Content -Raw '%ORIGDIR%\version.json')).build)"`) do set "EXEBUILD=%%B"
-if not defined EXEBUILD (
-    echo [ERREUR] Lecture du build courant impossible depuis %ORIGDIR%\version.json
-    popd & exit /b 1
-)
-if "%PUBLIER%"=="1" (
-    if defined BUILD_OVERRIDE (
-        set "EXEBUILD=%BUILD_OVERRIDE%"
-    ) else (
-        set /a EXEBUILD=EXEBUILD+1
-    )
-)
+echo [3bis/9] Injection du numero de build dans version_info.txt...
 if not exist "version_info.txt" (
     echo       [ATTENTION] version_info.txt introuvable : metadonnees de version non injectees.
 ) else (
@@ -162,7 +215,7 @@ REM ===========================================================================
 REM  ETAPE 4 : build PyInstaller
 REM ===========================================================================
 echo.
-echo [4/8] Construction avec PyInstaller ^(rummikub.spec^)...
+echo [4/9] Construction avec PyInstaller ^(rummikub.spec^)...
 call ".venv_build\Scripts\python.exe" -m PyInstaller rummikub.spec -y
 if errorlevel 1 (
     echo [ERREUR] Echec de PyInstaller
@@ -179,7 +232,7 @@ REM  Hors de cette fourchette -> simple avertissement, pas d'echec.
 REM  (Le garde-fou sur l'installeur final compresse est a l'etape 6.)
 REM ===========================================================================
 echo.
-echo [5/8] Verification de dist\Rummikub\Rummikub.exe ...
+echo [5/9] Verification de dist\Rummikub\Rummikub.exe ...
 if not exist "dist\Rummikub\Rummikub.exe" (
     echo [ERREUR] dist\Rummikub\Rummikub.exe introuvable apres le build.
     popd & exit /b 1
@@ -192,7 +245,7 @@ if %TOTAL% LSS 20971520 echo       [ATTENTION] Dossier dist\ inhabituellement PE
 if %TOTAL% GTR 47185920 echo       [ATTENTION] Dossier dist\ inhabituellement GRAND ^(attendu ~28 Mo, fourchette 20-45 Mo^).
 
 REM ===========================================================================
-REM  ETAPE 6 : installeur Inno Setup + copie (local + partage) + garde-fou
+REM  ETAPE 6 : installeur Inno Setup + copie (local + worktree) + garde-fou
 REM  Garde-fou sur l'INSTALLEUR FINAL COMPRESSE (Rummikub-Setup.exe).
 REM  Distinct de l'etape 5 (dossier dist\ non compresse) : ici on mesure le .exe
 REM  d'installation genere par Inno Setup, soit ~12 Mo (12 180 000 octets observes).
@@ -200,11 +253,11 @@ REM  Fourchette de sanite : 5 Mo a 25 Mo (5242880 a 26214400 octets).
 REM  Hors de cette fourchette -> simple avertissement, pas d'echec.
 REM ===========================================================================
 echo.
-echo [6/8] Generation de l'installeur avec Inno Setup...
+echo [6/9] Generation de l'installeur avec Inno Setup...
 REM  Numero de build injecte dynamiquement (issue #91), sur le modele de Scrabble
-REM  (/DScrabbleBuildInstalle) : EXEBUILD provient de version.json (etape 3bis,
-REM  +1 en --publier, --build N sinon). Le .iss n'a plus de #define hardcode ; le
-REM  nom du Setup (Rummikub-Setup-vN) reste donc toujours en phase avec version.json.
+REM  (/DScrabbleBuildInstalle) : EXEBUILD provient de version.json (etape 0bis).
+REM  Le .iss n'a plus de #define hardcode ; le nom du Setup (Rummikub-Setup-vN)
+REM  reste donc toujours en phase avec version.json.
 "%ISCC%" /DRummikubBuildInstalle=!EXEBUILD! installeur\rummikub.iss
 if errorlevel 1 (
     echo [ERREUR] Echec de la compilation de l'installeur ^(ISCC^).
@@ -232,10 +285,10 @@ if not exist "installeur\output" mkdir "installeur\output"
 copy /y "%SETUP%" "installeur\output\%SETUPNAME%" >nul
 if errorlevel 1 ( echo [ERREUR] Echec de la copie locale de l'installeur. & popd & exit /b 1 )
 
-echo       Copie de l'installeur vers le partage ^(%ORIGDIR%\installeur\output^)...
+echo       Copie de l'installeur vers le worktree ^(%ORIGDIR%\installeur\output^)...
 if not exist "%ORIGDIR%\installeur\output" mkdir "%ORIGDIR%\installeur\output"
 copy /y "%SETUP%" "%ORIGDIR%\installeur\output\%SETUPNAME%" >nul
-if errorlevel 1 ( echo [ERREUR] Echec de la copie de l'installeur vers le partage. & popd & exit /b 1 )
+if errorlevel 1 ( echo [ERREUR] Echec de la copie de l'installeur vers le worktree. & popd & exit /b 1 )
 
 set "SETUPSIZE=0"
 for /f "usebackq delims=" %%S in (`powershell -NoProfile -Command "(Get-Item '%SETUP%').Length"`) do set "SETUPSIZE=%%S"
@@ -244,61 +297,19 @@ if %SETUPSIZE% LSS 5242880 echo       [ATTENTION] Installeur inhabituellement PE
 if %SETUPSIZE% GTR 26214400 echo       [ATTENTION] Installeur inhabituellement GRAND ^(attendu ~12 Mo, fourchette 5-25 Mo^).
 
 REM ===========================================================================
-REM  Determination du numero de build et du nom du zip
-REM  CURBUILD (build courant lu dans version.json) est desormais lu dans LES DEUX
-REM  modes : il fournit MANIFESTBUILD, la valeur ecrite dans manifest.json a
-REM  l'etape 7, pour que ce manifest reste coherent avec le build reel meme en
-REM  build de test (sans --publier).
-REM  En mode --publier, le zip publie doit s'appeler rummikub-vN.zip (format
-REM  versionne attendu par Actualise pour construire l'URL de telechargement) ;
-REM  on calcule donc NEWBUILD DES MAINTENANT, avant l'etape 7, pour nommer le
-REM  zip de facon coherente entre l'etape 7 et l'etape 7bis, et MANIFESTBUILD
-REM  prend alors la valeur de NEWBUILD. Sans --publier, le zip garde le nom fixe
-REM  rummikub.zip (build de test local, jamais publie).
-REM ===========================================================================
-set "ZIPNAME=rummikub.zip"
-
-REM --- Build courant (CURBUILD) lu dans version.json DANS LES DEUX MODES.
-REM     Sert de valeur de build pour le manifest de l'etape 7 en mode test
-REM     (sans --publier) et de base au calcul de NEWBUILD en mode --publier.
-set "CURBUILD="
-for /f "usebackq delims=" %%B in (`powershell -NoProfile -Command "[int]((ConvertFrom-Json (Get-Content -Raw '%ORIGDIR%\version.json')).build)"`) do set "CURBUILD=%%B"
-if not defined CURBUILD (
-    echo [ERREUR] Lecture du build courant impossible depuis %ORIGDIR%\version.json
-    popd & exit /b 1
-)
-
-REM --- Build embarque dans le manifest de l'etape 7 : par defaut le build courant.
-REM     En mode --publier il sera remplace par NEWBUILD (cf. bloc ci-dessous).
-set "MANIFESTBUILD=!CURBUILD!"
-
-if not "%PUBLIER%"=="1" goto zipname_done
-
-REM --- Numero de build : --build N prioritaire, sinon version.json + 1 --------
-if defined BUILD_OVERRIDE (
-    set "NEWBUILD=%BUILD_OVERRIDE%"
-    echo       Build impose via --build : !NEWBUILD!
-    goto build_determine
-)
-set /a NEWBUILD=CURBUILD+1
-echo       Build courant : !CURBUILD! -- nouveau build : !NEWBUILD!
-:build_determine
-set "MANIFESTBUILD=!NEWBUILD!"
-set "ZIPNAME=rummikub-v!NEWBUILD!.zip"
-:zipname_done
-
-REM ===========================================================================
 REM  ETAPE 7 : manifest.json + zip (dist\Rummikub\* + manifest.json)
 REM  Le zip = dist\Rummikub\ + manifest.json, sans dossier englobant
 REM  (l'updater Actualise l'extrait directement par-dessus le dossier installe).
-REM  Nom : rummikub-vN.zip en --publier (format versionne, cf. bloc ci-dessus),
-REM  rummikub.zip sinon (build de test local non publie).
+REM  Nom toujours numerote (rummikub-vN.zip), publie ou non (issue #178) : le
+REM  dossier fixe hors worktree (etape 8) a besoin du numero reel dans tous les
+REM  modes, donc plus de nom fixe "rummikub.zip" pour les builds de test.
 REM  Garde-fou de taille sur le zip : fourchette 5 Mo a 25 Mo (memes bornes que
 REM  l'installeur compresse) -> hors fourchette = simple avertissement.
 REM ===========================================================================
+set "ZIPNAME=rummikub-v!EXEBUILD!.zip"
 echo.
-echo [7/8] Creation de manifest.json et de !ZIPNAME!...
-> manifest.json echo {"build": !MANIFESTBUILD!, "supprimer": []}
+echo [7/9] Creation de manifest.json et de !ZIPNAME!...
+> manifest.json echo {"build": !EXEBUILD!, "supprimer": []}
 if not exist "installeur\output" mkdir "installeur\output"
 if exist "installeur\output\!ZIPNAME!" del /f /q "installeur\output\!ZIPNAME!"
 powershell -NoProfile -Command "try { Compress-Archive -Path 'dist\Rummikub\*','manifest.json' -DestinationPath 'installeur\output\!ZIPNAME!' -Force } catch { exit 1 }"
@@ -316,89 +327,100 @@ echo       Taille de !ZIPNAME! ^(compresse^) : %ZIPSIZE% octets
 if %ZIPSIZE% LSS 5242880 echo       [ATTENTION] !ZIPNAME! inhabituellement PETIT ^(attendu ~13 Mo, fourchette 5-25 Mo^).
 if %ZIPSIZE% GTR 26214400 echo       [ATTENTION] !ZIPNAME! inhabituellement GRAND ^(attendu ~13 Mo, fourchette 5-25 Mo^).
 
-echo       Copie de !ZIPNAME! vers le partage ^(%ORIGDIR%\installeur\output^)...
+echo       Copie de !ZIPNAME! vers le worktree ^(%ORIGDIR%\installeur\output^)...
 copy /y "installeur\output\!ZIPNAME!" "%ORIGDIR%\installeur\output\!ZIPNAME!" >nul
-if errorlevel 1 ( echo [ERREUR] Echec de la copie de !ZIPNAME! vers le partage. & popd & exit /b 1 )
+if errorlevel 1 ( echo [ERREUR] Echec de la copie de !ZIPNAME! vers le worktree. & popd & exit /b 1 )
+
+popd
 
 REM ===========================================================================
-REM  ETAPE 7bis (--publier uniquement) : version.json + SHA-256 + commit local
-REM  Ne s'execute qu'avec l'argument --publier. Reprend le zip rummikub-vN.zip
-REM  genere a l'etape 7 (NEWBUILD deja calcule avant l'etape 7) pour :
-REM    - reecrire manifest.json avec ce numero et regenerer rummikub-vN.zip ;
-REM    - calculer le SHA-256 du zip ;
-REM    - ecrire version.json a la racine du clone partage (%ORIGDIR%) ;
+REM  ETAPE 8 : copie vers le dossier fixe hors worktree + publication eventuelle
+REM  installeur\output est ignore par git : il disparait avec le worktree quand
+REM  on le supprime (perte constatee sur l'installeur Rummikub v13, issue #178).
+REM  On copie donc aussi l'installeur et l'archive dans un dossier fixe hors
+REM  worktree, dans TOUS les modes (meme sans --publier), comme le font deja
+REM  rebuild_scrabble.bat (issue #472) et rebuild_actualise.bat (issue #71).
+REM  --publier ajoute en plus, apres cette copie, le calcul du SHA-256, l'ecriture
+REM  de version.json et un commit local (jamais de git push).
+REM ===========================================================================
+echo.
+echo [8/9] Copie vers %FIXEDSHARE% ...
+if not exist "%FIXEDSHARE%" mkdir "%FIXEDSHARE%"
+if not exist "%FIXEDSHARE%" (
+    echo [ERREUR] Impossible de creer %FIXEDSHARE%.
+    exit /b 1
+)
+copy /y "%ORIGDIR%\installeur\output\!SETUPNAME!" "%FIXEDSHARE%\!SETUPNAME!" >nul
+if errorlevel 1 ( echo [ERREUR] Echec de la copie de !SETUPNAME! vers %FIXEDSHARE%. & exit /b 1 )
+copy /y "%ORIGDIR%\installeur\output\!ZIPNAME!" "%FIXEDSHARE%\!ZIPNAME!" >nul
+if errorlevel 1 ( echo [ERREUR] Echec de la copie de !ZIPNAME! vers %FIXEDSHARE%. & exit /b 1 )
+
+set "FIXEDSETUPSIZE=0"
+for /f "usebackq delims=" %%S in (`powershell -NoProfile -Command "(Get-Item '%FIXEDSHARE%\!SETUPNAME!').Length"`) do set "FIXEDSETUPSIZE=%%S"
+set "FIXEDZIPSIZE=0"
+for /f "usebackq delims=" %%S in (`powershell -NoProfile -Command "(Get-Item '%FIXEDSHARE%\!ZIPNAME!').Length"`) do set "FIXEDZIPSIZE=%%S"
+echo       Copie vers %FIXEDSHARE% terminee.
+echo       !SETUPNAME! : !FIXEDSETUPSIZE! octets
+echo       !ZIPNAME! : !FIXEDZIPSIZE! octets
+
+REM ===========================================================================
+REM  ETAPE 8bis (--publier uniquement) : version.json + SHA-256 + commit local
+REM  Reprend l'archive !ZIPNAME! deja construite et copiee ci-dessus (meme
+REM  numero de build !EXEBUILD! depuis l'etape 0bis, pas de recalcul) pour :
+REM    - calculer son SHA-256 ;
+REM    - ecrire version.json a la racine du worktree (%ORIGDIR%) ;
 REM    - commiter version.json EN LOCAL (jamais de git push).
 REM  git push et la creation de la Release GitHub restent MANUELS (voir la fin).
 REM ===========================================================================
 if not "%PUBLIER%"=="1" goto fin_publier
 
 echo.
-echo [7bis/8] Mode --publier : version.json ^(build + SHA-256^) et commit local...
+echo [8bis/9] Mode --publier : version.json ^(build + SHA-256^) et commit local...
 
-REM --- Reecrire manifest.json avec le nouveau build et regenerer le zip -------
-REM  NEWBUILD et ZIPNAME ^(rummikub-vN.zip^) ont ete determines avant l'etape 7.
-echo       Reecriture de manifest.json ^(build !NEWBUILD!^) et du zip !ZIPNAME!...
-> manifest.json echo {"build": !NEWBUILD!, "supprimer": []}
-if exist "installeur\output\!ZIPNAME!" del /f /q "installeur\output\!ZIPNAME!"
-powershell -NoProfile -Command "try { Compress-Archive -Path 'dist\Rummikub\*','manifest.json' -DestinationPath 'installeur\output\!ZIPNAME!' -Force } catch { exit 1 }"
-if errorlevel 1 (
-    echo [ERREUR] Echec de la regeneration de !ZIPNAME! ^(--publier^).
-    popd & exit /b 1
-)
-copy /y "installeur\output\!ZIPNAME!" "%ORIGDIR%\installeur\output\!ZIPNAME!" >nul
-if errorlevel 1 ( echo [ERREUR] Echec de la copie de !ZIPNAME! vers le partage ^(--publier^). & popd & exit /b 1 )
-
-REM --- SHA-256 du zip regenere -----------------------------------------------
 set "ZIPSHA="
-for /f "usebackq delims=" %%H in (`powershell -NoProfile -Command "(Get-FileHash 'installeur\output\!ZIPNAME!' -Algorithm SHA256).Hash.ToLower()"`) do set "ZIPSHA=%%H"
+for /f "usebackq delims=" %%H in (`powershell -NoProfile -Command "(Get-FileHash '%ORIGDIR%\installeur\output\!ZIPNAME!' -Algorithm SHA256).Hash.ToLower()"`) do set "ZIPSHA=%%H"
 if not defined ZIPSHA (
     echo [ERREUR] Calcul du SHA-256 de !ZIPNAME! impossible.
-    popd & exit /b 1
+    exit /b 1
 )
 echo       SHA-256 : !ZIPSHA!
 
-REM --- version.json a la racine du clone partage (%ORIGDIR% = C:\CCW_Share\CCW\rummikub) -
-> "%ORIGDIR%\version.json" echo {"build": !NEWBUILD!, "sha256": "!ZIPSHA!"}
+> "%ORIGDIR%\version.json" echo {"build": !EXEBUILD!, "sha256": "!ZIPSHA!"}
 echo       version.json ecrit : %ORIGDIR%\version.json
 
-REM --- Commit LOCAL de version.json (jamais de git push) ---------------------
-echo       Commit local de version.json dans le clone partage...
+echo       Commit local de version.json dans le worktree...
 git -C "%ORIGDIR%" add version.json
-git -C "%ORIGDIR%" commit -m "Rummikub v!NEWBUILD! : version.json (build !NEWBUILD! + SHA-256 du zip)" -- version.json
+git -C "%ORIGDIR%" commit -m "Rummikub v!EXEBUILD! : version.json (build !EXEBUILD! + SHA-256 du zip)" -- version.json
 if errorlevel 1 echo       [ATTENTION] git commit n'a rien commite ^(version.json inchange ?^).
 :fin_publier
 
-popd
-
 REM ===========================================================================
-REM  ETAPE 8 : nettoyage du build local + reset du clone CCW
+REM  ETAPE 9 : nettoyage du build local
 REM ===========================================================================
 echo.
-echo [8/8] Nettoyage de %BUILDDIR% et reset du depot partage...
-echo       Nettoyage de %BUILDDIR% ...
+echo [9/9] Nettoyage de %BUILDDIR% ...
 rmdir /s /q "%BUILDDIR%"
-
-if "%PUBLIER%"=="1" (
-    echo       [--publier] Reset git IGNORE pour preserver le commit version.json.
-) else (
-    echo       Reset du depot partage ^(git reset --hard origin/master^)...
-    git -C C:\CCW_Share\CCW\rummikub reset --hard origin/master
-)
 
 echo.
 echo ============================================================================
 echo   Termine. Installeur : %ORIGDIR%\installeur\output\!SETUPNAME!
 echo             Archive    : %ORIGDIR%\installeur\output\!ZIPNAME!
 echo ============================================================================
+echo   --- Copie hors worktree (issue #178) ---
+echo   Inno Setup utilise : %ISCC%
+echo   Dossier fixe        : %FIXEDSHARE%
+echo     !SETUPNAME! : !FIXEDSETUPSIZE! octets
+echo     !ZIPNAME! : !FIXEDZIPSIZE! octets
+echo ============================================================================
 if "%PUBLIER%"=="1" (
     echo.
     echo   --- PUBLICATION ^(--publier^) : etapes MANUELLES restantes ---
-    echo   version.json a ete mis a jour ^(build !NEWBUILD!, SHA-256 du zip^) et
+    echo   version.json a ete mis a jour ^(build !EXEBUILD!, SHA-256 du zip^) et
     echo   COMMITE EN LOCAL dans %ORIGDIR%.
     echo.
     echo   Le script ne fait JAMAIS de git push ni de gh release create. A la main :
     echo     1^) git -C "%ORIGDIR%" push
-    echo     2^) Creer la Release GitHub ^(tag v!NEWBUILD!^) et y attacher :
+    echo     2^) Creer la Release GitHub ^(tag v!EXEBUILD!^) avec DEUX fichiers attaches :
     echo          - installeur\output\!SETUPNAME!
     echo          - installeur\output\!ZIPNAME!
     echo   ============================================================================
