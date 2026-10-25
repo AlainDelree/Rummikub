@@ -261,3 +261,30 @@ Note : `_coup_scission` (`ia.py`) couvre le cas « tuile réelle » (bout ou
 milieu de suite, #181) ; elle n'est plus limitée aux seuls bouts de suite,
 mais reste étrangère aux jokers (dont la libération, bout ou milieu, passe
 par `_liberations_possibles`).
+
+## 9. Scripts de simulation IA vs IA (`scripts/`)
+
+- `scripts/simulation_ia.py` : fait jouer 2 à 4 IA sur une ou plusieurs
+  manches, journalise les anomalies (coup invalide, blocage). Utile pour un
+  test de fumée ponctuel.
+- `scripts/comparer_niveaux_ia.py` (#184) : compare deux niveaux d'IA sur un
+  grand nombre de parties à 2 joueurs, pour savoir si l'un est réellement
+  plus fort que l'autre. Chaque donne (même distribution de tuiles) est
+  jouée deux fois en miroir (places échangées), pour annuler l'effet du
+  tirage ; avec la même graine, la campagne est reproductible à l'identique.
+  Toujours via le moteur Python seul, jamais pywebview (§7). Usage :
+
+  ```
+  python scripts/comparer_niveaux_ia.py --niveau-a Avancé --niveau-b Expert
+  python scripts/comparer_niveaux_ia.py --niveau-a Avancé --niveau-b Expert \
+      --donnes 200 --seed 7 --max-tours 500
+  ```
+
+  Affiche : victoires/taux/marge d'erreur (IC 95 %) par niveau, nombre
+  moyen de tuiles/points de pénalité du perdant, durée moyenne en tours,
+  répartition des fins de partie (chevalet vidé / pioche épuisée / arrêtée
+  par le garde-fou anti-blocage), et temps de calcul moyen/maximal d'un
+  tour de décision par niveau (repérage d'un emballement de la recherche de
+  libération de joker). Première campagne (Avancé vs Expert, 50 donnes,
+  valeurs par défaut) : écart non significatif à 95 % (53 % / 47 % sur 100
+  parties) — voir CHANGELOG pour le détail.
