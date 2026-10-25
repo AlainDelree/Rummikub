@@ -231,17 +231,20 @@ icône `assets/rummikub.ico` (facultative, absente → aucune icône).
   en gardant la détection de conflit (combinaisons touchées, tuiles de la
   main consommées) correcte ; le joker ainsi libéré doit être rejoué dans
   le même tour.
+- **Réduction de groupe de 4 à 3 (joker retiré)** (#183) —
+  `_jokers_liberables_par_groupe4_sans_remplacement` : un groupe de 4
+  tuiles du plateau contenant un joker (3 tuiles réelles de couleurs
+  distinctes + 1 joker) reste un groupe valide une fois le joker retiré —
+  *sans* aucune tuile de remplacement, contrairement à l'échange direct
+  (#148) qui exige une tuile identique en main, et à #180 qui retire une
+  tuile RÉELLE (jamais le joker) pour l'utiliser ailleurs. Intégré au même
+  format unifié que #169/#180/#181 (`_liberations_possibles`) ; le joker
+  ainsi libéré doit être rejoué dans le même tour. Ne s'applique qu'aux
+  groupes de 4 : un groupe de 3 avec joker (2 réelles + 1 joker) ne peut
+  pas perdre son joker sans tomber sous le minimum de 3 tuiles.
 
 **Identifiées mais pas encore implémentées :**
 
-- **Réduction de groupe de 4 à 3 (joker retiré)** : retirer le joker d'un
-  groupe de 4 tuiles (3 réelles + 1 joker) *sans* tuile de remplacement —
-  le groupe réduit à ses 3 tuiles réelles reste valide tel quel,
-  contrairement à l'échange direct (#148) qui exige une tuile identique
-  en main. Aucune issue dédiée ouverte à ce jour ; non couvert par
-  `_jokers_recuperables` (qui ne traite que le remplacement) ni par #180
-  (qui retire une tuile réelle, jamais le joker, pour l'utiliser
-  ailleurs).
 - **Démantèlement complet d'une courte suite contenant un joker** (#175) :
   retirer SES DEUX tuiles réelles (pas une seule comme dans les tactiques
   ci-dessus), chacune recombinée avec des tuiles de la main pour former
