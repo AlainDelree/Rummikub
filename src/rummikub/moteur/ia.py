@@ -249,11 +249,18 @@ def _coup_maximal(etat, idx, ordre_points=False):
 
 
 def _coup_scission(etat, idx):
-    """Scinde une suite longue pour libérer une tuile et former un groupe.
+    """Scinde une suite longue pour libérer une tuile réelle et former un
+    groupe — en BOUT (une seule suite restante) ou en position INTÉRIEURE
+    (deux suites valides restantes, de part et d'autre de la tuile retirée).
 
-    Ex. : le plateau contient une suite rouge 4-5-6-7 et le chevalet un 7 bleu
-    et un 7 jaune → on détache le 7 rouge (la suite 4-5-6 reste valide) pour
-    former le groupe 7 rouge/bleu/jaune, posant 2 tuiles du chevalet.
+    Ex. bout : suite rouge 4-5-6-7 et le chevalet un 7 bleu et un 7 jaune →
+    on détache le 7 rouge (la suite 4-5-6 reste valide) pour former le
+    groupe 7 rouge/bleu/jaune, posant 2 tuiles du chevalet.
+
+    Ex. intérieur (#181) : suite rouge 1-2-3-4-5-6-7 et le chevalet un 4 bleu
+    et un 4 jaune → on détache le 4 rouge (les suites 1-2-3 et 5-6-7 restent
+    valides, remplaçant la suite d'origine) pour former le groupe 4
+    rouge/bleu/jaune.
     """
     joueur = etat["joueurs"][idx]
     if not joueur["mise_initiale_faite"]:
@@ -264,10 +271,13 @@ def _coup_scission(etat, idx):
         r = valider_combinaison(combo)
         if not r["valide"] or r["type"] != "suite" or len(combo) < 4:
             continue
-        for bout in ("debut", "fin"):
-            reste = combo[1:] if bout == "debut" else combo[:-1]
-            libre = combo[0] if bout == "debut" else combo[-1]
-            if libre.est_joker or not valider_combinaison(reste)["valide"]:
+        for pi, libre in enumerate(combo):
+            if libre.est_joker:
+                continue
+            parties = [p for p in (combo[:pi], combo[pi + 1:]) if p]
+            if not parties or any(
+                    len(p) < 3 or not valider_combinaison(p)["valide"]
+                    for p in parties):
                 continue
             couleurs_vues = {libre.couleur}
             groupe = [libre]
@@ -280,7 +290,9 @@ def _coup_scission(etat, idx):
                     break
             if len(groupe) >= 3 and valider_combinaison(groupe)["valide"]:
                 nouveau_plateau = [list(c) for c in base]
-                nouveau_plateau[ci] = list(reste)
+                nouveau_plateau[ci] = list(parties[0])
+                for extra in parties[1:]:
+                    nouveau_plateau.append(list(extra))
                 nouveau_plateau.append(groupe)
                 ids = [t.id for t in groupe if t.id != libre.id]
                 nd = _plateau_vers_dict(nouveau_plateau)
@@ -444,20 +456,62 @@ def _jokers_liberables_par_reduction_groupe4(plateau, chevalet):
     return resultats
 
 
+def _jokers_liberables_par_scission_milieu(plateau, chevalet):
+    """Jokers en position INTÉRIEURE d'une suite, libérables en scindant
+    celle-ci en deux suites valides (chacune d'au moins 3 tuiles) de part et
+    d'autre du joker retiré.
+
+    Ex. : suite bleue 3-4-5-joker-7-8-9 → retirer le joker laisse deux
+    suites valides (3-4-5 et 7-8-9), qui remplacent la suite d'origine ; le
+    joker libéré doit ensuite être rejoué ailleurs avec des tuiles de la
+    main (cf. :func:`_liberations_possibles`).
+
+    Contrairement à :func:`_jokers_detachables_par_extension` (joker en
+    BOUT de suite, nécessitant une extension du bout opposé), ce cas porte
+    sur un joker strictement intérieur et ne consomme aucune tuile du
+    chevalet pour la scission elle-même : la combinaison d'origine devient
+    DEUX combinaisons.
+
+    Retourne ``[{"combi_index", "joker", "gauche", "droite"}, ...]``.
+    """
+    resultats = []
+    for ci, combo in enumerate(plateau):
+        r = valider_combinaison(combo)
+        if not r["valide"] or r["type"] != "suite" or len(combo) < 7:
+            continue
+        for pi in range(1, len(combo) - 1):
+            joker = combo[pi]
+            if not joker.est_joker:
+                continue
+            gauche = combo[:pi]
+            droite = combo[pi + 1:]
+            if len(gauche) < 3 or len(droite) < 3:
+                continue
+            if not valider_suite(gauche)["valide"] \
+                    or not valider_suite(droite)["valide"]:
+                continue
+            resultats.append({"combi_index": ci, "joker": joker,
+                              "gauche": gauche, "droite": droite})
+    return resultats
+
+
 def _liberations_possibles(plateau, chevalet):
     """Toutes les libérations de joker possibles — échange direct,
-    détachement en bout de suite, ou réduction d'un groupe de 4 à 3 — sous
-    une forme uniforme ::
+    détachement en bout de suite, réduction d'un groupe de 4 à 3, ou
+    scission en milieu de suite — sous une forme uniforme ::
 
         [{"combis", "joker", "tuiles_consommees", "appliquer"}, ...]
 
     ``combis`` est la liste des ``combi_index`` du plateau modifiés par
-    cette libération (un seul pour les deux premiers mécanismes ; deux
-    pour la réduction de groupe, qui modifie à la fois le groupe réduit et
-    la combinaison du joker échangé). ``appliquer(plateau)`` modifie ces
-    combinaisons en place pour effectuer la libération. ``tuiles_consommees``
-    liste les tuiles du CHEVALET utilisées (remplacement, tuile d'extension,
-    ou tuile complétant un groupe à 4 ; éventuellement aucune). Chaque
+    cette libération (un seul pour la plupart des mécanismes ; deux pour la
+    réduction de groupe, qui modifie à la fois le groupe réduit et la
+    combinaison du joker échangé). ``appliquer(plateau)`` modifie ces
+    combinaisons en place pour effectuer la libération — pour la scission en
+    milieu de suite, elle remplace la combinaison d'origine par sa moitié
+    gauche et AJOUTE la moitié droite comme nouvelle combinaison du plateau
+    (une combinaison devient deux). ``tuiles_consommees`` liste les tuiles du
+    CHEVALET utilisées (remplacement, tuile d'extension, tuile complétant un
+    groupe à 4 ; éventuellement aucune, comme pour la scission). Chaque
     entrée correspond à UNE libération ; en combiner plusieurs (sur des
     ``combis`` et ``tuiles_consommees`` disjoints) permet de récupérer
     plusieurs jokers en un seul coup.
@@ -509,6 +563,21 @@ def _liberations_possibles(plateau, chevalet):
             "combis": [ci_groupe, ci_joker],
             "joker": rec["joker"],
             "tuiles_consommees": [tuile_hand] if tuile_hand is not None else [],
+            "appliquer": appliquer,
+        })
+    for rec in _jokers_liberables_par_scission_milieu(plateau, chevalet):
+        ci = rec["combi_index"]
+        gauche = rec["gauche"]
+        droite = rec["droite"]
+
+        def appliquer(plateau_, ci=ci, gauche=gauche, droite=droite):
+            plateau_[ci] = list(gauche)
+            plateau_.append(list(droite))
+
+        liberations.append({
+            "combis": [ci],
+            "joker": rec["joker"],
+            "tuiles_consommees": [],
             "appliquer": appliquer,
         })
     return liberations

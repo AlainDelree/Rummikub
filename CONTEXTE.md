@@ -216,6 +216,21 @@ icône `assets/rummikub.ico` (facultative, absente → aucune icône).
   groupe de 4 à 3 (joker retiré) » ci-dessous : ici on retire une tuile
   RÉELLE pour s'en servir comme remplaçante ailleurs, jamais le joker
   lui-même sans remplacement.
+- **Scission en milieu de suite** (#181) — extension de `_coup_scission`
+  (tuile réelle) et `_jokers_liberables_par_scission_milieu` (joker) :
+  pour une suite d'au moins 7 tuiles, retirer une tuile intérieure (ni en
+  tête ni en queue) peut laisser DEUX suites valides (chacune d'au moins 3
+  tuiles, jokers éventuels compris) à la place de l'unique suite
+  d'origine — une combinaison devient deux. Cas tuile réelle : la tuile
+  libérée forme un nouveau groupe avec des tuiles de la main, comme pour
+  le cas bout de suite déjà géré par `_coup_scission` (comportement
+  inchangé pour ce cas bout). Cas joker : intégré au même format unifié
+  que #169/#180 (`_liberations_possibles`), qu'il a fallu étendre pour
+  qu'une libération puisse remplacer une combinaison du plateau par DEUX
+  (au lieu de la modifier en place ou d'en modifier deux existantes) tout
+  en gardant la détection de conflit (combinaisons touchées, tuiles de la
+  main consommées) correcte ; le joker ainsi libéré doit être rejoué dans
+  le même tour.
 
 **Identifiées mais pas encore implémentées :**
 
@@ -227,11 +242,6 @@ icône `assets/rummikub.ico` (facultative, absente → aucune icône).
   `_jokers_recuperables` (qui ne traite que le remplacement) ni par #180
   (qui retire une tuile réelle, jamais le joker, pour l'utiliser
   ailleurs).
-- **Scission en milieu de suite** : étendre `_coup_scission` (qui ne
-  détache aujourd'hui qu'une tuile réelle en BOUT de suite, jamais un
-  joker, pour former un nouveau groupe) afin de libérer une tuile ou un
-  joker en position intérieure d'une suite. Mentionnée en discussion avec
-  Alain, jamais formalisée en issue.
 - **Démantèlement complet d'une courte suite contenant un joker** (#175) :
   retirer SES DEUX tuiles réelles (pas une seule comme dans les tactiques
   ci-dessus), chacune recombinée avec des tuiles de la main pour former
@@ -244,7 +254,7 @@ icône `assets/rummikub.ico` (facultative, absente → aucune icône).
   combinaisons du plateau, pas un simple motif local — probablement une
   issue à part entière une fois les cas plus simples en place.
 
-Note : `_coup_scission` existe déjà dans `ia.py` mais ne porte pas sur un
-joker (elle exclut explicitement les jokers en bout de suite) — elle est
-citée ici seulement comme mécanisme apparenté, pas comme tactique de
-joker au sens de cette liste.
+Note : `_coup_scission` (`ia.py`) couvre le cas « tuile réelle » (bout ou
+milieu de suite, #181) ; elle n'est plus limitée aux seuls bouts de suite,
+mais reste étrangère aux jokers (dont la libération, bout ou milieu, passe
+par `_liberations_possibles`).

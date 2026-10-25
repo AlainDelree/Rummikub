@@ -324,3 +324,135 @@ def test_facile_ne_libere_pas_de_tuile_de_groupe4():
     coup = jouer_niveau_facile(etat, 1)
     assert coup["action"] == "jouer"
     assert set(coup["ids_tuiles"]) == {"rouge_11_a"}
+
+
+def _etat_avec_tuile_interieure_liberable(niveau):
+    """Issue #181 : suite rouge 1-2-3-4-5-6-7 ; le chevalet du bot a un 4
+    bleu et un 4 jaune. Retirer le 4 rouge (position intérieure) laisse
+    deux suites valides (1-2-3 et 5-6-7) et libère une tuile qui forme avec
+    la main le groupe de 4 (rouge/bleu/jaune)."""
+    etat = _partie_2j(niveau)
+    etat["index_joueur_actuel"] = 1
+    bot = etat["joueurs"][1]
+    bot["mise_initiale_faite"] = True
+    etat["plateau"] = [[
+        {"id": "rouge_1_a", "valeur": 1, "couleur": "rouge", "est_joker": False},
+        {"id": "rouge_2_a", "valeur": 2, "couleur": "rouge", "est_joker": False},
+        {"id": "rouge_3_a", "valeur": 3, "couleur": "rouge", "est_joker": False},
+        {"id": "rouge_4_a", "valeur": 4, "couleur": "rouge", "est_joker": False},
+        {"id": "rouge_5_a", "valeur": 5, "couleur": "rouge", "est_joker": False},
+        {"id": "rouge_6_a", "valeur": 6, "couleur": "rouge", "est_joker": False},
+        {"id": "rouge_7_a", "valeur": 7, "couleur": "rouge", "est_joker": False},
+    ]]
+    bot["chevalet"] = [
+        {"id": "bleu_4_a", "valeur": 4, "couleur": "bleu", "est_joker": False},
+        {"id": "jaune_4_a", "valeur": 4, "couleur": "jaune", "est_joker": False},
+    ]
+    return etat
+
+
+def test_avance_scinde_une_suite_pour_liberer_une_tuile_interieure():
+    """Avancé retire le 4 rouge en milieu de suite, scindant la suite en
+    deux (1-2-3 et 5-6-7), pour former le groupe des 4 avec la main."""
+    etat = _etat_avec_tuile_interieure_liberable("Avancé")
+    coup = jouer_niveau_avance(etat, 1)
+    assert coup["action"] == "jouer"
+    assert set(coup["ids_tuiles"]) == {"bleu_4_a", "jaune_4_a"}
+    plateau = [[tuile_depuis_dict(d) for d in c]
+               for c in coup["nouveau_plateau"]]
+    assert valider_plateau(plateau)["valide"]
+    assert len(plateau) == 3
+    groupe_4 = next(c for c in plateau if any(t.id == "bleu_4_a" for t in c))
+    assert {t.id for t in groupe_4} == {"rouge_4_a", "bleu_4_a", "jaune_4_a"}
+
+
+def test_expert_scinde_une_suite_pour_liberer_une_tuile_interieure():
+    etat = _etat_avec_tuile_interieure_liberable("Expert")
+    coup = jouer_niveau_expert(etat, 1)
+    assert coup["action"] == "jouer"
+    assert set(coup["ids_tuiles"]) == {"bleu_4_a", "jaune_4_a"}
+
+
+def test_facile_ne_scinde_pas_une_suite_en_son_milieu():
+    """Non-régression : Facile/Intermédiaire ne savent pas scinder une
+    suite en son milieu (seuls Avancé/Expert le tentent) — avec seulement
+    deux tuiles de valeur 4 en main, aucun coup n'est jouable."""
+    etat = _etat_avec_tuile_interieure_liberable("Facile")
+    coup = jouer_niveau_facile(etat, 1)
+    assert coup["action"] != "jouer"
+
+
+def _etat_avec_joker_interieur_liberable(niveau):
+    """Issue #181 : suite bleue 3-4-5-(joker)-7-8-9 ; le chevalet du bot a
+    un 12 rouge et un 12 jaune. Retirer le joker (position intérieure)
+    laisse deux suites valides (3-4-5 et 7-8-9) et libère un joker rejoué
+    avec la main dans un groupe de 12 (rouge/jaune/joker)."""
+    etat = _partie_2j(niveau)
+    etat["index_joueur_actuel"] = 1
+    bot = etat["joueurs"][1]
+    bot["mise_initiale_faite"] = True
+    etat["plateau"] = [[
+        {"id": "bleu_3_a", "valeur": 3, "couleur": "bleu", "est_joker": False},
+        {"id": "bleu_4_a", "valeur": 4, "couleur": "bleu", "est_joker": False},
+        {"id": "bleu_5_a", "valeur": 5, "couleur": "bleu", "est_joker": False},
+        {"id": "joker_1", "valeur": None, "couleur": None, "est_joker": True},
+        {"id": "bleu_7_a", "valeur": 7, "couleur": "bleu", "est_joker": False},
+        {"id": "bleu_8_a", "valeur": 8, "couleur": "bleu", "est_joker": False},
+        {"id": "bleu_9_a", "valeur": 9, "couleur": "bleu", "est_joker": False},
+    ]]
+    bot["chevalet"] = [
+        {"id": "rouge_12_a", "valeur": 12, "couleur": "rouge", "est_joker": False},
+        {"id": "jaune_12_a", "valeur": 12, "couleur": "jaune", "est_joker": False},
+    ]
+    return etat
+
+
+def test_avance_scinde_une_suite_pour_liberer_un_joker_interieur():
+    """Avancé retire le joker en milieu de suite, scindant la suite en deux
+    (3-4-5 et 7-8-9), et rejoue le joker libéré dans un nouveau groupe de 12
+    avec la main — seule façon de jouer les deux tuiles de la main ici."""
+    etat = _etat_avec_joker_interieur_liberable("Avancé")
+    coup = jouer_niveau_avance(etat, 1)
+    assert coup["action"] == "jouer"
+    assert set(coup["ids_tuiles"]) == {"rouge_12_a", "jaune_12_a"}
+    plateau = [[tuile_depuis_dict(d) for d in c]
+               for c in coup["nouveau_plateau"]]
+    assert valider_plateau(plateau)["valide"]
+    assert len(plateau) == 3
+    groupe_12 = next(c for c in plateau
+                     if any(t.id == "rouge_12_a" for t in c))
+    assert any(t.est_joker for t in groupe_12)
+    assert not any(t.est_joker for c in plateau for t in c
+                   if not any(tt.id == "rouge_12_a" for tt in c))
+
+
+def test_expert_scinde_une_suite_pour_liberer_un_joker_interieur():
+    etat = _etat_avec_joker_interieur_liberable("Expert")
+    coup = jouer_niveau_expert(etat, 1)
+    assert coup["action"] == "jouer"
+    assert set(coup["ids_tuiles"]) == {"rouge_12_a", "jaune_12_a"}
+
+
+def test_avance_ne_scinde_pas_une_suite_trop_courte():
+    """Suite rouge 3-4-5-6-7 (longueur 5) : retirer la tuile centrale (5)
+    laisserait deux parties de longueur 2, invalides — trop courte pour
+    être scindée en son milieu, même si la main a de quoi former un groupe
+    avec la tuile centrale (5 bleu / 5 jaune). Le coup ne doit pas être
+    proposé."""
+    etat = _partie_2j("Avancé")
+    etat["index_joueur_actuel"] = 1
+    bot = etat["joueurs"][1]
+    bot["mise_initiale_faite"] = True
+    etat["plateau"] = [[
+        {"id": "rouge_3_a", "valeur": 3, "couleur": "rouge", "est_joker": False},
+        {"id": "rouge_4_a", "valeur": 4, "couleur": "rouge", "est_joker": False},
+        {"id": "rouge_5_a", "valeur": 5, "couleur": "rouge", "est_joker": False},
+        {"id": "rouge_6_a", "valeur": 6, "couleur": "rouge", "est_joker": False},
+        {"id": "rouge_7_a", "valeur": 7, "couleur": "rouge", "est_joker": False},
+    ]]
+    bot["chevalet"] = [
+        {"id": "bleu_5_a", "valeur": 5, "couleur": "bleu", "est_joker": False},
+        {"id": "jaune_5_a", "valeur": 5, "couleur": "jaune", "est_joker": False},
+    ]
+    coup = jouer_niveau_avance(etat, 1)
+    assert coup["action"] != "jouer"
