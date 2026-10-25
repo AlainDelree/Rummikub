@@ -456,3 +456,195 @@ def test_avance_ne_scinde_pas_une_suite_trop_courte():
     ]
     coup = jouer_niveau_avance(etat, 1)
     assert coup["action"] != "jouer"
+
+
+# --------------------------------------------------------------------------- #
+# Issue #182 : non-régression de la scission en BOUT de suite (cas #134,
+# jamais couvert par un test unitaire avant la généralisation #181).
+# --------------------------------------------------------------------------- #
+
+def _etat_avec_fin_de_suite_liberable(niveau):
+    """Suite rouge 4-5-6-7 ; le chevalet du bot a un 7 bleu et un 7 jaune.
+    Détacher le 7 rouge (dernière tuile, position en BOUT) laisse la suite
+    4-5-6 valide seule, et libère une tuile qui forme avec la main le
+    groupe de trois 7 (rouge/bleu/jaune)."""
+    etat = _partie_2j(niveau)
+    etat["index_joueur_actuel"] = 1
+    bot = etat["joueurs"][1]
+    bot["mise_initiale_faite"] = True
+    etat["plateau"] = [[
+        {"id": "rouge_4_a", "valeur": 4, "couleur": "rouge", "est_joker": False},
+        {"id": "rouge_5_a", "valeur": 5, "couleur": "rouge", "est_joker": False},
+        {"id": "rouge_6_a", "valeur": 6, "couleur": "rouge", "est_joker": False},
+        {"id": "rouge_7_a", "valeur": 7, "couleur": "rouge", "est_joker": False},
+    ]]
+    bot["chevalet"] = [
+        {"id": "bleu_7_a", "valeur": 7, "couleur": "bleu", "est_joker": False},
+        {"id": "jaune_7_a", "valeur": 7, "couleur": "jaune", "est_joker": False},
+    ]
+    return etat
+
+
+def test_avance_scinde_une_suite_pour_liberer_sa_derniere_tuile():
+    """Avancé détache le 7 rouge en fin de suite ; 4-5-6 reste valide et le
+    groupe de trois 7 est posé."""
+    etat = _etat_avec_fin_de_suite_liberable("Avancé")
+    coup = jouer_niveau_avance(etat, 1)
+    assert coup["action"] == "jouer"
+    assert set(coup["ids_tuiles"]) == {"bleu_7_a", "jaune_7_a"}
+    plateau = [[tuile_depuis_dict(d) for d in c]
+               for c in coup["nouveau_plateau"]]
+    assert valider_plateau(plateau)["valide"]
+    assert len(plateau) == 2
+    suite_restante = next(c for c in plateau
+                          if any(t.id == "rouge_4_a" for t in c))
+    assert {t.id for t in suite_restante} == {
+        "rouge_4_a", "rouge_5_a", "rouge_6_a"}
+    groupe_7 = next(c for c in plateau if any(t.id == "bleu_7_a" for t in c))
+    assert {t.id for t in groupe_7} == {"rouge_7_a", "bleu_7_a", "jaune_7_a"}
+
+
+def test_expert_scinde_une_suite_pour_liberer_sa_derniere_tuile():
+    etat = _etat_avec_fin_de_suite_liberable("Expert")
+    coup = jouer_niveau_expert(etat, 1)
+    assert coup["action"] == "jouer"
+    assert set(coup["ids_tuiles"]) == {"bleu_7_a", "jaune_7_a"}
+
+
+def _etat_avec_debut_de_suite_liberable(niveau):
+    """Suite rouge 4-5-6-7 ; le chevalet du bot a un 4 bleu et un 4 jaune.
+    Détacher le 4 rouge (première tuile, position en BOUT) laisse la suite
+    5-6-7 valide seule, et libère une tuile qui forme avec la main le
+    groupe de trois 4 (rouge/bleu/jaune)."""
+    etat = _partie_2j(niveau)
+    etat["index_joueur_actuel"] = 1
+    bot = etat["joueurs"][1]
+    bot["mise_initiale_faite"] = True
+    etat["plateau"] = [[
+        {"id": "rouge_4_a", "valeur": 4, "couleur": "rouge", "est_joker": False},
+        {"id": "rouge_5_a", "valeur": 5, "couleur": "rouge", "est_joker": False},
+        {"id": "rouge_6_a", "valeur": 6, "couleur": "rouge", "est_joker": False},
+        {"id": "rouge_7_a", "valeur": 7, "couleur": "rouge", "est_joker": False},
+    ]]
+    bot["chevalet"] = [
+        {"id": "bleu_4_a", "valeur": 4, "couleur": "bleu", "est_joker": False},
+        {"id": "jaune_4_a", "valeur": 4, "couleur": "jaune", "est_joker": False},
+    ]
+    return etat
+
+
+def test_avance_scinde_une_suite_pour_liberer_sa_premiere_tuile():
+    """Avancé détache le 4 rouge en début de suite ; 5-6-7 reste valide et
+    le groupe de trois 4 est posé."""
+    etat = _etat_avec_debut_de_suite_liberable("Avancé")
+    coup = jouer_niveau_avance(etat, 1)
+    assert coup["action"] == "jouer"
+    assert set(coup["ids_tuiles"]) == {"bleu_4_a", "jaune_4_a"}
+    plateau = [[tuile_depuis_dict(d) for d in c]
+               for c in coup["nouveau_plateau"]]
+    assert valider_plateau(plateau)["valide"]
+    assert len(plateau) == 2
+    suite_restante = next(c for c in plateau
+                          if any(t.id == "rouge_5_a" for t in c))
+    assert {t.id for t in suite_restante} == {
+        "rouge_5_a", "rouge_6_a", "rouge_7_a"}
+    groupe_4 = next(c for c in plateau if any(t.id == "bleu_4_a" for t in c))
+    assert {t.id for t in groupe_4} == {"rouge_4_a", "bleu_4_a", "jaune_4_a"}
+
+
+def test_expert_scinde_une_suite_pour_liberer_sa_premiere_tuile():
+    etat = _etat_avec_debut_de_suite_liberable("Expert")
+    coup = jouer_niveau_expert(etat, 1)
+    assert coup["action"] == "jouer"
+    assert set(coup["ids_tuiles"]) == {"bleu_4_a", "jaune_4_a"}
+
+
+def _etat_avec_suite_trop_courte_en_bout(niveau):
+    """Suite rouge 5-6-7 (longueur 3, le minimum) ; le chevalet du bot a un
+    7 bleu et un 7 jaune. Détacher le 7 rouge en bout laisserait 5-6 seul
+    (longueur 2), invalide — trop courte pour être scindée, même en bout."""
+    etat = _partie_2j(niveau)
+    etat["index_joueur_actuel"] = 1
+    bot = etat["joueurs"][1]
+    bot["mise_initiale_faite"] = True
+    etat["plateau"] = [[
+        {"id": "rouge_5_a", "valeur": 5, "couleur": "rouge", "est_joker": False},
+        {"id": "rouge_6_a", "valeur": 6, "couleur": "rouge", "est_joker": False},
+        {"id": "rouge_7_a", "valeur": 7, "couleur": "rouge", "est_joker": False},
+    ]]
+    bot["chevalet"] = [
+        {"id": "bleu_7_a", "valeur": 7, "couleur": "bleu", "est_joker": False},
+        {"id": "jaune_7_a", "valeur": 7, "couleur": "jaune", "est_joker": False},
+    ]
+    return etat
+
+
+def test_avance_ne_scinde_pas_une_suite_de_trois_tuiles_en_bout():
+    """Non-régression : une suite au minimum légal (3 tuiles) ne peut pas
+    être scindée en bout, la partie restante (2 tuiles) étant invalide."""
+    etat = _etat_avec_suite_trop_courte_en_bout("Avancé")
+    coup = jouer_niveau_avance(etat, 1)
+    assert coup["action"] != "jouer"
+
+
+def test_expert_ne_scinde_pas_une_suite_de_trois_tuiles_en_bout():
+    etat = _etat_avec_suite_trop_courte_en_bout("Expert")
+    coup = jouer_niveau_expert(etat, 1)
+    assert coup["action"] != "jouer"
+
+
+def _etat_avec_joker_en_bout_de_suite(niveau):
+    """Suite rouge 4-5-6-(joker=7) ; le chevalet du bot a un 7 bleu et un 7
+    jaune — même valeur que celle représentée par le joker, mais pas la même
+    couleur (rouge), donc pas d'échange direct possible (#169) ; et aucune
+    tuile pour étendre l'autre bout, donc pas de détachement par extension
+    (cf. :func:`_jokers_detachables_par_extension`). Le joker étant en bout
+    de suite, par le mécanisme de scission (#134/#181) il n'est PAS
+    détachable : seule une tuile réelle peut être la tuile « libre » retirée
+    (cf. note CONTEXTE.md §8). Aucun coup ne doit donc être proposé ici."""
+    etat = _partie_2j(niveau)
+    etat["index_joueur_actuel"] = 1
+    bot = etat["joueurs"][1]
+    bot["mise_initiale_faite"] = True
+    etat["plateau"] = [[
+        {"id": "rouge_4_a", "valeur": 4, "couleur": "rouge", "est_joker": False},
+        {"id": "rouge_5_a", "valeur": 5, "couleur": "rouge", "est_joker": False},
+        {"id": "rouge_6_a", "valeur": 6, "couleur": "rouge", "est_joker": False},
+        {"id": "joker_1", "valeur": None, "couleur": None, "est_joker": True},
+    ]]
+    bot["chevalet"] = [
+        {"id": "bleu_7_a", "valeur": 7, "couleur": "bleu", "est_joker": False},
+        {"id": "jaune_7_a", "valeur": 7, "couleur": "jaune", "est_joker": False},
+    ]
+    return etat
+
+
+def test_avance_ne_detache_pas_un_joker_en_bout_de_suite_par_scission():
+    """Non-régression : un joker en bout de suite n'est pas détaché par le
+    mécanisme de scission (#134/#181), contrairement à une tuile réelle."""
+    etat = _etat_avec_joker_en_bout_de_suite("Avancé")
+    coup = jouer_niveau_avance(etat, 1)
+    assert coup["action"] != "jouer"
+
+
+def test_expert_ne_detache_pas_un_joker_en_bout_de_suite_par_scission():
+    etat = _etat_avec_joker_en_bout_de_suite("Expert")
+    coup = jouer_niveau_expert(etat, 1)
+    assert coup["action"] != "jouer"
+
+
+def test_avance_ne_scinde_pas_en_bout_sans_mise_initiale_faite():
+    """Non-régression : sans mise initiale faite, la scission en bout de
+    suite n'est pas proposée (même configuration que la scission en fin de
+    suite, mais `mise_initiale_faite` à False)."""
+    etat = _etat_avec_fin_de_suite_liberable("Avancé")
+    etat["joueurs"][1]["mise_initiale_faite"] = False
+    coup = jouer_niveau_avance(etat, 1)
+    assert coup["action"] != "jouer"
+
+
+def test_expert_ne_scinde_pas_en_bout_sans_mise_initiale_faite():
+    etat = _etat_avec_fin_de_suite_liberable("Expert")
+    etat["joueurs"][1]["mise_initiale_faite"] = False
+    coup = jouer_niveau_expert(etat, 1)
+    assert coup["action"] != "jouer"
