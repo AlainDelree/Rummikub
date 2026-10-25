@@ -29,6 +29,7 @@ from rummikub.moteur.partie import (
     tuile_depuis_dict, plateau_depuis_dict, _plateau_vers_dict,
     _points_tuiles_posees,
 )
+from rummikub.moteur.solveur import resoudre_coup, BudgetDepasse
 
 
 # --------------------------------------------------------------------------- #
@@ -796,22 +797,39 @@ def jouer_niveau_avance(etat, idx):
     return _piocher_ou_passer(etat)
 
 
-def jouer_niveau_expert(etat, idx):
-    """Comme avancé + refuse de poser si un adversaire est à ≤ 3 tuiles.
+BUDGET_TEMPS_EXPERT = 1.5  # secondes ; voir solveur.resoudre_coup (#186).
 
-    (sauf si le coup vide son propre chevalet).
+
+def jouer_niveau_expert(etat, idx, budget_temps=None):
+    """Réarrangement global du plateau (solveur, #186) : toutes les
+    combinaisons du plateau peuvent être redécoupées librement (aucune de
+    leurs tuiles n'est jamais retirée du plateau) pour poser le plus grand
+    nombre de tuiles du chevalet. Remplace l'ancienne chaîne de tactiques
+    locales d'Avancé (échange/détachement/scission de joker...), qui ne
+    modifiaient jamais plus d'une ou deux combinaisons à la fois.
+
+    Repli sur le comportement d'Avancé si le solveur dépasse son budget de
+    temps par tour (recherche trop coûteuse pour ce plateau), ou s'il ne
+    trouve lui-même aucun coup — dans ce dernier cas Avancé ne fera
+    généralement pas mieux, mais le tenter reste un filet de sécurité sans
+    coût perceptible.
+
+    N'a plus la règle historique « pioche au lieu de poser si un adversaire
+    a ≤ 3 tuiles » : la campagne de #184 n'a montré aucun avantage mesurable
+    à la prudence, et poser davantage de tuiles est presque toujours
+    préférable (voir rapport de clôture #186).
     """
-    coup = _meilleur_coup_avec_joker(etat, idx, ordre_points=True) or _coup_scission(etat, idx)
-    if not coup:
-        return _piocher_ou_passer(etat)
-    joueur = etat["joueurs"][idx]
-    reste = len(joueur["chevalet"]) - len(coup["ids_tuiles"])
-    adversaire_proche = any(
-        i != idx and len(j["chevalet"]) <= 3
-        for i, j in enumerate(etat["joueurs"]))
-    if adversaire_proche and reste > 0:
-        return _piocher_ou_passer(etat)
-    return coup
+    if budget_temps is None:
+        budget_temps = BUDGET_TEMPS_EXPERT  # lu à l'appel (pas figé au
+        # chargement du module) pour rester ajustable, ex. dans une
+        # campagne de simulation (scripts/comparer_niveaux_ia.py).
+    try:
+        coup = resoudre_coup(etat, idx, budget_temps=budget_temps)
+    except BudgetDepasse:
+        coup = None
+    if coup:
+        return coup
+    return jouer_niveau_avance(etat, idx)
 
 
 NIVEAUX_IA = {

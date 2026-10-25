@@ -1,5 +1,7 @@
 """Tests des cinq niveaux d'IA."""
 
+import pytest
+
 from rummikub.moteur.ia import (
     jouer_ia, jouer_niveau_avance, jouer_niveau_expert,
     jouer_niveau_facile, jouer_niveau_intermediaire, NIVEAUX_IA,
@@ -7,6 +9,7 @@ from rummikub.moteur.ia import (
 from rummikub.moteur.partie import creer_partie
 from rummikub.moteur.validation import valider_plateau
 from rummikub.moteur.tuiles import tuile_depuis_dict
+from rummikub.moteur.solveur import resoudre_coup, BudgetDepasse
 
 
 def _partie_2j(niveau="Débutant"):
@@ -627,10 +630,32 @@ def test_avance_ne_detache_pas_un_joker_en_bout_de_suite_par_scission():
     assert coup["action"] != "jouer"
 
 
-def test_expert_ne_detache_pas_un_joker_en_bout_de_suite_par_scission():
+def test_expert_trouve_un_groupe_pour_le_joker_en_bout_de_suite():
+    """Issue #186 : contrairement à Avancé (tactiques locales, non-régression
+    ci-dessus), le solveur de réarrangement global d'Expert trouve ICI un
+    coup légitimement meilleur que « ne rien jouer » : la suite rouge
+    4-5-6-(joker) redevient la suite 4-5-6 (toujours valide, 3 tuiles) et le
+    joker libéré forme un NOUVEAU groupe de 7 avec les deux tuiles de la
+    main (bleu/jaune/joker = 7) — aucune des deux ne correspond à la
+    couleur/valeur de la tactique de scission (qui ne s'applique de toute
+    façon pas à un joker en bout), mais le réarrangement global n'a pas
+    cette limite. Conformément à la consigne de l'issue #186 (tâche 6), ce
+    test remplace l'ancien `test_expert_ne_detache_pas_un_joker_en_bout_de_
+    suite_par_scission`, devenu faux pour de bonnes raisons — voir le
+    rapport de clôture #186."""
     etat = _etat_avec_joker_en_bout_de_suite("Expert")
     coup = jouer_niveau_expert(etat, 1)
-    assert coup["action"] != "jouer"
+    assert coup["action"] == "jouer"
+    assert set(coup["ids_tuiles"]) == {"bleu_7_a", "jaune_7_a"}
+    plateau = [[tuile_depuis_dict(d) for d in c]
+               for c in coup["nouveau_plateau"]]
+    assert valider_plateau(plateau)["valide"]
+    suite_restante = next(c for c in plateau
+                          if any(t.id == "rouge_4_a" for t in c))
+    assert {t.id for t in suite_restante} == {
+        "rouge_4_a", "rouge_5_a", "rouge_6_a"}
+    groupe_7 = next(c for c in plateau if any(t.id == "bleu_7_a" for t in c))
+    assert any(t.est_joker for t in groupe_7)
 
 
 def test_avance_ne_scinde_pas_en_bout_sans_mise_initiale_faite():
@@ -730,3 +755,139 @@ def test_avance_ne_reduit_pas_un_groupe_de_3_avec_joker():
     ]
     coup = jouer_niveau_avance(etat, 1)
     assert coup["action"] != "jouer"
+
+
+# --------------------------------------------------------------------------- #
+# Issue #186 : solveur de réarrangement global du plateau (niveau Expert).
+# --------------------------------------------------------------------------- #
+
+def _etat_demantelement_courte_suite(niveau):
+    """Issue #175 : suite noire 5-(joker=6)-7 (3 tuiles, le minimum). Le
+    chevalet contient bleu_5/jaune_5 et bleu_7/jaune_7 (pour recomposer
+    chacune des deux tuiles réelles démantelées en un nouveau groupe) et
+    bleu_9/jaune_9 (pour le joker, isolé une fois les deux tuiles réelles
+    retirées de la suite, dans un troisième groupe). Aucune tactique locale
+    existante (#148 à #183) ne couvre ce cas : elles ne retirent jamais
+    DEUX tuiles réelles d'une même combinaison en un seul coup. Seul le
+    solveur de réarrangement global (#186) le trouve."""
+    etat = _partie_2j(niveau)
+    etat["index_joueur_actuel"] = 1
+    bot = etat["joueurs"][1]
+    bot["mise_initiale_faite"] = True
+    etat["plateau"] = [[
+        {"id": "noir_5_a", "valeur": 5, "couleur": "noir", "est_joker": False},
+        {"id": "joker_1", "valeur": None, "couleur": None, "est_joker": True},
+        {"id": "noir_7_a", "valeur": 7, "couleur": "noir", "est_joker": False},
+    ]]
+    bot["chevalet"] = [
+        {"id": "bleu_5_a", "valeur": 5, "couleur": "bleu", "est_joker": False},
+        {"id": "jaune_5_a", "valeur": 5, "couleur": "jaune", "est_joker": False},
+        {"id": "bleu_7_a", "valeur": 7, "couleur": "bleu", "est_joker": False},
+        {"id": "jaune_7_a", "valeur": 7, "couleur": "jaune", "est_joker": False},
+        {"id": "bleu_9_a", "valeur": 9, "couleur": "bleu", "est_joker": False},
+        {"id": "jaune_9_a", "valeur": 9, "couleur": "jaune", "est_joker": False},
+    ]
+    return etat
+
+
+def test_expert_demantele_completement_une_courte_suite_avec_joker():
+    """Issue #175 : le solveur pose les 6 tuiles de la main en démantelant
+    complètement la suite noire — chacune de ses deux tuiles réelles
+    recomposée dans un nouveau groupe, le joker isolé et libéré dans un
+    troisième groupe."""
+    etat = _etat_demantelement_courte_suite("Expert")
+    coup = jouer_niveau_expert(etat, 1)
+    assert coup["action"] == "jouer"
+    assert set(coup["ids_tuiles"]) == {
+        "bleu_5_a", "jaune_5_a", "bleu_7_a", "jaune_7_a", "bleu_9_a", "jaune_9_a"}
+    plateau = [[tuile_depuis_dict(d) for d in c]
+               for c in coup["nouveau_plateau"]]
+    assert valider_plateau(plateau)["valide"]
+    assert len(plateau) == 3
+    groupe_5 = next(c for c in plateau if any(t.id == "bleu_5_a" for t in c))
+    groupe_7 = next(c for c in plateau if any(t.id == "bleu_7_a" for t in c))
+    groupe_9 = next(c for c in plateau if any(t.id == "bleu_9_a" for t in c))
+    assert {t.id for t in groupe_5} == {"noir_5_a", "bleu_5_a", "jaune_5_a"}
+    assert {t.id for t in groupe_7} == {"noir_7_a", "bleu_7_a", "jaune_7_a"}
+    assert any(t.est_joker for t in groupe_9)
+
+
+def test_avance_ne_demantele_pas_une_courte_suite_avec_joker():
+    """Non-régression : Avancé (tactiques locales) ne trouve PAS ce coup —
+    voir CONTEXTE.md §8, cas identifié mais non implémenté avant #186."""
+    etat = _etat_demantelement_courte_suite("Avancé")
+    coup = jouer_niveau_avance(etat, 1)
+    assert coup["action"] != "jouer"
+
+
+def test_expert_ouvre_avec_une_combinaison_qui_atteint_la_mise_minimale():
+    """Mise initiale pas faite (#186, tâche 2) : seule la main compte (le
+    plateau n'est pas touché), le solveur doit choisir une combinaison
+    atteignant au moins le minimum requis (30 points par défaut)."""
+    etat = _partie_2j("Expert")
+    etat["index_joueur_actuel"] = 1
+    bot = etat["joueurs"][1]
+    bot["chevalet"] = [
+        {"id": "rouge_13_a", "valeur": 13, "couleur": "rouge", "est_joker": False},
+        {"id": "bleu_13_a", "valeur": 13, "couleur": "bleu", "est_joker": False},
+        {"id": "jaune_13_a", "valeur": 13, "couleur": "jaune", "est_joker": False},
+        {"id": "noir_1_a", "valeur": 1, "couleur": "noir", "est_joker": False},
+    ]
+    coup = jouer_niveau_expert(etat, 1)
+    assert coup["action"] == "jouer"
+    assert set(coup["ids_tuiles"]) == {"rouge_13_a", "bleu_13_a", "jaune_13_a"}
+    plateau = [[tuile_depuis_dict(d) for d in c]
+               for c in coup["nouveau_plateau"]]
+    assert valider_plateau(plateau)["valide"]
+
+
+def test_expert_n_ouvre_pas_sous_le_minimum_de_la_mise_initiale():
+    """Si aucune combinaison possible depuis la main n'atteint le minimum
+    requis (ici 3 points : groupe de trois 1), Expert ne doit pas jouer."""
+    etat = _partie_2j("Expert")
+    etat["index_joueur_actuel"] = 1
+    bot = etat["joueurs"][1]
+    bot["chevalet"] = [
+        {"id": "rouge_1_a", "valeur": 1, "couleur": "rouge", "est_joker": False},
+        {"id": "bleu_1_a", "valeur": 1, "couleur": "bleu", "est_joker": False},
+        {"id": "jaune_1_a", "valeur": 1, "couleur": "jaune", "est_joker": False},
+    ]
+    coup = jouer_niveau_expert(etat, 1)
+    assert coup["action"] in ("piocher", "passer")
+
+
+def test_expert_aucun_coup_possible():
+    """Aucune combinaison ne peut être formée ni étendue : Expert doit se
+    replier sur pioche (ou passe si la pioche est vide), jamais planter ni
+    renvoyer un coup invalide."""
+    etat = _partie_2j("Expert")
+    etat["index_joueur_actuel"] = 1
+    bot = etat["joueurs"][1]
+    bot["mise_initiale_faite"] = True
+    etat["plateau"] = [[
+        {"id": "rouge_4_a", "valeur": 4, "couleur": "rouge", "est_joker": False},
+        {"id": "rouge_5_a", "valeur": 5, "couleur": "rouge", "est_joker": False},
+        {"id": "rouge_6_a", "valeur": 6, "couleur": "rouge", "est_joker": False},
+    ]]
+    bot["chevalet"] = [
+        {"id": "bleu_1_a", "valeur": 1, "couleur": "bleu", "est_joker": False},
+        {"id": "jaune_9_a", "valeur": 9, "couleur": "jaune", "est_joker": False},
+        {"id": "noir_12_a", "valeur": 12, "couleur": "noir", "est_joker": False},
+    ]
+    assert resoudre_coup(etat, 1, budget_temps=1.0) is None
+    coup = jouer_niveau_expert(etat, 1)
+    assert coup["action"] in ("piocher", "passer")
+
+
+def test_expert_se_replie_sur_avance_si_budget_depasse():
+    """Issue #186 (tâche 3/6) : avec un budget de temps nul, le solveur
+    doit lever BudgetDepasse dès la recherche ; Expert se replie alors sur
+    exactement le coup que jouerait Avancé, sans jamais planter."""
+    etat = _etat_avec_reduction_groupe4("Expert")
+    with pytest.raises(BudgetDepasse):
+        resoudre_coup(etat, 1, budget_temps=0.0)
+
+    coup_replie = jouer_niveau_expert(etat, 1, budget_temps=0.0)
+    coup_avance = jouer_niveau_avance(etat, 1)
+    assert coup_replie["action"] == coup_avance["action"] == "jouer"
+    assert set(coup_replie["ids_tuiles"]) == set(coup_avance["ids_tuiles"])

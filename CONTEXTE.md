@@ -44,7 +44,10 @@ src/rummikub/
     partie.py               État de partie, tours, pioche, backup, manches.
     score.py                calculer_scores_manche, trouver_gagnant_manche.
     ia.py                   5 niveaux d'IA (voir §5) + tactiques de
-                            récupération de joker (voir §8).
+                            récupération de joker (voir §8, niveau Avancé
+                            et repli d'Expert).
+    solveur.py              Solveur de réarrangement global du plateau,
+                            utilisé par Expert (voir §8bis, #186).
   ui/
     application.py          ApplicationRummikub : fenêtre pywebview, etat_jeu (public),
                             naviguer_vers_jeu/accueil, reprendre_jeu, load_url.
@@ -150,7 +153,7 @@ icône `assets/rummikub.ico` (facultative, absente → aucune icône).
   valide.
 - `tests/test_bilan.py` : lecture des journaux de parties et calcul du bilan
   par niveau d'IA (voir §9).
-- État actuel : **75 tests passent** (`pytest -q` → `75 passed`).
+- État actuel : **81 tests passent** (`pytest -q` → `81 passed`).
 
 ## 7. Vérification empirique d'un comportement front-end
 
@@ -182,6 +185,12 @@ icône `assets/rummikub.ico` (facultative, absente → aucune icône).
 > tactique de joker (objectif : pouvoir un jour revoir les niveaux de
 > difficulté de l'IA — jugés trop faibles actuellement — une fois
 > l'ensemble des tactiques couvert).
+
+> **Depuis #186, cette liste ne décrit plus que le niveau Avancé.** Expert
+> ne les utilise plus comme chaîne de tactiques principale : il appelle le
+> solveur de réarrangement global (§8bis), nettement plus fort, et ne se
+> replie sur le comportement d'Avancé ci-dessous que si ce solveur dépasse
+> son budget de temps par tour (ou échoue à trouver quoi que ce soit).
 
 **Implémentées :**
 
@@ -247,24 +256,99 @@ icône `assets/rummikub.ico` (facultative, absente → aucune icône).
   groupes de 4 : un groupe de 3 avec joker (2 réelles + 1 joker) ne peut
   pas perdre son joker sans tomber sous le minimum de 3 tuiles.
 
-**Identifiées mais pas encore implémentées :**
+**Identifiées mais pas encore implémentées pour Avancé :**
 
 - **Démantèlement complet d'une courte suite contenant un joker** (#175) :
   retirer SES DEUX tuiles réelles (pas une seule comme dans les tactiques
   ci-dessus), chacune recombinée avec des tuiles de la main pour former
   deux NOUVELLES combinaisons (groupes ou suites) ailleurs sur le
   plateau — le joker est ainsi isolé et libéré sans qu'aucune tuile ne le
-  remplace directement. Généralisable au cas sans joker : la même suite
-  démantelée autour d'une tuile réelle (plutôt qu'un joker), dont les deux
-  voisines sont recombinées ailleurs. Nettement plus complexe que les
-  tactiques ci-dessus — recherche de recombinaison globale sur plusieurs
-  combinaisons du plateau, pas un simple motif local — probablement une
-  issue à part entière une fois les cas plus simples en place.
+  remplace directement. Généralisable au cas sans joker. Nettement plus
+  complexe que les tactiques ci-dessus — recherche de recombinaison
+  globale sur plusieurs combinaisons du plateau, pas un simple motif
+  local. Avancé ne le trouve toujours pas (tactiques locales inchangées,
+  voir `test_avance_ne_demantele_pas_une_courte_suite_avec_joker`) ;
+  **Expert le trouve désormais**, via le solveur de réarrangement global
+  (§8bis) — voir `test_expert_demantele_completement_une_courte_suite_
+  avec_joker` dans `tests/test_ia.py`.
 
 Note : `_coup_scission` (`ia.py`) couvre le cas « tuile réelle » (bout ou
 milieu de suite, #181) ; elle n'est plus limitée aux seuls bouts de suite,
 mais reste étrangère aux jokers (dont la libération, bout ou milieu, passe
 par `_liberations_possibles`).
+
+## 8bis. Solveur de réarrangement global du plateau — niveau Expert (#186)
+
+Depuis #186, Expert ne joue plus la chaîne de tactiques ci-dessus : il
+appelle `moteur/solveur.py::resoudre_coup(etat, idx, budget_temps)`, qui
+reconstruit librement tout le plateau (toutes les tuiles déjà posées
+peuvent changer de combinaison, aucune ne peut disparaître) pour y poser le
+plus grand nombre possible de tuiles du chevalet, jokers compris.
+
+- **Principe** : on raisonne sur des compteurs par emplacement
+  `(couleur, valeur)` (0 à 2 tuiles réelles possibles) et sur les 2 jokers
+  du jeu, chacun marqué « obligatoire » s'il vient du plateau (doit
+  impérativement finir dans une combinaison valide) ou « optionnel » s'il
+  vient du chevalet (peut rester en main). Une recherche récursive
+  mémoïsée choisit, à chaque étape, une combinaison (groupe ou suite)
+  consommant un emplacement obligatoire restant — si aucune n'existe, la
+  branche échoue, aucune tuile du plateau ne doit disparaître — puis, une
+  fois tous les emplacements obligatoires traités, tente d'y ajouter le
+  plus de tuiles optionnelles (chevalet) possible.
+- **Départage** (plusieurs réarrangements posant le même nombre de
+  tuiles) : d'abord le plus de points posés (valeur des tuiles du
+  chevalet effectivement jouées), puis, à égalité, celui qui utilise le
+  moins de jokers du chevalet — un joker reste une ressource précieuse
+  même quand il ne change pas le nombre de tuiles posées ce tour-ci.
+- **Mise initiale pas faite** : le solveur ignore alors le plateau (une
+  règle du jeu interdit d'y toucher avant la mise initiale) et cherche la
+  meilleure combinaison formable depuis la seule main, sous la contrainte
+  des points posés ≥ `mise_initiale_min` — avec un repli en 2 passes documenté
+  dans `solveur.py` quand le réarrangement qui pose le plus de tuiles
+  n'atteint pas ce minimum (limite documentée : pas nécessairement
+  l'optimum exact sous cette contrainte, voir docstring de
+  `_meilleur_rearrangement`).
+- **Combinaisons gelées** (`_separer_combos_figees`) : une combinaison du
+  plateau qui ne partage aucune couleur/valeur avec la main et ne contient
+  aucun joker est reconduite telle quelle, hors recherche — borne
+  nécessaire pour la combinatoire (principal facteur de ralentissement en
+  milieu/fin de partie), au prix de réarrangements à travers une chaîne de
+  combinaisons toutes étrangères à la main courante (cas non rencontré par
+  les scénarios couverts par les tests).
+- **Dégradation progressive sous budget de temps** (`BudgetDepasse`,
+  `_resoudre`) : au-delà d'une dizaine de combinaisons pertinentes pour la
+  main courante, l'arbre de recherche dépasse largement ce qu'un budget
+  d'1 à 2 secondes permet de parcourir en entier (voir le rapport de
+  clôture #186 pour l'analyse). Deux mesures en atténuent l'effet : les
+  candidats de chaque emplacement sont essayés en priorité dans l'ordre
+  décroissant de tuiles de main consommées (atteint le plafond optimiste,
+  donc la coupure de branche, plus vite) ; et si le budget s'épuise EN
+  COURS d'exploration, la meilleure branche déjà trouvée à ce niveau est
+  conservée (réarrangement valide, pas nécessairement optimal) plutôt que
+  tout perdre. `BudgetDepasse` n'est donc levée, et `jouer_niveau_expert`
+  ne se replie sur le comportement d'Avancé (§8) pour ce tour, que si
+  RIEN n'a été trouvé nulle part dans l'arbre avant expiration du budget
+  (`BUDGET_TEMPS_EXPERT`, 1.5s par défaut, `moteur/ia.py`) — idem si le
+  solveur conclut lui-même qu'aucun coup n'existe (filet de sécurité,
+  coût négligeable).
+- **Règle supprimée** (#186, suite de #184) : Expert ne refuse plus de
+  poser quand un adversaire a ≤ 3 tuiles (ancien comportement, retiré —
+  la campagne de #184 n'a montré aucun avantage mesurable à la prudence).
+- **Performance** : rapide en début de partie (plateau simple, < quelques
+  ms) ; au-delà d'une dizaine de combinaisons pertinentes pour la main
+  courante, la recherche consomme typiquement tout le budget de temps
+  (dégradation progressive ci-dessus, pas un échec total) — voir le
+  rapport de clôture #186 pour les mesures (temps moyen/maximal par tour).
+- **Tests** : `tests/test_ia.py` — le solveur retrouve au moins aussi bien
+  chaque scénario déjà couvert par Avancé (échange direct, détachement en
+  bout, libérations combinées, groupe de 4, scission en milieu de suite,
+  groupe de 4 avec joker retiré), plus le démantèlement complet (#175),
+  un scénario de mise initiale, un scénario sans aucun coup possible, et
+  le repli sur budget de temps dépassé. Un ancien test spécifique à Expert
+  (`test_expert_ne_detache_pas_un_joker_en_bout_de_suite_par_scission`) a
+  été remplacé : le solveur y trouve légitimement un meilleur coup qu'« 
+  aucun » (voir `test_expert_trouve_un_groupe_pour_le_joker_en_bout_de_
+  suite`).
 
 ## 9. Scripts de simulation IA vs IA (`scripts/`)
 
@@ -289,9 +373,16 @@ par `_liberations_possibles`).
   répartition des fins de partie (chevalet vidé / pioche épuisée / arrêtée
   par le garde-fou anti-blocage), et temps de calcul moyen/maximal d'un
   tour de décision par niveau (repérage d'un emballement de la recherche de
-  libération de joker). Première campagne (Avancé vs Expert, 50 donnes,
-  valeurs par défaut) : écart non significatif à 95 % (53 % / 47 % sur 100
-  parties) — voir CHANGELOG pour le détail.
+  libération de joker). Première campagne (#184, Avancé vs Expert avant le
+  solveur de réarrangement global, 50 donnes) : écart non significatif à
+  95 % (53 % / 47 % sur 100 parties). **Depuis #186** (Expert = solveur de
+  réarrangement global, §8bis), à budget de production (1.5s/tour),
+  40 parties (2 lots, voir CHANGELOG-186 pour le détail et la justification
+  de cet échantillon réduit par rapport aux 200/500 donnes souhaitées) :
+  écart significatif, Expert 80.0 % ± 12.4 pt, part de parties bloquées
+  (pioche épuisée) 10 % (contre 29 % en #184) — voir CHANGELOG-186 pour le
+  détail complet (temps de calcul par tour, effet du budget de temps sur la
+  force du solveur).
 ## 10. Journal de parties et bilan par niveau d'IA (issue #185)
 
 - **Journal** (`persistance/journal.py`) : optionnel, activé par la clé
