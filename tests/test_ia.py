@@ -1,15 +1,21 @@
 """Tests des cinq niveaux d'IA."""
 
+import json
+from pathlib import Path
+
 import pytest
 
 from rummikub.moteur.ia import (
     jouer_ia, jouer_niveau_avance, jouer_niveau_expert,
     jouer_niveau_facile, jouer_niveau_intermediaire, NIVEAUX_IA,
+    BUDGET_TEMPS_EXPERT,
 )
 from rummikub.moteur.partie import creer_partie
 from rummikub.moteur.validation import valider_plateau
 from rummikub.moteur.tuiles import tuile_depuis_dict
 from rummikub.moteur.solveur import resoudre_coup, BudgetDepasse
+
+_DONNEES = Path(__file__).resolve().parent / "donnees"
 
 
 def _partie_2j(niveau="Débutant"):
@@ -996,3 +1002,69 @@ def test_expert_conserve_plusieurs_combinaisons_du_plateau_sans_mise_initiale():
                 | ({tt["id"] for tt in bot["chevalet"]}
                    - set(coup["ids_tuiles"])))
     assert ids_apres == ids_avant
+
+
+# --------------------------------------------------------------------------- #
+# Issue #190 (suite de #187) : plateau chargé (70 tuiles, 19 combinaisons)
+# où le solveur ne trouvait RIEN en 1,5 s (repli total sur Avancé) alors
+# qu'un coup de 3 tuiles existe — voir ``tests/donnees/cas_expert_budget_
+# tour81.json`` et le rapport de clôture #190 pour l'analyse (combinatoire
+# du gel des combinaisons, ordre d'exploration, backtracking).
+# --------------------------------------------------------------------------- #
+
+def _charger_cas_tour81():
+    with open(_DONNEES / "cas_expert_budget_tour81.json", encoding="utf-8") as f:
+        data = json.load(f)
+    return data["etat"], data["idx"]
+
+
+def _verifier_coup_valide_sans_perte(etat, idx, coup):
+    joueur = etat["joueurs"][idx]
+    ids_avant = ({tt["id"] for combo in etat.get("plateau", []) for tt in combo}
+                | {tt["id"] for tt in joueur["chevalet"]})
+    nouveau_plateau = [[tuile_depuis_dict(d) for d in c]
+                       for c in coup["nouveau_plateau"]]
+    assert valider_plateau(nouveau_plateau)["valide"]
+    ids_apres = ({tt.id for combo in nouveau_plateau for tt in combo}
+                | ({tt["id"] for tt in joueur["chevalet"]}
+                   - set(coup["ids_tuiles"])))
+    assert ids_apres == ids_avant, "des tuiles ont disparu (ou sont apparues)"
+
+
+def test_solveur_plateau_charge_trouve_au_moins_trois_tuiles_avec_gros_budget():
+    """Avec un budget confortable (10 s, largement au-dessus du temps
+    mesuré en développement — voir rapport #190), le solveur doit retrouver
+    au moins le coup de 3 tuiles identifié manuellement sur ce plateau
+    (11 noir, 11 noir, 7 rouge), sans jamais perdre de tuile du plateau."""
+    etat, idx = _charger_cas_tour81()
+    coup = resoudre_coup(etat, idx, budget_temps=10.0)
+    assert coup is not None
+    assert coup["action"] == "jouer"
+    assert len(coup["ids_tuiles"]) >= 3
+    _verifier_coup_valide_sans_perte(etat, idx, coup)
+
+
+def test_solveur_plateau_charge_trouve_un_coup_avec_budget_de_production():
+    """Avec le budget de production d'Expert (voir ``BUDGET_TEMPS_EXPERT``
+    dans ``moteur/ia.py``), le solveur doit désormais trouver un coup sur ce
+    plateau (avant #190, il ne trouvait RIEN et Expert se repliait sur
+    Avancé, qui ne pose qu'une tuile). Tolérance de temps large (×6) pour
+    ne pas échouer par hasard sur une machine de CI nettement plus lente
+    que celle utilisée pour mesurer la cible de production — ce n'est PAS
+    un relâchement de l'objectif de vitesse, seulement une marge anti-
+    flakiness sur une machine inconnue."""
+    etat, idx = _charger_cas_tour81()
+    budget_test = BUDGET_TEMPS_EXPERT * 6
+    coup = resoudre_coup(etat, idx, budget_temps=budget_test)
+    assert coup is not None, (
+        f"aucun coup trouvé même avec {budget_test} s (× 6 le budget de "
+        f"production de {BUDGET_TEMPS_EXPERT} s) — régression de vitesse "
+        f"du solveur sur plateau chargé")
+    assert coup["action"] == "jouer"
+    # Objectif mesurable de #190 : retrouver au moins le coup de 3 tuiles
+    # (le solveur le trouve en ~80 ms en développement, bien avant
+    # l'expiration même du seul budget de production à 1.5 s — la marge
+    # ×6 ci-dessus protège le TEMPS de la mesure sur une machine lente,
+    # pas la qualité attendue du résultat).
+    assert len(coup["ids_tuiles"]) >= 3
+    _verifier_coup_valide_sans_perte(etat, idx, coup)

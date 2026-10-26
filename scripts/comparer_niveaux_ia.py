@@ -41,7 +41,7 @@ if SRC.is_dir() and str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
 from rummikub.config import NIVEAUX  # noqa: E402
-from rummikub.moteur.ia import jouer_ia  # noqa: E402
+from rummikub.moteur.ia import jouer_ia, jouer_niveau_expert  # noqa: E402
 from rummikub.moteur.partie import (  # noqa: E402
     annuler_tour,
     backup_debut_tour,
@@ -91,7 +91,8 @@ def _anomalies_conservation(etat: dict) -> list[str]:
 # la décision IA par niveau).
 # --------------------------------------------------------------------------- #
 
-def jouer_un_tour(etat: dict, idx: int, temps_par_niveau: dict) -> tuple[dict, bool, bool]:
+def jouer_un_tour(etat: dict, idx: int, temps_par_niveau: dict,
+                  replis_expert: list) -> tuple[dict, bool, bool]:
     """Joue le tour de l'IA à l'index ``idx``.
 
     Chronomètre l'appel à ``jouer_ia`` et l'ajoute à
@@ -103,13 +104,31 @@ def jouer_un_tour(etat: dict, idx: int, temps_par_niveau: dict) -> tuple[dict, b
     de tuiles (#187) — distingué des autres motifs de rejet (ex. mise
     initiale insuffisante) pour que ce type d'anomalie, bien plus grave,
     ressorte clairement dans le rapport de la campagne.
+
+    Pour le niveau Expert, appelle ``jouer_niveau_expert`` directement
+    (plutôt que le ``jouer_ia`` générique) avec ``on_repli`` (#190) afin de
+    compter, dans ``replis_expert``, le nombre de tours où Expert s'est
+    replié sur Avancé — ``replis_expert[0]`` : total (toute cause) ;
+    ``replis_expert[1]`` : parmi eux, ceux dus à un dépassement du budget
+    de temps SANS avoir rien trouvé (:class:`BudgetDepasse` — la seule
+    cause que l'accélération de #190 peut réduire : l'autre cause, un coup
+    légitimement impossible, ne dépend pas de la vitesse de recherche).
     """
     niveau = etat["joueurs"][idx]["niveau"]
     backup_debut_tour(etat)
 
+    def _compter_repli(timeout):
+        replis_expert[0] += 1
+        if timeout:
+            replis_expert[1] += 1
+
     debut = time.monotonic()
     try:
-        res_ia = jouer_ia(etat, idx)
+        if niveau == "Expert":
+            res_ia = jouer_niveau_expert(
+                etat, idx, on_repli=_compter_repli)
+        else:
+            res_ia = jouer_ia(etat, idx)
     except Exception:
         temps_par_niveau.setdefault(niveau, []).append(time.monotonic() - debut)
         logger.exception("Exception de l'IA %s au tour %d", niveau, etat["tour_numero"])
@@ -148,7 +167,7 @@ def jouer_un_tour(etat: dict, idx: int, temps_par_niveau: dict) -> tuple[dict, b
 # --------------------------------------------------------------------------- #
 
 def jouer_partie(config_joueurs: list[dict], max_tours: int,
-                 temps_par_niveau: dict) -> dict:
+                 temps_par_niveau: dict, replis_expert: list) -> dict:
     """Joue une manche complète à 2 joueurs jusqu'à sa fin naturelle
     (chevalet vidé ou pioche épuisée) ou jusqu'au garde-fou ``max_tours``.
     """
@@ -168,7 +187,7 @@ def jouer_partie(config_joueurs: list[dict], max_tours: int,
             break
         idx = etat["index_joueur_actuel"]
         etat, invalide, tuiles_disparues = jouer_un_tour(
-            etat, idx, temps_par_niveau)
+            etat, idx, temps_par_niveau, replis_expert)
         if invalide:
             coups_invalides += 1
         if tuiles_disparues:
@@ -212,6 +231,12 @@ def comparer(niveau_a: str, niveau_b: str, nb_donnes: int, seed: int,
     coups_invalides_total = 0
     coups_tuiles_disparues_total = 0
     anomalies_conservation_total = 0
+    # Liste (plutôt qu'un tuple d'int) : mutable, modifiable depuis la
+    # fermeture ``_compter_repli`` de ``jouer_un_tour`` sans variable
+    # ``nonlocal`` ni retour supplémentaire à faire remonter à travers
+    # ``jouer_partie``. [0] = replis total (toute cause), [1] = parmi eux,
+    # ceux dus à un dépassement de budget sans rien trouvé (voir #190).
+    replis_expert = [0, 0]
 
     for i, graine in enumerate(graines):
         for ordre, camps in enumerate((("A", "B"), ("B", "A"))):
@@ -222,7 +247,8 @@ def comparer(niveau_a: str, niveau_b: str, nb_donnes: int, seed: int,
                  "niveau": niveau_camp[camp]}
                 for camp in camps
             ]
-            resultat = jouer_partie(config_joueurs, max_tours, temps_par_niveau)
+            resultat = jouer_partie(config_joueurs, max_tours, temps_par_niveau,
+                                    replis_expert)
             coups_invalides_total += resultat["coups_invalides"]
             coups_tuiles_disparues_total += resultat["coups_tuiles_disparues"]
             anomalies_conservation_total += resultat["anomalies_conservation"]
@@ -264,6 +290,8 @@ def comparer(niveau_a: str, niveau_b: str, nb_donnes: int, seed: int,
         "coups_invalides_total": coups_invalides_total,
         "coups_tuiles_disparues_total": coups_tuiles_disparues_total,
         "anomalies_conservation_total": anomalies_conservation_total,
+        "replis_expert_total": replis_expert[0],
+        "replis_expert_timeout": replis_expert[1],
         "nb_donnes": nb_donnes,
         "nb_parties": 2 * nb_donnes,
     }
@@ -342,6 +370,19 @@ def afficher_rapport(resume: dict) -> None:
     for niveau, temps in sorted(resume["temps_par_niveau"].items()):
         print(f"    {niveau:15s} : moyenne {moyenne(temps) * 1000:.1f} ms, "
              f"max {max(temps) * 1000:.1f} ms, sur {len(temps)} tour(s)")
+
+    tours_expert = len(resume["temps_par_niveau"].get("Expert", []))
+    if tours_expert:
+        replis = resume["replis_expert_total"]
+        replis_timeout = resume["replis_expert_timeout"]
+        print(f"  Replis d'Expert sur Avancé, toute cause : "
+             f"{replis}/{tours_expert} tour(s) ({replis / tours_expert * 100:.1f} %)")
+        print(f"    — dont faute de résultat dans le budget (#190, seule "
+             f"cause visée par l'accélération) : {replis_timeout}/{tours_expert} "
+             f"tour(s) ({replis_timeout / tours_expert * 100:.1f} %)")
+        print(f"    — dont coup légitimement impossible (aucun rapport "
+             f"avec la vitesse) : {replis - replis_timeout}/{tours_expert} "
+             f"tour(s) ({(replis - replis_timeout) / tours_expert * 100:.1f} %)")
     print("=" * 70)
 
 
