@@ -1,14 +1,92 @@
 from rummikub.moteur.tuiles import Tuile
-from rummikub.moteur.description_coup import decrire_coup_ia, etapes_coup_ia
+from rummikub.moteur.description_coup import (
+    decrire_coup_ia, etapes_coup_ia, _contracter, _decrire_combo)
 
 
-def t(v, c):
-    return Tuile(f"{c}_{v}_a", v, c).as_dict()
+def t(v, c, serie="a"):
+    return Tuile(f"{c}_{v}_{serie}", v, c).as_dict()
 
 
 def j(n=1, c="rouge"):
     return Tuile(f"joker_{n}", None, c, est_joker=True).as_dict()
 
+
+def _ids_plateau(plateau):
+    return [d["id"] for combo in plateau for d in combo]
+
+
+def _ids_cadre(cadre):
+    return [c["tuile"]["id"] for c in cadre]
+
+
+def _verifier_invariants(avant, apres, etapes):
+    """Invariants communs à toute suite d'étapes (issue #191, point 7) :
+    - chaque tuile (plateau d'avant + tuiles posées) n'est jamais, à aucune
+      étape, à deux endroits à la fois (plateau et cadre confondus) ;
+    - la toute première étape est « Départ » et reproduit le plateau d'avant ;
+    - la toute dernière étape reproduit exactement le plateau d'après, avec
+      un cadre vide ;
+    - aucune étape ne laisse le plateau+cadre inchangés par rapport à la
+      précédente (pas d'étape sans effet visible)."""
+    assert etapes[0]["titre"] == "Départ"
+    ids_avant = sorted(sorted(d["id"] for d in c) for c in avant)
+    ids_depart = sorted(sorted(d["id"] for d in c) for c in etapes[0]["plateau"])
+    assert ids_depart == ids_avant
+
+    precedent = None
+    for etape in etapes:
+        combines = _ids_plateau(etape["plateau"]) + _ids_cadre(etape["cadre"])
+        assert len(combines) == len(set(combines)), \
+            f"tuile dupliquée à l'étape {etape['titre'] or '(sans titre)'}"
+        empreinte = (tuple(sorted(combines)),
+                     tuple(sorted(_ids_plateau(etape["plateau"]))))
+        # "Les jokers" est volontairement une vue d'ensemble qui ne change
+        # rien au plateau/cadre de "Départ" juste avant : seules les étapes
+        # SANS titre (les changements réels) doivent toujours différer de
+        # la précédente.
+        if precedent is not None and not etape["titre"]:
+            assert empreinte != precedent, "étape sans changement visible"
+        precedent = empreinte
+
+    assert etapes[-1]["cadre"] == []
+    ids_apres = sorted(sorted(d["id"] for d in c) for c in apres)
+    ids_derniere = sorted(sorted(d["id"] for d in c) for c in etapes[-1]["plateau"])
+    assert ids_derniere == ids_apres
+
+
+# ------------------------------------------------------------- contractions
+
+def test_contraction_de_le_devient_du_pour_un_groupe():
+    assert _contracter("de", "le groupe de 7") == "du groupe de 7"
+
+
+def test_contraction_a_le_devient_au_pour_un_groupe():
+    assert _contracter("à", "le groupe de 7") == "au groupe de 7"
+
+
+def test_contraction_de_la_suite_ne_se_contracte_pas():
+    assert _contracter("de", "la suite rouge (5 à 9)") == "de la suite rouge (5 à 9)"
+    assert _contracter("à", "la suite rouge (5 à 9)") == "à la suite rouge (5 à 9)"
+
+
+def test_contraction_de_les_devient_des():
+    assert _contracter("de", "les groupes de 7 et 8") == "des groupes de 7 et 8"
+
+
+def test_contraction_a_les_devient_aux():
+    assert _contracter("à", "les suites rouge et bleue") == "aux suites rouge et bleue"
+
+
+def test_decrire_combo_groupe_et_suite_avec_contraction_en_contexte():
+    groupe = [t(7, "rouge"), t(7, "bleu"), t(7, "jaune")]
+    suite = [t(5, "noir"), t(6, "noir"), t(7, "noir")]
+    assert _contracter("de", _decrire_combo(groupe)) == "du groupe de 7"
+    assert _contracter("à", _decrire_combo(groupe)) == "au groupe de 7"
+    assert _contracter("de", _decrire_combo(suite)) == "de la suite noir (5 à 7)"
+    assert _contracter("à", _decrire_combo(suite)) == "à la suite noir (5 à 7)"
+
+
+# --------------------------------------------------------------- coups simples
 
 def test_coup_simple_extension_d_une_suite():
     avant = [[t(7, "rouge"), t(8, "rouge"), t(9, "rouge")]]
@@ -27,7 +105,11 @@ def test_coup_simple_extension_d_une_suite():
     assert r["texte"].count(".") == 1
 
     etapes = etapes_coup_ia(avant, apres)
-    assert len(etapes) == 1  # pas de bouton "Pas à pas" pour un coup simple
+    _verifier_invariants(avant, apres, etapes)
+    # Départ + 1 seul changement visible : pas de bouton "Pas à pas" (le
+    # front-end ne l'affiche qu'à partir de 2 changements, cf. jeu.js).
+    changements = [e for e in etapes if not e["titre"]]
+    assert len(changements) == 1
 
 
 def test_coup_simple_nouveau_groupe():
@@ -50,7 +132,10 @@ def test_coup_sans_changement():
     assert r["nb_combinaisons_defaites"] == 0
     assert r["nb_combinaisons_creees"] == 0
     assert r["nb_combinaisons_modifiees"] == 0
+    assert etapes_coup_ia([], []) == []
 
+
+# ----------------------------------------------- joker récupéré puis rejoué
 
 def test_joker_recupere_puis_rejoue_ailleurs():
     # Suite rouge 5-6-(7 en joker) : l'IA échange le joker contre le 7 rouge
@@ -63,7 +148,7 @@ def test_joker_recupere_puis_rejoue_ailleurs():
 
     r = decrire_coup_ia(avant, apres)
 
-    assert r["nb_combinaisons_defaites"] == 0  # la suite garde sa majorité (2/3)
+    assert r["nb_combinaisons_defaites"] == 0  # la suite garde sa majorité
     assert r["nb_combinaisons_creees"] == 1
     assert r["nb_combinaisons_modifiees"] == 1
     assert len(r["jokers_deplaces"]) == 1
@@ -72,10 +157,31 @@ def test_joker_recupere_puis_rejoue_ailleurs():
     assert "groupe de 8" in depl["vers"]
     assert "joker" in r["texte"].lower()
     assert "groupe de 8" in r["texte"]
+    # Contractions correctes dans la phrase du joker.
+    assert "de la suite rouge" in r["texte"]
+    assert "au groupe de 8" in r["texte"]
 
     etapes = etapes_coup_ia(avant, apres)
-    assert len(etapes) >= 2  # touche plus d'une combinaison → pas-à-pas possible
+    _verifier_invariants(avant, apres, etapes)
+    changements = [e for e in etapes if not e["titre"]]
+    assert len(changements) >= 2  # touche plus d'une combinaison
 
+    # L'écran "Les jokers" doit exister et préciser que le remplaçant (7
+    # rouge) vient de la main, pas du plateau.
+    jokers_ecran = next(e for e in etapes if e["titre"] == "Les jokers")
+    assert "de sa main" in jokers_ecran["texte"]
+
+    # Le joker doit être libéré (visible dans le cadre) avant d'être
+    # réutilisé : trouver l'étape où il entre dans le cadre, puis celle où
+    # il en sort, et vérifier l'ordre.
+    idx_libere = next(i for i, e in enumerate(etapes)
+                        if "joker_1" in _ids_cadre(e["cadre"]))
+    idx_repris = next(i for i, e in enumerate(etapes)
+                        if i > idx_libere and "joker_1" not in _ids_cadre(e["cadre"]))
+    assert idx_libere < idx_repris
+
+
+# --------------------------------------------------- démantèlement d'un groupe
 
 def test_coup_touchant_plusieurs_combinaisons_demantele_un_groupe():
     # Un groupe de 12 est complètement démantelé : chacune de ses 3 tuiles
@@ -93,16 +199,145 @@ def test_coup_touchant_plusieurs_combinaisons_demantele_un_groupe():
     assert r["nb_combinaisons_creees"] == 3
     assert r["nb_combinaisons_modifiees"] == 0
     assert "groupe de 12" in r["texte"]
-    assert "défaite" in r["texte"]
+    assert "défait" in r["texte"]
+    # Deux combinaisons différentes partagent le nom "groupe de 12" (celle
+    # qui est défaite et celle qui est créée) : les couleurs désambiguïsent.
+    assert "groupe de 12 rouge, bleu et jaune" in r["texte"]
+    assert "groupe de 12 jaune, noir et joker" in r["texte"]
     ids_posees = {d["id"] for d in r["tuiles_posees"]}
     assert ids_posees == {"rouge_10_a", "rouge_11_a", "bleu_11_a",
                            "bleu_13_a", "noir_12_a", "joker_1"}
 
     etapes = etapes_coup_ia(avant, apres)
-    assert len(etapes) == 4  # 1 combinaison défaite + 3 nouvelles combinaisons
-    assert etapes[0]["texte"] == "Le groupe de 12 est défait."
-    # La toute dernière étape doit correspondre exactement au plateau d'après.
-    ids_derniere_etape = sorted(
-        sorted(d["id"] for d in combo) for combo in etapes[-1]["plateau"])
-    ids_attendus = sorted(sorted(d["id"] for d in combo) for combo in apres)
-    assert ids_derniere_etape == ids_attendus
+    _verifier_invariants(avant, apres, etapes)
+    changements = [e for e in etapes if not e["titre"]]
+    # 3 retraits (un par tuile, chacune vers une destination différente) + 3
+    # créations.
+    assert len(changements) == 6
+
+    # Le groupe de 12 d'origine reste affiché, rétréci et "provisoire",
+    # entre le moment où il perd sa première tuile et celui où il disparaît
+    # (sa dernière tuile libérée).
+    provisoires_vus = any(e["provisoires"] for e in etapes)
+    assert provisoires_vus
+
+
+# --------------------------------------------- coup en chaîne (Bruno, Expert)
+
+def _plateau_bruno_simple():
+    avant = [[t(3, "rouge"), t(3, "noir"), j(1)]]
+    apres = [
+        [t(3, "rouge"), t(3, "noir"), t(3, "bleu")],
+        [t(11, "bleu"), t(11, "noir"), j(1)],
+    ]
+    return avant, apres
+
+
+def test_bruno_cas_simple_texte_et_etapes():
+    """Cas décrit dans le contexte de l'issue #191 : Bruno pose 3 bleu, 11
+    bleu et 11 noir ; le 3 bleu remplace le joker du groupe de 3, et le
+    joker libéré forme un nouveau groupe de 11 avec les deux 11 de la main."""
+    avant, apres = _plateau_bruno_simple()
+
+    r = decrire_coup_ia(avant, apres, nom="Bruno")
+    assert r["texte"] == (
+        "Bruno a posé 3 tuiles de sa main : 3 bleu, 11 bleu et 11 noir. "
+        "Il a créé un groupe de 11. "
+        "Il a complété le groupe de 3 en remplaçant le joker par le 3 bleu. "
+        "Le joker est passé du groupe de 3 au groupe de 11.")
+
+    etapes = etapes_coup_ia(avant, apres)
+    _verifier_invariants(avant, apres, etapes)
+
+    # Départ : plateau d'avant, cadre rempli des 3 tuiles de la main.
+    depart = etapes[0]
+    assert depart["titre"] == "Départ"
+    assert {c["tuile"]["id"] for c in depart["cadre"]} == \
+        {"bleu_3_a", "bleu_11_a", "noir_11_a"}
+    assert all(c["origine"] == "main" for c in depart["cadre"])
+
+    # "Les jokers" juste après "Départ" : c'est le cœur du coup (point 3bis).
+    assert etapes[1]["titre"] == "Les jokers"
+
+    # Exactement 2 changements visibles : le remplacement dans le groupe de
+    # 3 (le joker rejoint le cadre), puis la formation du nouveau groupe de
+    # 11 (le cadre se vide).
+    changements = [e for e in etapes if not e["titre"]]
+    assert len(changements) == 2
+    assert "joker_1" in _ids_cadre(changements[0]["cadre"])
+    assert changements[1]["cadre"] == []
+
+
+def _plateau_bruno_expert_chaine():
+    """Coup en chaîne observé en jeu (Bruno, Expert, issue #191 point 7)."""
+    groupe11 = [t(11, "bleu"), t(11, "noir"), j(1)]
+    groupe12 = [t(12, "rouge"), t(12, "bleu"), t(12, "noir")]
+    suite_jaune = [t(11, "jaune"), t(12, "jaune"), t(13, "jaune")]
+    suite_noire = [t(6, "noir"), t(7, "noir"), t(8, "noir"), t(9, "noir"),
+                    t(10, "noir"), t(11, "noir", "b")]
+    groupe7 = [t(7, "noir", "b"), t(7, "jaune"), t(7, "rouge")]
+    avant = [groupe11, groupe12, suite_jaune, suite_noire, groupe7]
+
+    apres = [
+        [t(13, "bleu"), t(13, "jaune"), j(1)],
+        [t(7, "rouge"), t(7, "bleu"), t(7, "jaune"), t(7, "noir", "b")],
+        [t(12, "rouge"), t(12, "bleu"), t(12, "jaune")],
+        [t(11, "bleu"), t(11, "jaune"), t(11, "noir")],
+        [t(6, "noir"), t(7, "noir"), t(8, "noir")],
+        [t(9, "noir"), t(10, "noir"), t(11, "noir", "b"), t(12, "noir")],
+    ]
+    return avant, apres
+
+
+def test_chaine_bruno_expert_enchainement_tuile_par_tuile():
+    avant, apres = _plateau_bruno_expert_chaine()
+
+    etapes = etapes_coup_ia(avant, apres)
+    _verifier_invariants(avant, apres, etapes)
+
+    # Le 11 jaune doit être présenté comme venant du plateau (suite jaune),
+    # jamais de la main : vérifié via l'étape où il entre dans le cadre.
+    etape_retrait_11jaune = next(
+        e for e in etapes if "jaune_11_a" in _ids_cadre(e["cadre"]))
+    carte_11jaune = next(c for c in etape_retrait_11jaune["cadre"]
+                           if c["tuile"]["id"] == "jaune_11_a")
+    assert carte_11jaune["origine"] == "plateau"
+
+    # L'écran "Les jokers" mentionne explicitement que le remplaçant du
+    # joker (le 11 jaune) vient du plateau, pas de la main.
+    jokers_ecran = next(e for e in etapes if e["titre"] == "Les jokers")
+    assert "11 jaune" in jokers_ecran["texte"]
+    assert "venant de la suite jaune" in jokers_ecran["texte"]
+    assert "de sa main" not in jokers_ecran["texte"]
+
+    # Ordre causal : le 11 jaune sort de la suite jaune AVANT de remplacer
+    # le joker du groupe de 11 ; le 12 jaune sort de la suite jaune AVANT de
+    # remplacer le 12 noir du groupe de 12 ; le 12 noir libéré prolonge la
+    # suite noire APRÈS avoir été libéré.
+    def premiere_etape_ou(pred):
+        return next(i for i, e in enumerate(etapes) if pred(e))
+
+    idx_sortie_11jaune = premiere_etape_ou(
+        lambda e: "jaune_11_a" in _ids_cadre(e["cadre"]))
+    idx_swap_groupe11 = premiere_etape_ou(
+        lambda e: any({"bleu_11_a", "jaune_11_a", "noir_11_a"} ==
+                       {d["id"] for d in c} for c in e["plateau"]))
+    assert idx_sortie_11jaune < idx_swap_groupe11
+
+    idx_sortie_12jaune = premiere_etape_ou(
+        lambda e: "jaune_12_a" in _ids_cadre(e["cadre"]))
+    idx_swap_groupe12 = premiere_etape_ou(
+        lambda e: any({"rouge_12_a", "bleu_12_a", "jaune_12_a"} ==
+                       {d["id"] for d in c} for c in e["plateau"]))
+    assert idx_sortie_12jaune < idx_swap_groupe12
+
+    idx_liberation_12noir = premiere_etape_ou(
+        lambda e: "noir_12_a" in _ids_cadre(e["cadre"]))
+    idx_suite_finale_12noir = premiere_etape_ou(
+        lambda e: any({"noir_9_a", "noir_10_a", "noir_11_b", "noir_12_a"} ==
+                       {d["id"] for d in c} for c in e["plateau"]))
+    assert idx_liberation_12noir < idx_suite_finale_12noir
+
+    # Dernière étape = plateau d'après exactement, cadre vide (déjà vérifié
+    # par _verifier_invariants, répété ici pour la lisibilité du test).
+    assert etapes[-1]["cadre"] == []

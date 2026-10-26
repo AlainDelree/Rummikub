@@ -742,12 +742,13 @@ function rafraichirBoutonRejouerIA() {
   // #189 (champ "resume" alors absent du dict persisté).
   if (divResume) divResume.textContent = (type === "pose" && coup.resume) || "";
 
-  // Bouton « Pas à pas » (issue #189) : visible seulement si le coup touche
-  // au moins 2 étapes distinctes — un coup simple n'en compte qu'une (voire
-  // zéro pour une pioche/un passage) et garde donc le seul rejeu animé.
+  // Bouton « Pas à pas » (issue #189, #191) : visible seulement si le coup
+  // touche au moins 2 changements réels sur le plateau — les écrans
+  // "Départ"/"Les jokers" ne comptent pas, un coup simple n'en a qu'un
+  // (voire zéro pour une pioche/un passage) et garde donc le seul rejeu animé.
   const etapes = (type === "pose" && coup.etapes) || [];
   if (btnPasAPas) {
-    const afficher = etapes.length >= 2;
+    const afficher = nbChangementsPasAPas(etapes) >= 2;
     btnPasAPas.hidden = !afficher;
     btnPasAPas.disabled = !afficher;
   }
@@ -1841,25 +1842,69 @@ async function rejouerDernierCoupIA() {
 let etapesPasAPasActuelles = [];
 let indexEtapePasAPas = 0;
 
+// Nombre de CHANGEMENTS réels (hors écrans "Départ"/"Les jokers", qui ne
+// modifient rien à l'écran) : c'est ce compte, pas la longueur brute de la
+// liste d'étapes, qui détermine si le pas-à-pas vaut la peine d'être proposé
+// (issue #191 : "Départ" et "Les jokers" existent même pour un coup simple).
+function nbChangementsPasAPas(etapes) {
+  return (etapes || []).filter((e) => !e.titre).length;
+}
+
 // Construit un aperçu statique d'un plateau (liste de combinaisons) dans le
 // conteneur donné, en réutilisant tuileDepuisDict pour un rendu visuel
-// identique au vrai tapis, mais sans AUCUN écouteur d'événement.
-function rendreApercuPlateauPasAPas(conteneur, plateau) {
+// identique au vrai tapis, mais sans AUCUN écouteur d'événement. Marque les
+// combinaisons "provisoires" (issue #191 : une combinaison mi-démantelée,
+// temporairement invalide, affichée différemment d'une vraie "combinaison
+// invalide" du jeu) et surligne les tuiles juste posées/libérées en
+// réutilisant la surbrillance existante (tuile-ia-highlight).
+function rendreApercuPlateauPasAPas(conteneur, plateau, provisoires, surbrillance) {
   conteneur.innerHTML = "";
-  (plateau || []).forEach((combo) => {
+  const provSet = new Set(provisoires || []);
+  const surbSet = new Set(surbrillance || []);
+  (plateau || []).forEach((combo, idx) => {
     const groupe = document.createElement("div");
     groupe.className = "groupe-combinaison";
-    combo.forEach((d) => groupe.appendChild(tuileDepuisDict(d)));
+    if (provSet.has(idx)) groupe.classList.add("combi-provisoire");
+    combo.forEach((d) => {
+      const el = tuileDepuisDict(d);
+      if (surbSet.has(d.id)) el.classList.add("tuile-ia-highlight");
+      groupe.appendChild(el);
+    });
     conteneur.appendChild(groupe);
+  });
+}
+
+// Construit le cadre « tuiles à placer » : tuiles de la main (pourtour vert,
+// même code couleur que la légende "ce-tour") et tuiles libérées du plateau
+// (pourtour orange, "deplacee-tapis") pas encore replacées à ce stade.
+// Affiche "vide" une fois le cadre réellement vide (dernière étape).
+function rendreCadrePasAPas(conteneur, cadre) {
+  conteneur.innerHTML = "";
+  if (!cadre || !cadre.length) {
+    const vide = document.createElement("span");
+    vide.className = "cadre-vide";
+    vide.textContent = "vide";
+    conteneur.appendChild(vide);
+    return;
+  }
+  cadre.forEach((entree) => {
+    const el = tuileDepuisDict(entree.tuile);
+    el.classList.add(entree.origine === "main" ? "ce-tour" : "deplacee-tapis");
+    conteneur.appendChild(el);
   });
 }
 
 function rendreEtapePasAPas() {
   const etape = etapesPasAPasActuelles[indexEtapePasAPas];
   if (!etape) return;
+  const soustitre = document.getElementById("soustitre-etape-pas-a-pas");
+  if (soustitre) soustitre.textContent = etape.titre || "";
   document.getElementById("texte-etape-pas-a-pas").textContent = etape.texte;
   rendreApercuPlateauPasAPas(
-    document.getElementById("zone-plateau-pas-a-pas"), etape.plateau);
+    document.getElementById("zone-plateau-pas-a-pas"), etape.plateau,
+    etape.provisoires, etape.surbrillance);
+  rendreCadrePasAPas(
+    document.getElementById("cadre-tuiles-pas-a-pas"), etape.cadre);
   document.getElementById("compteur-etape-pas-a-pas").textContent =
     "Étape " + (indexEtapePasAPas + 1) + " / " + etapesPasAPasActuelles.length;
   document.getElementById("btn-pas-a-pas-precedent").disabled =
@@ -1870,11 +1915,11 @@ function rendreEtapePasAPas() {
 
 // Ouvre le mode pas-à-pas sur le dernier coup de l'IA. Le bouton qui déclenche
 // cet appel n'est affiché/activé par rafraichirBoutonRejouerIA() que quand
-// coup.etapes contient au moins 2 étapes.
+// coup.etapes contient au moins 2 changements réels.
 function ouvrirPasAPas() {
   const coup = etat.dernier_coup_ia;
   const etapes = (coup && coup.etapes) || [];
-  if (etapes.length < 2) return;
+  if (nbChangementsPasAPas(etapes) < 2) return;
   etapesPasAPasActuelles = etapes;
   indexEtapePasAPas = 0;
   document.getElementById("titre-pas-a-pas").textContent =

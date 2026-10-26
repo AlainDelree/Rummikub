@@ -584,13 +584,50 @@ button:disabled { opacity: 0.4; cursor: not-allowed; }
    d'interaction — voir rendreApercuPlateauPasAPas dans jeu.js). */
 .carte-pas-a-pas { max-width: 720px; width: 90vw; text-align: center; }
 .carte-pas-a-pas h2 { color: var(--couleur-ordinateur); margin-bottom: 10px; }
+.soustitre-etape-pas-a-pas { color: var(--couleur-ordinateur); font-size: 0.85rem;
+  font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em;
+  margin: 0 0 2px; min-height: 1.1em; }
+.soustitre-etape-pas-a-pas:empty { visibility: hidden; }
 .texte-etape-pas-a-pas { color: var(--couleur-texte); font-size: 1.05rem;
   font-weight: 600; line-height: 1.4; min-height: 2.6em; margin-bottom: 12px; }
+
+/* Cadre « tuiles à placer » (issue #191) : au-dessus de l'aperçu du plateau,
+   contient les tuiles encore en attente (venues de la main ou libérées du
+   plateau) à cette étape. Mêmes pourtours que la légende du jeu (#legende-
+   couleurs) : vert "ce-tour" pour une tuile de la main, orange "deplacee-
+   tapis" pour une tuile libérée du tapis — distingue visuellement les deux
+   provenances sans introduire de nouvelle couleur. */
+.zone-cadre-pas-a-pas { background: rgba(0,0,0,0.12); border: 1px dashed
+  rgba(255,255,255,0.35); border-radius: 8px; padding: 10px 12px;
+  margin-bottom: 10px; text-align: left; }
+.cadre-label { color: var(--couleur-texte); opacity: 0.75; font-size: 0.75rem;
+  font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em;
+  margin-bottom: 6px; }
+.cadre-tuiles-pas-a-pas { display: flex; flex-wrap: wrap; gap: 8px;
+  min-height: 56px; align-items: center; }
+.cadre-tuiles-pas-a-pas .tuile-jeu { cursor: default; }
+.cadre-vide { color: var(--couleur-texte); opacity: 0.6; font-style: italic;
+  font-size: 0.9rem; }
+
 .zone-plateau-pas-a-pas { display: flex; flex-wrap: wrap; align-content: flex-start;
   gap: 10px; min-height: 90px; max-height: 50vh; overflow-y: auto;
   background: var(--tapis-vert-clair); border-radius: 8px; padding: 12px;
   margin-bottom: 16px; }
 .zone-plateau-pas-a-pas .groupe-combinaison { cursor: default; }
+/* Combinaison "provisoire" (issue #191) : mi-démantelée, temporairement
+   invalide pendant les étapes intermédiaires. Distincte de .combi-invalide
+   (rouge, pulsée, réservée aux vraies erreurs du joueur sur le tapis) : ici
+   un simple liseré ambre fixe, avec une courte mention, pour signaler un état
+   transitoire normal plutôt qu'une erreur. */
+.zone-plateau-pas-a-pas .groupe-combinaison.combi-provisoire {
+  border: 2px dashed #f59e0b; background: rgba(245,158,11,0.12);
+  position: relative; padding-top: 16px;
+}
+.zone-plateau-pas-a-pas .groupe-combinaison.combi-provisoire::before {
+  content: "provisoire"; position: absolute; top: 2px; left: 6px;
+  font-size: 0.62rem; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.03em; color: #f59e0b;
+}
 .boutons-pas-a-pas { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
 .boutons-pas-a-pas button { flex: 1; margin-top: 0; }
 .compteur-etape-pas-a-pas { color: var(--couleur-texte); font-size: 0.85rem;

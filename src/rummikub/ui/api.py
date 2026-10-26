@@ -218,7 +218,8 @@ class Api:
             # avant/après déjà disponible, puis simplement affichés côté JS.
             from rummikub.moteur.description_coup import (
                 decrire_coup_ia, etapes_coup_ia)
-            resume = decrire_coup_ia(plateau_avant, plateau_apres)
+            resume = decrire_coup_ia(plateau_avant, plateau_apres,
+                                      nom=etat["joueurs"][idx]["nom"])
             etat["dernier_coup_ia"]["resume"] = resume["texte"]
             etat["dernier_coup_ia"]["etapes"] = etapes_coup_ia(
                 plateau_avant, plateau_apres)
