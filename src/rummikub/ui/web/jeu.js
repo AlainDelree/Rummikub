@@ -710,11 +710,15 @@ function rafraichirBoutons() {
 // correctif, une pioche/passe laissait affiché le rejeu d'une ancienne pose).
 function rafraichirBoutonRejouerIA() {
   const btn = document.getElementById("btn-rejouer-coup-ia");
+  const divResume = document.getElementById("resume-coup-ia");
+  const btnPasAPas = document.getElementById("btn-pas-a-pas-coup-ia");
   if (!btn) return;
   const coup = etat.dernier_coup_ia;
   if (!coup) {
     btn.disabled = true;
     btn.textContent = "▶ Dernier coup joué par l'ordinateur";
+    if (divResume) divResume.textContent = "";
+    if (btnPasAPas) { btnPasAPas.hidden = true; btnPasAPas.disabled = true; }
     return;
   }
   // Compat anciennes parties sauvegardées (avant #157) : le champ "type"
@@ -730,6 +734,22 @@ function rafraichirBoutonRejouerIA() {
   } else {
     btn.disabled = true;
     btn.textContent = "⏭ " + coup.nom + " a passé son tour";
+  }
+
+  // Résumé écrit (issue #189) : calculé côté Python (moteur/description_
+  // coup.py) au moment du coup, simplement affiché ici — absent pour une
+  // pioche/un passage (rien à résumer), ou pour une partie reprise d'avant
+  // #189 (champ "resume" alors absent du dict persisté).
+  if (divResume) divResume.textContent = (type === "pose" && coup.resume) || "";
+
+  // Bouton « Pas à pas » (issue #189) : visible seulement si le coup touche
+  // au moins 2 étapes distinctes — un coup simple n'en compte qu'une (voire
+  // zéro pour une pioche/un passage) et garde donc le seul rejeu animé.
+  const etapes = (type === "pose" && coup.etapes) || [];
+  if (btnPasAPas) {
+    const afficher = etapes.length >= 2;
+    btnPasAPas.hidden = !afficher;
+    btnPasAPas.disabled = !afficher;
   }
 }
 
@@ -1810,6 +1830,77 @@ async function rejouerDernierCoupIA() {
   effacerSurbrillanceIA();
 }
 
+// ------------------------------------------- rejeu pas-à-pas (issue #189)
+// Mode optionnel, à côté du rejeu animé ci-dessus (jamais déclenché par lui,
+// ni l'inverse) : pour un coup touchant plusieurs combinaisons, le joueur
+// avance lui-même étape par étape (Suivant/Précédent), chaque étape montrant
+// un aperçu en LECTURE SEULE du plateau (aucun gestionnaire d'interaction
+// attaché) et une phrase descriptive, les deux déjà calculées côté Python
+// (moteur/description_coup.py::etapes_coup_ia, voir coup.etapes). Ne modifie
+// jamais l'état de la partie ; peut être quitté à tout moment.
+let etapesPasAPasActuelles = [];
+let indexEtapePasAPas = 0;
+
+// Construit un aperçu statique d'un plateau (liste de combinaisons) dans le
+// conteneur donné, en réutilisant tuileDepuisDict pour un rendu visuel
+// identique au vrai tapis, mais sans AUCUN écouteur d'événement.
+function rendreApercuPlateauPasAPas(conteneur, plateau) {
+  conteneur.innerHTML = "";
+  (plateau || []).forEach((combo) => {
+    const groupe = document.createElement("div");
+    groupe.className = "groupe-combinaison";
+    combo.forEach((d) => groupe.appendChild(tuileDepuisDict(d)));
+    conteneur.appendChild(groupe);
+  });
+}
+
+function rendreEtapePasAPas() {
+  const etape = etapesPasAPasActuelles[indexEtapePasAPas];
+  if (!etape) return;
+  document.getElementById("texte-etape-pas-a-pas").textContent = etape.texte;
+  rendreApercuPlateauPasAPas(
+    document.getElementById("zone-plateau-pas-a-pas"), etape.plateau);
+  document.getElementById("compteur-etape-pas-a-pas").textContent =
+    "Étape " + (indexEtapePasAPas + 1) + " / " + etapesPasAPasActuelles.length;
+  document.getElementById("btn-pas-a-pas-precedent").disabled =
+    indexEtapePasAPas === 0;
+  document.getElementById("btn-pas-a-pas-suivant").disabled =
+    indexEtapePasAPas === etapesPasAPasActuelles.length - 1;
+}
+
+// Ouvre le mode pas-à-pas sur le dernier coup de l'IA. Le bouton qui déclenche
+// cet appel n'est affiché/activé par rafraichirBoutonRejouerIA() que quand
+// coup.etapes contient au moins 2 étapes.
+function ouvrirPasAPas() {
+  const coup = etat.dernier_coup_ia;
+  const etapes = (coup && coup.etapes) || [];
+  if (etapes.length < 2) return;
+  etapesPasAPasActuelles = etapes;
+  indexEtapePasAPas = 0;
+  document.getElementById("titre-pas-a-pas").textContent =
+    "Rejeu pas à pas — " + ((coup && coup.nom) || "l'ordinateur");
+  rendreEtapePasAPas();
+  document.getElementById("overlay-pas-a-pas").className = "overlay-visible";
+}
+
+function fermerPasAPas() {
+  document.getElementById("overlay-pas-a-pas").className = "overlay-cache";
+}
+
+function etapePasAPasSuivante() {
+  if (indexEtapePasAPas < etapesPasAPasActuelles.length - 1) {
+    indexEtapePasAPas++;
+    rendreEtapePasAPas();
+  }
+}
+
+function etapePasAPasPrecedente() {
+  if (indexEtapePasAPas > 0) {
+    indexEtapePasAPas--;
+    rendreEtapePasAPas();
+  }
+}
+
 // ------------------------------------------------------------ fin de manche
 // Dispatcher appelé à chaque fin de manche : si c'est aussi la dernière
 // manche de la partie, le message de fin de manche serait redondant avec le
@@ -1967,6 +2058,14 @@ function brancherEvenements() {
   document.getElementById("btn-annuler").addEventListener("click", onAnnuler);
   document.getElementById("btn-rejouer-coup-ia")
     .addEventListener("click", rejouerDernierCoupIA);
+  document.getElementById("btn-pas-a-pas-coup-ia")
+    .addEventListener("click", ouvrirPasAPas);
+  document.getElementById("btn-pas-a-pas-suivant")
+    .addEventListener("click", etapePasAPasSuivante);
+  document.getElementById("btn-pas-a-pas-precedent")
+    .addEventListener("click", etapePasAPasPrecedente);
+  document.getElementById("btn-pas-a-pas-quitter")
+    .addEventListener("click", fermerPasAPas);
   document.getElementById("btn-verifier-calc").addEventListener("click", onVerifierCalc);
   document.getElementById("btn-jouer").addEventListener("click", onJouer);
   // Le bouton #btn-piocher (fusion Piocher/Passer) reçoit son écouteur

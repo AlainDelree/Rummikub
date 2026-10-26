@@ -110,6 +110,26 @@ body { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
 .btn-rejouer-coup-ia:hover:not(:disabled) { background: rgba(255,255,255,0.18); }
 .btn-rejouer-coup-ia:disabled { opacity: 0.45; cursor: not-allowed; }
 
+/* Résumé écrit du dernier coup de l'IA (issue #189) : juste sous le bouton
+   de rejeu, lecture seule, texte calculé côté Python (moteur/description_
+   coup.py). Vide (donc invisible, pas de fond résiduel) tant qu'aucun coup
+   de pose n'a encore été joué ce tour-ci. */
+.resume-coup-ia { font-size: 0.74rem; line-height: 1.35; color: rgba(255,255,255,0.85);
+  padding: 0 2px; }
+.resume-coup-ia:empty { display: none; }
+
+/* Bouton « Pas à pas » (issue #189) : à côté du bouton de rejeu animé, ne
+   s'affiche QUE si le dernier coup touche au moins 2 étapes distinctes
+   (voir rafraichirBoutonRejouerIA) — jamais déclenché par le bouton de rejeu
+   animé lui-même, qui garde son comportement inchangé. */
+.btn-pas-a-pas-coup-ia {
+  width: 100%; text-align: left; font-size: 0.78rem; font-weight: 600;
+  background: rgba(255,255,255,0.1); color: #fff; border: none;
+  border-radius: 6px; padding: 8px 10px; cursor: pointer;
+}
+.btn-pas-a-pas-coup-ia:hover:not(:disabled) { background: rgba(255,255,255,0.18); }
+.btn-pas-a-pas-coup-ia[hidden] { display: none; }
+
 /* Vitesse du rejeu du dernier coup IA (issue #164) : accessible directement
    depuis l'écran de jeu, juste sous le bouton de rejeu, sur le même modèle
    que le contrôle de zoom du tapis (#zoom-tapis). */
@@ -557,6 +577,25 @@ button:disabled { opacity: 0.4; cursor: not-allowed; }
 .carte-confirm p { color: var(--couleur-texte); line-height: 1.4; margin-bottom: 20px; }
 .boutons-confirm { display: flex; gap: 12px; }
 .boutons-confirm button { flex: 1; margin-top: 0; }
+
+/* Rejeu pas-à-pas (issue #189, suite de #144/#149) : carte plus large que
+   celles de confirmation, pour accueillir un aperçu du tapis en lecture
+   seule (mêmes tuiles/styles que le vrai tapis, mais sans aucun gestionnaire
+   d'interaction — voir rendreApercuPlateauPasAPas dans jeu.js). */
+.carte-pas-a-pas { max-width: 720px; width: 90vw; text-align: center; }
+.carte-pas-a-pas h2 { color: var(--couleur-ordinateur); margin-bottom: 10px; }
+.texte-etape-pas-a-pas { color: var(--couleur-texte); font-size: 1.05rem;
+  font-weight: 600; line-height: 1.4; min-height: 2.6em; margin-bottom: 12px; }
+.zone-plateau-pas-a-pas { display: flex; flex-wrap: wrap; align-content: flex-start;
+  gap: 10px; min-height: 90px; max-height: 50vh; overflow-y: auto;
+  background: var(--tapis-vert-clair); border-radius: 8px; padding: 12px;
+  margin-bottom: 16px; }
+.zone-plateau-pas-a-pas .groupe-combinaison { cursor: default; }
+.boutons-pas-a-pas { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
+.boutons-pas-a-pas button { flex: 1; margin-top: 0; }
+.compteur-etape-pas-a-pas { color: var(--couleur-texte); font-size: 0.85rem;
+  white-space: nowrap; }
+.btn-pas-a-pas-quitter { width: 100%; margin-top: 0; }
 .btn-secondaire {
   padding: 14px; background: #fff; color: var(--couleur-texte);
   border: 2px solid var(--couleur-bordure); border-radius: 6px;
