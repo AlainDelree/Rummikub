@@ -639,6 +639,137 @@ plus grand nombre possible de tuiles du chevalet, jokers compris.
   proprement, distinction budget de production/généreux pour Expert, résumé
   et classement des coups ratés les plus importants).
 
+### 11bis. Fiabilisation de l'analyse (issue #193, suite de #188)
+
+L'analyse ci-dessus (#188) ne regardait que les pioches/passes d'une IA, avec
+un seul budget fixe, et ne vérifiait jamais le solveur lui-même. #193 lève
+ces trois limites, toujours dans `persistance/coups_rates.py` (fonctions
+ajoutées, celles de #188 ci-dessus restent inchangées à l'identique) :
+
+- **Poses sous-optimales** (`extraire_toutes_decisions`,
+  `analyser_decision_complete`) : pour une pose (IA ou humain), compare le
+  nombre de tuiles RÉELLEMENT posées (différence chevalet avant/après dans le
+  journal) au maximum trouvé par le solveur. Trois issues possibles selon le
+  signe de l'écart : `pose_sous_optimale` (le solveur fait mieux),
+  `joueur_bat_solveur` (le joueur a posé PLUS que le solveur même au budget
+  généreux — n'arrive en pratique que pour un humain, jamais pour une IA qui
+  ne peut pas dépasser le solveur qui l'a produite), ou rien (pose optimale).
+  `extraire_decisions_ia_toutes` généralise l'extraction aux poses pour une
+  IA ; `extraire_decisions_joueur(data, nom)` fait de même pour un joueur
+  HUMAIN nommé (option `--joueur` du script, voir plus bas) — les deux
+  gèrent une pose annulée puis rejouée (même numéro de tour réutilisé,
+  dédoublonnage par dernière occurrence, comme `bilan.py`) en reconstituant
+  l'état même à travers une entrée `"annulation"` du journal (qui porte
+  elle aussi un instantané complet). `calculer_resume_complet` agrège par
+  niveau/phase en distinguant `pioche_passe_ratees` et `poses_sous_optimales`
+  (avec le total de tuiles manquantes) ; `top_coups_rates_complet` classe les
+  deux catégories ensemble.
+- **Budget nécessaire** (`budget_necessaire`, `repartition_budget_necessaire`,
+  `BUDGETS_SERIE_DEFAUT = (1.5, 3, 6, 10, 20, 30)` secondes) : pour un coup
+  raté/une pose sous-optimale déjà identifié, cherche le plus petit budget de
+  la série qui retrouve le même nombre de tuiles — coûteux (relance le
+  solveur par palier), donc calculé seulement à la demande
+  (`--budget-mesure` du script), jamais en routine sur toute une campagne.
+- **Budget par défaut généreux (10 s) et avertissement** : le budget généreux
+  par défaut du script reste 10 s (inchangé depuis #188, déjà conforme) ;
+  `scripts/analyser_coups_rates.py` affiche désormais un AVERTISSEMENT
+  explicite si l'utilisateur choisit `--budget` < 10 s, et répète dans le
+  rapport final qu'une décision « inconclusive » (budget épuisé sans rien
+  trouver, `BudgetDepasse`) n'est PAS un coup non raté — le nombre réel de
+  coups ratés reste incertain dans l'intervalle
+  `[coups_rates ; coups_rates + inconclusifs]` tant que les inconclusifs ne
+  sont pas tous tranchés. `--retenter-inconclusifs` relance ces décisions
+  avec un budget plus grand (`--budget-inconclusifs`, défaut 30 s) sous une
+  limite de durée TOTALE ferme pour toute la passe
+  (`--limite-temps-inconclusifs`, défaut 300 s) — dépassée, elle s'arrête en
+  signalant combien de décisions n'ont pas pu être retentées, plutôt que de
+  risquer une durée illimitée.
+- **Vérification croisée indépendante du solveur** (`moteur/verif_solveur.py`,
+  nouveau module pur) : `max_tuiles_posables_exhaustif(plateau, chevalet)`
+  est une seconde implémentation volontairement lente (force brute sans
+  AUCUNE des optimisations de `solveur.py` : essaie tous les sous-ensembles
+  du chevalet du plus grand au plus petit, et pour chacun toutes les façons
+  de partitionner plateau+sous-ensemble en combinaisons valides), praticable
+  uniquement sur de petites positions. `generer_position_aleatoire(rng, ...)`
+  fabrique une position aléatoire reproductible (graine fixe) : un petit
+  plateau (0 ou une combinaison de 3-4 tuiles) et une petite main (1 à 5-6
+  tuiles, jokers rares). `scripts/verifier_solveur_exhaustif.py --nb --seed
+  --budget-solveur` compare les deux sur `--nb` positions et signale tout
+  écart (sans jamais corriger le solveur automatiquement — seulement un bug
+  évident le justifierait, voir l'issue). **Résultat sur 300 positions,
+  graine 193 : 0 écart, 0 inconclusive** (`tests/test_verif_solveur.py`
+  fixe une seconde campagne, graine 193, 60 positions, même conclusion) — le
+  solveur retrouve bien le maximum réel sur toutes les positions testées à
+  cette échelle ; ceci ne prouve rien sur les plateaux de taille réelle
+  (largement hors de portée de la recherche exhaustive), seulement sur le
+  petit périmètre couvert par les positions générées.
+- **Cas de référence connus, tests robustes au temps de calcul de la
+  machine** : `tests/test_coups_rates_extensions.py` fabrique une décision
+  de pose (une seule tuile jouée) à partir de
+  `tests/donnees/cas_expert_bruno_tour57.json` (`attendu_min_tuiles: 3`) et
+  vérifie que `analyser_decision_complete` la détecte comme
+  `pose_sous_optimale` (2 tuiles manquantes) avec un budget très généreux
+  (15 s, large marge), et — point important de l'issue — qu'un budget
+  délibérément minuscule (0,05 s) la classe `inconclusif`, JAMAIS « pose
+  optimale » : ne jamais sous-compter un coup raté faute de budget plutôt
+  que de l'afficher comme incertain.
+- **Analyse d'un joueur HUMAIN** (`--joueur "Nom"` du script,
+  `extraire_decisions_joueur`, `resume_joueur_humain`) : même analyse que
+  pour une IA, mais deux listes séparées — (a) `coups_peut_etre_rates` (pose
+  partielle ou pioche/passe alors qu'un coup existait, à vérifier à la main,
+  jamais une certitude pour un humain qui peut avoir d'autres raisons de
+  jouer ainsi) et (b) `solveur_bat` (le joueur a posé PLUS de tuiles que le
+  solveur même au budget généreux — ce sont les cas les plus utiles pour
+  améliorer le solveur, voir l'avertissement sur le gel des combinaisons en
+  tête de fichier). Quelques statistiques de style PUREMENT DESCRIPTIVES
+  (`resume["style"]`) : part des poses au maximum du solveur, tuiles posées
+  en moyenne par tour contre le maximum, part des pioches alors qu'un coup
+  existait, nombre de jokers joués et nombre moyen de tours d'attente avant
+  d'être joués. **Aucune conclusion stratégique à en tirer sur un petit
+  échantillon de parties** (rappelé dans le rapport du script) : ces
+  chiffres ne sont là que pour reconnaître un style, pas pour le juger.
+- **Technique de la « réserve » jamais confondue avec un coup raté**
+  (`detecter_reserves_joueur`) : parmi les poses partielles/pioches avec
+  coup possible d'un joueur humain, une tuile que le solveur aurait posée
+  mais que le joueur a gardée, puis effectivement posée au tour SUIVANT de
+  ce même joueur (même partie), est une « réserve réussie » ; si elle n'est
+  pas posée au tour suivant (en main ou plus posable), c'est une « réserve
+  perdue » — les deux catégories sont retirées des listes (a)/(b) ci-dessus
+  (`indices_a_exclure`), jamais comptées comme coup raté ni comme cas où le
+  solveur est battu. `--verifier-reserve-evite-pioche` ajoute, pour chaque
+  réserve réussie, un appel solveur supplémentaire (contre-factuel : sans
+  la tuile réservée, le solveur trouve-t-il encore un coup au tour suivant ?)
+  — coûteux, désactivé par défaut. **Limite assumée** : la détection ne
+  regarde que le tour immédiatement SUIVANT du même joueur (pas une fenêtre
+  plus large), et ne distingue pas une vraie réserve stratégique d'un oubli
+  qui se résout par hasard au tour suivant — a posteriori les deux sont
+  indiscernables (déjà noté dans l'issue).
+- **Enregistrement de nouveaux cas de référence** (`--enregistrer-cas-reference`
+  du script) : écrit les coups ratés/poses sous-optimales les plus
+  importants (IA) ou les cas où le joueur bat le solveur (`--joueur`) au
+  même format que `tests/donnees/cas_expert_*.json` (clé
+  `attendu_min_tuiles` = résultat du solveur pour l'IA, nombre de tuiles
+  réellement posées par le joueur pour un humain) — **n'écrase jamais un
+  fichier existant** (vérifié avant écriture).
+- **Non exécuté sur les vrais journaux de `RACINE_DATA/logs_parties`** :
+  cette issue a été traitée dans un **worktree isolé** dont le périmètre
+  autorisé ne contient AUCUN journal réel (`data/logs_parties` du worktree
+  est vide) — les vrais journaux de parties jouées vivent hors de ce
+  périmètre. Le script a été vérifié de bout en bout (tous les modes, y
+  compris `--joueur`, `--budget-mesure`, `--retenter-inconclusifs`,
+  `--enregistrer-cas-reference`) sur des journaux fabriqués à la main, mais
+  **les chiffres réels sur les parties déjà jouées (point 6 de l'issue)
+  restent à produire par Alain lui-même**, en relançant
+  `python scripts/analyser_coups_rates.py --tous --budget 10` (et, pour un
+  joueur humain, `--joueur "Alain"`) depuis une install courante du projet
+  (pas ce worktree).
+- Tests (en plus de `test_coups_rates.py`, #188, inchangé) :
+  `tests/test_coups_rates_extensions.py` (poses sous-optimales, joueur bat
+  le solveur, résumé étendu, budget nécessaire, détection de réserve
+  réussie/perdue, cas de référence Bruno avec budget suffisant/insuffisant) ;
+  `tests/test_verif_solveur.py` (recherche exhaustive sur cas unitaires +
+  campagne aléatoire à graine fixe contre le solveur de production).
+
 ## 12. Rendre lisible un coup complexe de l'IA (issue #189, puis #191)
 
 Depuis le solveur de réarrangement global (#186), un coup de l'IA peut

@@ -1,24 +1,37 @@
 #!/usr/bin/env python3
-"""Analyse des « coups ratés » de l'IA à partir des journaux de parties
-(issue #188, suite de #185).
+"""Analyse des « coups ratés » de l'IA — et, en option, d'un joueur humain —
+à partir des journaux de parties (issue #193, suite de #188).
 
-Pour chaque décision d'une IA de piocher ou de passer, reconstitue l'état
-exact (chevalets, plateau) qu'elle affrontait — enregistré dans le journal
-juste avant cette décision — et interroge le solveur d'Expert
-(``moteur/solveur.py``) sur cet état avec un budget de temps généreux. Si le
-solveur trouve un coup qui pose au moins une tuile, la décision est un
-« coup raté ».
+Pour chaque décision (pose, pioche ou passe) d'un joueur, reconstitue
+l'état exact (chevalets, plateau) qu'il affrontait — enregistré dans le
+journal juste avant cette décision — et interroge le solveur d'Expert
+(``moteur/solveur.py``) sur cet état avec un budget de temps GÉNÉREUX
+(10 s par défaut). Trois catégories de décision sous-optimale :
+
+  - pioche/passe alors qu'un coup existait (« coup raté », comme #188) ;
+  - pose d'un nombre de tuiles inférieur au maximum trouvé par le solveur
+    (« pose sous-optimale », nouveau) ;
+  - (joueur humain uniquement) pose d'un nombre de tuiles SUPÉRIEUR à ce que
+    le solveur trouve même avec le budget généreux (« le solveur est battu »
+    — les cas les plus précieux pour l'améliorer).
 
 Logique de détection et de résumé : voir ``persistance/coups_rates.py`` (pur,
 testé indépendamment). Ce script est en ligne de commande, moteur Python
 seul (aucun import pywebview — voir CONTEXTE.md §7).
 
-ATTENTION — à lire avant d'interpréter le résultat : le solveur gèle
-certaines combinaisons déjà posées sur le plateau pour limiter la
-combinatoire (voir la docstring de ``moteur/solveur.py``). Un coup non
-trouvé ne prouve donc PAS qu'aucun coup n'existe : les coups ratés détectés
-ci-dessous sont une BORNE BASSE, jamais une liste exhaustive. Ne JAMAIS
-conclure d'un chiffre bas que le niveau joue parfaitement.
+ATTENTION — à lire avant d'interpréter le résultat :
+  1. Le solveur gèle certaines combinaisons déjà posées sur le plateau pour
+     limiter la combinatoire (voir la docstring de ``moteur/solveur.py``).
+     Un coup non trouvé ne prouve donc PAS qu'aucun coup n'existe : les
+     coups ratés détectés ci-dessous sont une BORNE BASSE, jamais une liste
+     exhaustive.
+  2. Un budget de temps TROP COURT fait manquer des coups ratés qui
+     demandent plus de réflexion : ils sont alors comptés comme
+     « inconclusifs », PAS comme « aucun coup raté » — ne jamais lire un
+     chiffre bas comme une preuve que le niveau joue bien avec un budget
+     court (voir ``--budget`` ci-dessous).
+  3. Ne JAMAIS conclure d'un petit échantillon de parties à une vérité
+     stratégique générale sur le style d'un joueur (option ``--joueur``).
 
 Usage :
 
@@ -27,13 +40,20 @@ Usage :
     python scripts/analyser_coups_rates.py --tous
     python scripts/analyser_coups_rates.py --tous --dossier chemin/vers/logs_parties
     python scripts/analyser_coups_rates.py --budget 20 --budget-production 1.5
+    python scripts/analyser_coups_rates.py --tous --budget-mesure
+    python scripts/analyser_coups_rates.py --tous --retenter-inconclusifs
+    python scripts/analyser_coups_rates.py --tous --enregistrer-cas-reference
+    python scripts/analyser_coups_rates.py --tous --joueur "Alain"
 
 Cette analyse ne modifie jamais l'IA ni le moteur : elle se limite à relire
 des journaux déjà écrits et à interroger le solveur en lecture pure.
 """
 
 import argparse
+import json
+import re
 import sys
+import time
 from pathlib import Path
 
 _RACINE = Path(__file__).resolve().parent.parent
@@ -41,19 +61,36 @@ _SRC = _RACINE / "src"
 if _SRC.is_dir() and str(_SRC) not in sys.path:
     sys.path.insert(0, str(_SRC))
 
+from rummikub.moteur.ia import BUDGET_TEMPS_EXPERT  # noqa: E402
 from rummikub.persistance.bilan import charger_journal, lister_journaux  # noqa: E402
 from rummikub.persistance.coups_rates import (  # noqa: E402
-    analyser_journal, calculer_resume, top_coups_rates,
+    BUDGETS_SERIE_DEFAUT,
+    analyser_decision_complete, budget_necessaire, calculer_resume_complet,
+    detecter_reserves_joueur, extraire_decisions_ia_toutes,
+    extraire_decisions_joueur, repartition_budget_necessaire,
+    resume_joueur_humain, top_coups_rates_complet,
 )
 
 LIBELLE_MOMENT = {"avant_mise": "avant la mise initiale",
                    "apres_mise": "après la mise initiale"}
 
+BUDGET_INCONCLUSIFS_DEFAUT = 30.0
+LIMITE_TEMPS_INCONCLUSIFS_DEFAUT = 300.0  # 5 min, ferme, pour toute la passe.
+
 AVERTISSEMENT = (
-    "ATTENTION : le solveur Expert gèle certaines combinaisons déjà posées sur\n"
-    "le plateau pour limiter la combinatoire (voir moteur/solveur.py) — un coup\n"
-    "non trouvé ne prouve pas qu'aucun coup n'existe. Les coups ratés détectés\n"
-    "ci-dessus sont une BORNE BASSE, pas une liste exhaustive."
+    "ATTENTION :\n"
+    "1. Le solveur Expert gèle certaines combinaisons déjà posées sur le\n"
+    "   plateau pour limiter la combinatoire (voir moteur/solveur.py) — un coup\n"
+    "   non trouvé ne prouve pas qu'aucun coup n'existe. Les coups ratés/poses\n"
+    "   sous-optimales détectés ci-dessus sont une BORNE BASSE, pas une liste\n"
+    "   exhaustive.\n"
+    "2. Les décisions « inconclusives » (budget généreux épuisé sans rien\n"
+    "   trouver) ne sont PAS des coups non ratés : le nombre réel de coups\n"
+    "   ratés est incertain dans la fourchette [coups_rates ; coups_rates +\n"
+    "   inconclusifs]. Ne jamais lire une baisse du compteur de coups ratés\n"
+    "   obtenue avec un budget plus court comme un signe d'amélioration.\n"
+    "3. (--joueur) Ne tirer aucune conclusion stratégique d'un échantillon de\n"
+    "   quelques parties : ces chiffres restent descriptifs."
 )
 
 
@@ -63,6 +100,10 @@ def _dossier_defaut() -> Path:
         return config.RACINE_DATA / "logs_parties"
     except Exception:
         return _RACINE / "data" / "logs_parties"
+
+
+def _dossier_donnees_test() -> Path:
+    return _RACINE / "tests" / "donnees"
 
 
 def _ordre_niveaux() -> list:
@@ -77,15 +118,51 @@ def _fmt_pct(valeur) -> str:
     return "—" if valeur is None else f"{valeur * 100:.0f} %"
 
 
-def afficher_resume(resume: dict, flux=sys.stdout) -> None:
-    if not resume:
-        print("Aucune décision de piocher/passer d'une IA trouvée pour ce filtre.",
-              file=flux)
-        return
+def _fmt(valeur, suffixe="") -> str:
+    return "—" if valeur is None else f"{valeur:.2f}{suffixe}"
 
+
+# --------------------------------------------------------------------------- #
+# Mode IA (défaut) : poses + pioches/passes, par niveau et par phase.
+# --------------------------------------------------------------------------- #
+
+def _analyser_tous_journaux_ia(chemins, budget_genereux=10.0,
+                               budget_production=BUDGET_TEMPS_EXPERT):
+    """Retourne la liste des résultats (avec ``fichier`` ajouté sur chaque
+    entrée) sur tous les journaux, IA uniquement."""
+    tous = []
+    for chemin in chemins:
+        data = charger_journal(chemin)
+        if data is None:
+            print(f"Journal illisible ou invalide, ignoré : {chemin}", file=sys.stderr)
+            continue
+        print(f"Analyse de {chemin.name}...", file=sys.stderr)
+        decisions = extraire_decisions_ia_toutes(data)
+        for decision in decisions:
+            resultat = analyser_decision_complete(
+                decision, budget_genereux=budget_genereux,
+                budget_production=budget_production)
+            resultat["fichier"] = chemin.name
+            marque = ""
+            if resultat["coup_rate"]:
+                marque = " <- coup raté"
+            elif resultat["pose_sous_optimale"]:
+                marque = f" <- pose sous-optimale ({resultat['nb_tuiles_manquantes']} manquante(s))"
+            elif resultat["inconclusif"]:
+                marque = " <- inconclusif"
+            print(f"  tour {resultat['tour']} ({resultat['nom']}, {resultat['niveau']}, "
+                  f"{resultat['action']}){marque}", file=sys.stderr)
+            tous.append(resultat)
+    return tous
+
+
+def afficher_resume_complet(resume: dict, flux=sys.stdout) -> None:
+    if not resume:
+        print("Aucune décision d'une IA trouvée pour ce filtre.", file=flux)
+        return
     ordre = _ordre_niveaux()
     niveaux = sorted(resume, key=lambda n: (ordre.index(n) if n in ordre
-                                            else len(ordre), n))
+                                            else len(ordre), n or ""))
     for niveau in niveaux:
         print(f"=== {niveau} ===", file=flux)
         for moment in ("avant_mise", "apres_mise"):
@@ -93,11 +170,13 @@ def afficher_resume(resume: dict, flux=sys.stdout) -> None:
             if not s:
                 continue
             print(f"  {LIBELLE_MOMENT[moment]} :", file=flux)
-            print(f"    Décisions pioche/passe analysées : {s['decisions']}", file=flux)
-            print(f"    Coups ratés détectés             : {s['coups_rates']} "
-                  f"({_fmt_pct(s['pct_rates'])})", file=flux)
-            if niveau == "Expert" and s["coups_rates"]:
-                print(f"    ... dont limités par le budget de production (1,5 s) : "
+            print(f"    Décisions analysées (pose/pioche/passe) : {s['decisions']}", file=flux)
+            print(f"    Pioche/passe alors qu'un coup existait  : {s['pioche_passe_ratees']}",
+                  file=flux)
+            print(f"    Poses sous-optimales                    : {s['poses_sous_optimales']} "
+                  f"({s['tuiles_manquantes_poses']} tuile(s) manquante(s) au total)", file=flux)
+            if niveau == "Expert" and s["budget_limite"]:
+                print(f"    ... dont limitées par le budget de production (1,5 s) : "
                       f"{s['budget_limite']}", file=flux)
             if s["inconclusifs"]:
                 print(f"    Décisions inconclusives (budget généreux épuisé)  : "
@@ -105,25 +184,204 @@ def afficher_resume(resume: dict, flux=sys.stdout) -> None:
         print(file=flux)
 
 
-def afficher_top(resultats: list, n: int = 5, flux=sys.stdout) -> None:
-    top = top_coups_rates(resultats, n=n)
+def afficher_top_complet(resultats: list, n: int, flux=sys.stdout) -> None:
+    top = top_coups_rates_complet(resultats, n=n)
     if not top:
         return
-    print(f"=== {len(top)} coup(s) raté(s) le(s) plus important(s) (à examiner à la main) ===",
-          file=flux)
+    print(f"=== {len(top)} coup(s) raté(s)/pose(s) sous-optimale(s) le(s) plus "
+          f"important(s) ===", file=flux)
     for r in top:
-        detail = (f"tour {r['tour']} — {r['nom']} ({r['niveau']}, {r['action']}) : "
-                  f"{r['nb_tuiles']} tuile(s) ratée(s)")
+        categorie = "coup raté" if r["coup_rate"] else "pose sous-optimale"
+        detail = (f"{r.get('fichier', '?')}, tour {r['tour']} — {r['nom']} ({r['niveau']}, "
+                  f"{r['action']}) : {categorie}, {r['nb_tuiles_manquantes']} tuile(s) ratée(s)")
         if r["moment"] == "avant_mise" and r["points_ouverture"] is not None:
             detail += f", ouverture à {r['points_ouverture']} points"
         print(f"  - {detail}", file=flux)
     print(file=flux)
 
 
+# --------------------------------------------------------------------------- #
+# Cas inconclusifs : seconde passe à budget plus grand (point 6 bis).
+# --------------------------------------------------------------------------- #
+
+def _retenter_inconclusifs(resultats, decisions_par_cle, budget_inconclusifs,
+                           limite_temps_totale):
+    """Pour chaque décision restée inconclusive, retente le solveur avec un
+    budget plus grand (``--budget-inconclusifs``), sous une limite de durée
+    TOTALE ferme pour toute la passe (``--limite-temps-inconclusifs``) — on
+    arrête dès qu'elle est dépassée, même si des décisions restent à
+    retenter (signalé). Met à jour les résultats EN PLACE."""
+    limite = time.monotonic() + limite_temps_totale
+    a_retenter = [r for r in resultats if r["inconclusif"]]
+    if not a_retenter:
+        return 0, 0
+    print(f"\nNouvelle tentative sur {len(a_retenter)} décision(s) inconclusive(s) "
+          f"(budget {budget_inconclusifs} s, limite totale {limite_temps_totale} s)...",
+          file=sys.stderr)
+    tranchees = arretees_par_limite = 0
+    for r in a_retenter:
+        if time.monotonic() > limite:
+            arretees_par_limite += 1
+            continue
+        decision = decisions_par_cle.get((r["fichier"], r["tour"], r["nom"]))
+        if decision is None:
+            continue
+        nouveau = analyser_decision_complete(decision, budget_genereux=budget_inconclusifs,
+                                             budget_production=r.get("budget_production", 1.5))
+        nouveau["fichier"] = r["fichier"]
+        r.clear()
+        r.update(nouveau)
+        if not nouveau["inconclusif"]:
+            tranchees += 1
+    if arretees_par_limite:
+        print(f"ATTENTION : limite de durée totale atteinte, "
+              f"{arretees_par_limite} décision(s) non retentée(s).", file=sys.stderr)
+    return tranchees, arretees_par_limite
+
+
+# --------------------------------------------------------------------------- #
+# Enregistrement de nouveaux cas de référence (point 6 bis / 6 ter).
+# --------------------------------------------------------------------------- #
+
+def _nom_fichier_cas(prefixe: str, fichier: str, tour) -> str:
+    base = re.sub(r"[^a-zA-Z0-9]+", "", Path(fichier).stem)[-12:]
+    return f"cas_expert_{prefixe}_{base}_tour{tour}.json"
+
+
+def _enregistrer_cas_reference(decision: dict, attendu_min_tuiles: int, prefixe: str,
+                               dossier: Path) -> Path:
+    """Enregistre ``decision`` au même format que ``tests/donnees/
+    cas_expert_*.json`` (clé ``attendu_min_tuiles``), SANS JAMAIS écraser un
+    fichier existant (point 6 bis de l'issue #193). Retourne le chemin écrit,
+    ou ``None`` si un fichier de ce nom existait déjà."""
+    nom = _nom_fichier_cas(prefixe, decision["fichier"], decision["tour"])
+    chemin = dossier / nom
+    if chemin.exists():
+        return None
+    data = {"idx": decision["idx"], "etat": decision["etat"],
+            "attendu_min_tuiles": attendu_min_tuiles}
+    chemin.write_text(json.dumps(data, ensure_ascii=False, indent=1), encoding="utf-8")
+    return chemin
+
+
+# --------------------------------------------------------------------------- #
+# Mode joueur humain (point 6 ter).
+# --------------------------------------------------------------------------- #
+
+def _analyser_joueur(chemins, nom_joueur, budget_genereux, budget_production,
+                     verifier_reserve_pioche):
+    """Analyse ``nom_joueur`` journal par journal (la détection de réserve
+    compare deux tours CONSÉCUTIFS du même joueur dans la MÊME partie —
+    jamais à travers deux parties différentes)."""
+    agrege = {"nb_tours_analyses": 0, "coups_peut_etre_rates": [],
+              "solveur_bat": [], "reserves_reussies": [], "reserves_perdues": [],
+              "poses": 0, "poses_max": 0, "total_reel": 0, "total_solveur": 0,
+              "pioches": 0, "pioches_coup_possible": 0,
+              "jokers_joues": 0, "jokers_attente_total": 0}
+
+    for chemin in chemins:
+        data = charger_journal(chemin)
+        if data is None:
+            print(f"Journal illisible ou invalide, ignoré : {chemin}", file=sys.stderr)
+            continue
+        decisions = extraire_decisions_joueur(data, nom_joueur)
+        if not decisions:
+            continue
+        print(f"Analyse de {chemin.name} ({len(decisions)} décision(s) de "
+              f"{nom_joueur})...", file=sys.stderr)
+        resultats = [analyser_decision_complete(d, budget_genereux=budget_genereux,
+                                                budget_production=budget_production)
+                    for d in decisions]
+        reserves = detecter_reserves_joueur(
+            decisions, resultats, verifier_a_evite_pioche=verifier_reserve_pioche)
+        resume = resume_joueur_humain(decisions, resultats, reserves)
+
+        for liste_cle in ("coups_peut_etre_rates", "solveur_bat",
+                          "reserves_reussies", "reserves_perdues"):
+            for entree in resume[liste_cle]:
+                agrege[liste_cle].append(dict(entree, fichier=chemin.name))
+        agrege["nb_tours_analyses"] += resume["nb_tours_analyses"]
+        style = resume["style"]
+        if style["nb_poses"]:
+            agrege["poses"] += style["nb_poses"]
+            agrege["poses_max"] += round(style["part_poses_au_max"] * style["nb_poses"])
+            agrege["total_reel"] += style["moyenne_tuiles_posees"] * style["nb_poses"]
+            agrege["total_solveur"] += style["moyenne_tuiles_max_solveur"] * style["nb_poses"]
+        if style["nb_pioches"]:
+            agrege["pioches"] += style["nb_pioches"]
+            agrege["pioches_coup_possible"] += round(
+                style["part_pioches_coup_possible"] * style["nb_pioches"])
+        if style["nb_jokers_joues"]:
+            agrege["jokers_joues"] += style["nb_jokers_joues"]
+            agrege["jokers_attente_total"] += (
+                style["jokers_tours_attente_moyenne"] * style["nb_jokers_joues"])
+
+        # Pour --enregistrer-cas-reference : il faut pouvoir retrouver la
+        # décision d'origine (état complet) d'une entrée de solveur_bat.
+        for i, d in enumerate(decisions):
+            if i in reserves["indices_a_exclure"]:
+                continue
+            r = resultats[i]
+            if r["joueur_bat_solveur"]:
+                d["fichier"] = chemin.name
+                agrege.setdefault("_decisions_solveur_bat", []).append((d, r))
+
+    return agrege
+
+
+def afficher_resume_joueur(nom_joueur: str, agrege: dict, flux=sys.stdout) -> None:
+    print(f"=== Joueur humain : {nom_joueur} ===", file=flux)
+    print(f"  Tours analysés (hors inconclusifs) : {agrege['nb_tours_analyses']}", file=flux)
+    print(file=flux)
+
+    print(f"  (a) Coups peut-être ratés (pose partielle ou pioche/passe alors "
+          f"qu'un coup existait, hors réserves) : {len(agrege['coups_peut_etre_rates'])}",
+          file=flux)
+    for e in agrege["coups_peut_etre_rates"][:10]:
+        print(f"    - {e['fichier']}, tour {e['tour']} ({e['action']}) : "
+              f"{e['nb_tuiles_manquantes']} tuile(s) manquante(s) — à vérifier à la main",
+              file=flux)
+    print(file=flux)
+
+    print(f"  (b) Le solveur est BATTU (le joueur pose plus que le solveur, "
+          f"même au budget généreux) : {len(agrege['solveur_bat'])} — les cas les "
+          f"plus précieux pour améliorer le solveur", file=flux)
+    for e in agrege["solveur_bat"][:10]:
+        print(f"    - {e['fichier']}, tour {e['tour']} : +{e['nb_tuiles_excedentaires']} "
+              f"tuile(s) de plus que le solveur", file=flux)
+    print(file=flux)
+
+    print(f"  Technique de la « réserve » (jamais comptée ci-dessus) :", file=flux)
+    print(f"    Réussies : {len(agrege['reserves_reussies'])}  —  "
+          f"Perdues : {len(agrege['reserves_perdues'])}", file=flux)
+    print(file=flux)
+
+    poses, pioches = agrege["poses"], agrege["pioches"]
+    jokers = agrege["jokers_joues"]
+    print("  Statistiques de style (descriptives uniquement, voir avertissement) :", file=flux)
+    print(f"    Poses au maximum du solveur : "
+          f"{_fmt_pct(agrege['poses_max'] / poses if poses else None)} ({poses} pose(s))",
+          file=flux)
+    print(f"    Tuiles posées / tour (vs max solveur) : "
+          f"{_fmt(agrege['total_reel'] / poses if poses else None)} / "
+          f"{_fmt(agrege['total_solveur'] / poses if poses else None)}", file=flux)
+    print(f"    Pioches alors qu'un coup existait : "
+          f"{_fmt_pct(agrege['pioches_coup_possible'] / pioches if pioches else None)} "
+          f"({pioches} pioche(s))", file=flux)
+    print(f"    Jokers joués : {jokers}, tours d'attente moyens avant d'être joués : "
+          f"{_fmt(agrege['jokers_attente_total'] / jokers if jokers else None)}", file=flux)
+    print(file=flux)
+
+
+# --------------------------------------------------------------------------- #
+# main
+# --------------------------------------------------------------------------- #
+
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(
-        description="Analyse des coups ratés (pioche/passe) d'une IA à partir "
-                     "des journaux de parties (issue #188).")
+        description="Analyse des coups ratés, poses sous-optimales et budget "
+                     "nécessaire d'une IA (ou d'un joueur humain) à partir des "
+                     "journaux de parties (issue #193, suite de #188).")
     parser.add_argument("fichier", nargs="?", default=None,
                         help="Journal à analyser (défaut : le plus récent du dossier).")
     parser.add_argument("--tous", action="store_true",
@@ -132,14 +390,52 @@ def main(argv=None) -> int:
     parser.add_argument("--dossier", default=None,
                         help="Dossier des journaux (défaut : RACINE_DATA/logs_parties).")
     parser.add_argument("--budget", type=float, default=10.0,
-                        help="Budget de temps généreux du solveur, en secondes "
-                             "(défaut 10).")
+                        help="Budget de temps GÉNÉREUX du solveur, en secondes "
+                             "(défaut 10 — recommandé, voir avertissement). Un budget "
+                             "plus court sous-compte les coups ratés qui demandent "
+                             "plus de réflexion.")
     parser.add_argument("--budget-production", type=float, default=None,
                         help="Budget de production à comparer pour Expert "
                              "(défaut : celui utilisé en jeu, voir moteur/ia.py).")
     parser.add_argument("--top", type=int, default=5,
-                        help="Nombre de coups ratés détaillés à afficher (défaut 5).")
+                        help="Nombre de coups ratés/poses sous-optimales détaillés à "
+                             "afficher (défaut 5).")
+    parser.add_argument("--budget-mesure", action="store_true",
+                        help="Pour chaque coup raté/pose sous-optimale, mesure le plus "
+                             "petit budget (série 1,5/3/6/10/20/30 s) qui le retrouve, "
+                             "et affiche la répartition. Coûteux (relance le solveur "
+                             "plusieurs fois par cas) — désactivé par défaut.")
+    parser.add_argument("--retenter-inconclusifs", action="store_true",
+                        help="Retente les décisions inconclusives avec un budget plus "
+                             "grand (--budget-inconclusifs), sous une limite de durée "
+                             "totale ferme (--limite-temps-inconclusifs).")
+    parser.add_argument("--budget-inconclusifs", type=float,
+                        default=BUDGET_INCONCLUSIFS_DEFAUT,
+                        help=f"Budget pour la seconde passe sur les inconclusifs "
+                             f"(défaut {BUDGET_INCONCLUSIFS_DEFAUT} s).")
+    parser.add_argument("--limite-temps-inconclusifs", type=float,
+                        default=LIMITE_TEMPS_INCONCLUSIFS_DEFAUT,
+                        help="Limite de durée TOTALE, en secondes, de la passe sur les "
+                             f"inconclusifs (défaut {LIMITE_TEMPS_INCONCLUSIFS_DEFAUT} s).")
+    parser.add_argument("--enregistrer-cas-reference", action="store_true",
+                        help="Enregistre les coups ratés/poses sous-optimales (ou, avec "
+                             "--joueur, les cas où le joueur bat le solveur) les plus "
+                             "importants comme nouveaux fichiers tests/donnees/"
+                             "cas_expert_*.json (n'écrase jamais un fichier existant).")
+    parser.add_argument("--joueur", default=None,
+                        help="Nom d'un joueur HUMAIN : applique la même analyse à ses "
+                             "décisions plutôt qu'à celles d'une IA (point 6 ter).")
+    parser.add_argument("--verifier-reserve-evite-pioche", action="store_true",
+                        help="(--joueur) Pour chaque réserve réussie, vérifie si elle a "
+                             "évité une pioche au tour suivant (appel solveur "
+                             "supplémentaire — coûteux).")
     args = parser.parse_args(argv)
+
+    if args.budget < 10.0:
+        print(f"AVERTISSEMENT : --budget {args.budget} s est inférieur au budget "
+              f"généreux recommandé (10 s) — les coups qui demandent plus de temps de "
+              f"réflexion seront comptés à tort comme inconclusifs ou non ratés, "
+              f"jamais comme coups ratés confirmés.\n", file=sys.stderr)
 
     dossier = Path(args.dossier) if args.dossier else _dossier_defaut()
 
@@ -152,32 +448,94 @@ def main(argv=None) -> int:
         chemins = [tous[-1]] if tous else []
 
     if not chemins:
-        print("Aucun journal trouvé.", file=sys.stderr)
+        print(f"Aucun journal trouvé dans {dossier}.", file=sys.stderr)
+        return 0
+
+    budget_production = args.budget_production  # None -> défaut de analyser_decision_complete
+
+    if args.joueur:
+        agrege = _analyser_joueur(chemins, args.joueur, args.budget,
+                                  budget_production or 1.5, args.verifier_reserve_evite_pioche)
+        afficher_resume_joueur(args.joueur, agrege)
+        if args.enregistrer_cas_reference:
+            candidats = sorted(agrege.get("_decisions_solveur_bat", []),
+                               key=lambda dr: dr[1]["nb_tuiles_excedentaires"], reverse=True)
+            for d, r in candidats[:3]:
+                chemin = _enregistrer_cas_reference(
+                    d, r["nb_tuiles_reel"], "humain", _dossier_donnees_test())
+                if chemin:
+                    print(f"Cas de référence enregistré : {chemin}", file=sys.stderr)
+        print(AVERTISSEMENT)
         return 0
 
     kwargs = {"budget_genereux": args.budget}
-    if args.budget_production is not None:
-        kwargs["budget_production"] = args.budget_production
+    if budget_production is not None:
+        kwargs["budget_production"] = budget_production
 
-    tous_resultats = []
-    for chemin in chemins:
-        data = charger_journal(chemin)
-        if data is None:
-            print(f"Journal illisible ou invalide, ignoré : {chemin}", file=sys.stderr)
-            continue
-        print(f"Analyse de {chemin.name}...", file=sys.stderr)
+    resultats = _analyser_tous_journaux_ia(chemins, **kwargs)
 
-        def _progres(resultat, _chemin=chemin):
-            marque = " <- coup raté" if resultat["coup_rate"] else ""
-            print(f"  tour {resultat['tour']} ({resultat['nom']}, {resultat['niveau']}, "
-                  f"{resultat['action']}){marque}", file=sys.stderr)
+    if args.retenter_inconclusifs:
+        decisions_par_cle = {}
+        for chemin in chemins:
+            data = charger_journal(chemin)
+            if data is None:
+                continue
+            for d in extraire_decisions_ia_toutes(data):
+                decisions_par_cle[(chemin.name, d["tour"], d["nom"])] = d
+        tranchees, arretees = _retenter_inconclusifs(
+            resultats, decisions_par_cle, args.budget_inconclusifs,
+            args.limite_temps_inconclusifs)
+        print(f"{tranchees} décision(s) tranchée(s) par la seconde passe, "
+              f"{arretees} non retentée(s) (limite de temps).\n", file=sys.stderr)
 
-        resultats = analyser_journal(data, on_resultat=_progres, **kwargs)
-        tous_resultats.extend(resultats)
+    resume = calculer_resume_complet(resultats)
+    afficher_resume_complet(resume)
+    afficher_top_complet(resultats, n=args.top)
 
-    resume = calculer_resume(tous_resultats)
-    afficher_resume(resume)
-    afficher_top(tous_resultats, n=args.top)
+    if args.budget_mesure:
+        a_mesurer = [r for r in resultats if r["coup_rate"] or r["pose_sous_optimale"]]
+        print(f"=== Budget nécessaire (mesuré sur {len(a_mesurer)} coup(s) "
+              f"raté(s)/sous-optimal(aux)) ===")
+        decisions_par_cle = {}
+        for chemin in chemins:
+            data = charger_journal(chemin)
+            if data is None:
+                continue
+            for d in extraire_decisions_ia_toutes(data):
+                decisions_par_cle[(chemin.name, d["tour"], d["nom"])] = d
+        valeurs = []
+        for r in a_mesurer:
+            decision = decisions_par_cle.get((r["fichier"], r["tour"], r["nom"]))
+            if decision is None:
+                continue
+            cible = r["nb_tuiles_solveur"]
+            valeurs.append(budget_necessaire(decision, cible))
+        repartition = repartition_budget_necessaire(valeurs)
+        for b in sorted(BUDGETS_SERIE_DEFAUT):
+            print(f"  à portée de {b} s : {repartition[b]}")
+        print(f"  indéterminé (> {max(BUDGETS_SERIE_DEFAUT)} s nécessaires) : "
+              f"{repartition['indetermine']}")
+        print()
+
+    if args.enregistrer_cas_reference:
+        candidats = top_coups_rates_complet(resultats, n=3)
+        for r in candidats:
+            decision = None
+            for chemin in chemins:
+                data = charger_journal(chemin)
+                if data is None or chemin.name != r["fichier"]:
+                    continue
+                for d in extraire_decisions_ia_toutes(data):
+                    if d["tour"] == r["tour"] and d["nom"] == r["nom"]:
+                        decision = dict(d, fichier=chemin.name)
+                        break
+            if decision is None:
+                continue
+            chemin_ecrit = _enregistrer_cas_reference(
+                decision, r["nb_tuiles_solveur"], "ia", _dossier_donnees_test())
+            if chemin_ecrit:
+                print(f"Cas de référence enregistré : {chemin_ecrit}", file=sys.stderr)
+
     print(AVERTISSEMENT)
     return 0
 
