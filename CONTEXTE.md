@@ -38,6 +38,8 @@ src/rummikub/
                             charger_partie, marquer_terminee, supprimer_partie.
   persistance/journal.py   Journal JSON optionnel par partie (debug + bilan, voir §9).
   persistance/bilan.py      Lecture des journaux + calcul du bilan par niveau d'IA (§9).
+  persistance/coups_rates.py  Détection des coups ratés de l'IA via le solveur
+                            d'Expert, à partir des journaux (§11).
   moteur/                   Logique de jeu pure (voir §3).
     tuiles.py               Dataclass Tuile + création/mélange/distribution.
     validation.py           valider_suite/groupe/combinaison/plateau.
@@ -445,3 +447,50 @@ plus grand nombre possible de tuiles du chevalet, jokers compris.
 - Tests : `tests/test_bilan.py` (lecture tolérante aux formats anciens/
   corrompus, dédoublonnage après annulation, calcul du bilan, intégration
   réelle `journal.logger_action` → `bilan`).
+
+## 11. Analyse des « coups ratés » de l'IA (issue #188)
+
+- **Objectif** : à partir d'un journal de partie (§10), dire si une IA qui a
+  pioché ou passé aurait pu jouer — notamment avant sa mise initiale, où un
+  joueur humain ne peut pas juger (il ne voit pas le chevalet de l'IA).
+- **Calcul** (`persistance/coups_rates.py`, pur, sans pywebview) :
+  `extraire_decisions_ia(data)` reconstitue, pour chaque décision de piocher/
+  passer d'une IA, l'état exact affronté (chevalet + plateau enregistrés par
+  l'action PRÉCÉDENTE dans le journal — la toute première action d'un
+  journal est donc ignorée, faute d'état antérieur). La mise initiale d'un
+  joueur est considérée faite s'il a déjà posé au moins une tuile plus tôt
+  dans le même journal (impossible de poser avant de l'avoir atteinte en une
+  fois). `analyser_decision(decision, budget_genereux=10.0,
+  budget_production=1.5)` interroge alors le solveur d'Expert
+  (`moteur/solveur.py::resoudre_coup`) sur cet état : s'il trouve un coup qui
+  pose au moins une tuile, la décision est un « coup raté » (nombre de
+  tuiles posables, et avant la mise initiale, points que l'ouverture aurait
+  rapportés). Pour Expert uniquement, le solveur est interrogé une seconde
+  fois avec le budget de production réel (1,5 s) afin de distinguer un coup
+  raté par faiblesse de l'algorithme (le budget de production l'aurait
+  trouvé aussi) d'un coup raté par manque de temps de calcul (seul le budget
+  généreux le trouve — champ `budget_limite`). `calculer_resume(resultats)`
+  agrège par niveau d'IA et par phase (avant/après mise initiale) ;
+  `top_coups_rates(resultats, n=5)` retient les coups ratés les plus
+  importants (tuiles ratées) pour examen manuel.
+- **Script CLI** : `python scripts/analyser_coups_rates.py [FICHIER]
+  [--tous] [--dossier CHEMIN] [--budget SECONDES]
+  [--budget-production SECONDES] [--top N]`. Sans argument, analyse le
+  journal le plus récent de `RACINE_DATA/logs_parties` ; `--tous` analyse
+  tous les journaux du dossier. Un journal illisible/corrompu est signalé et
+  ignoré sans interrompre l'analyse des autres.
+- **Limite documentée, répétée à l'affichage** : le solveur gèle certaines
+  combinaisons déjà posées sur le plateau pour limiter la combinatoire (voir
+  docstring de `moteur/solveur.py`, `_separer_combos_figees`) — un coup non
+  trouvé ne prouve pas qu'aucun coup n'existe. Les coups ratés détectés sont
+  une **borne basse**, jamais une liste exhaustive. Autre limite : le
+  journal ne conserve pas la configuration de la partie (`mise_initiale_min`
+  notamment) — `config.MISE_INITIALE_MIN` (valeur par défaut) est utilisée
+  pour toutes les parties rejouées.
+- **Ne modifie jamais l'IA ni le moteur** : lecture pure des journaux +
+  appels en lecture au solveur existant.
+- Tests : `tests/test_coups_rates.py` (coup raté détecté après mise
+  initiale, pioche justifiée sans aucun coup trouvable, coup raté avant la
+  mise initiale avec points d'ouverture, journaux anciens/corrompus ignorés
+  proprement, distinction budget de production/généreux pour Expert, résumé
+  et classement des coups ratés les plus importants).
