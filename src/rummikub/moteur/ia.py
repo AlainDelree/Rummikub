@@ -800,7 +800,7 @@ def jouer_niveau_avance(etat, idx):
 BUDGET_TEMPS_EXPERT = 1.5  # secondes ; voir solveur.resoudre_coup (#186).
 
 
-def jouer_niveau_expert(etat, idx, budget_temps=None):
+def jouer_niveau_expert(etat, idx, budget_temps=None, on_repli=None):
     """Réarrangement global du plateau (solveur, #186) : toutes les
     combinaisons du plateau peuvent être redécoupées librement (aucune de
     leurs tuiles n'est jamais retirée du plateau) pour poser le plus grand
@@ -808,11 +808,24 @@ def jouer_niveau_expert(etat, idx, budget_temps=None):
     locales d'Avancé (échange/détachement/scission de joker...), qui ne
     modifiaient jamais plus d'une ou deux combinaisons à la fois.
 
-    Repli sur le comportement d'Avancé si le solveur dépasse son budget de
-    temps par tour (recherche trop coûteuse pour ce plateau), ou s'il ne
-    trouve lui-même aucun coup — dans ce dernier cas Avancé ne fera
-    généralement pas mieux, mais le tenter reste un filet de sécurité sans
-    coût perceptible.
+    Repli sur le comportement d'Avancé dans deux cas bien distincts (voir
+    ``on_repli`` ci-dessous) : (1) le solveur dépasse son budget de temps
+    par tour SANS avoir trouvé le moindre réarrangement nulle part dans
+    l'arbre (:class:`BudgetDepasse` — recherche trop coûteuse pour ce
+    plateau dans le temps alloué) ; (2) le solveur conclut, dans son
+    budget, qu'AUCUN réarrangement ne pose la moindre tuile du chevalet
+    (coup légitimement impossible — Avancé ne fera généralement pas mieux,
+    mais le tenter reste un filet de sécurité sans coût perceptible). Ces
+    deux cas ont des causes et des remèdes très différents : le premier est
+    un problème de vitesse (ce que #190 cherche à réduire), le second ne
+    l'est pas (aucune vitesse supplémentaire n'y changerait rien). Depuis
+    #190, le solveur est « progressif » (voir ``moteur/solveur.py``) : le
+    repli du premier type devient rare sur un plateau chargé, là où il
+    était auparavant quasi systématique au-delà du budget de production.
+    ``on_repli``, si fourni, est appelé avec un seul argument booléen
+    (``timeout`` : ``True`` si c'est le cas (1), ``False`` si c'est le cas
+    (2)) juste avant ce repli — uniquement pour la mesure (voir
+    ``scripts/comparer_niveaux_ia.py``), jamais utilisé en jeu normal.
 
     N'a plus la règle historique « pioche au lieu de poser si un adversaire
     a ≤ 3 tuiles » : la campagne de #184 n'a montré aucun avantage mesurable
@@ -825,10 +838,14 @@ def jouer_niveau_expert(etat, idx, budget_temps=None):
         # campagne de simulation (scripts/comparer_niveaux_ia.py).
     try:
         coup = resoudre_coup(etat, idx, budget_temps=budget_temps)
+        timeout = False
     except BudgetDepasse:
         coup = None
+        timeout = True
     if coup:
         return coup
+    if on_repli is not None:
+        on_repli(timeout)
     return jouer_niveau_avance(etat, idx)
 
 

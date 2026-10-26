@@ -57,6 +57,22 @@ entier. Deux mesures en atténuent l'effet plutôt que de le supprimer
   budget (repli sur Avancé toujours nécessaire dans ce cas précis — voir
   :func:`resoudre_coup`).
 
+Une troisième mesure (#190, suite de #187) complète les deux ci-dessus sur
+les plateaux chargés : sur un emplacement obligatoire (tuile du plateau à
+replacer), la plupart des candidats ex-aequo au premier critère de tri
+n'utilisent aucune tuile de la main — ils ne se distinguaient donc pas entre
+eux, et la recherche pouvait en essayer un qui restructure inutilement une
+zone du plateau étrangère à la main avant celui, trivial, qui reconduit la
+combinaison déjà posée (voir ``_signatures_originales``). Chaque candidat
+porte désormais une signature ``(type, couleur/valeur, taille)`` ; parmi les
+ex-aequo, celui qui reproduit une combinaison déjà posée avant ce tour est
+tenté EN PREMIER, ce qui réduit fortement les impasses/retours en arrière
+sur ces zones et donc le temps nécessaire pour trouver un premier
+réarrangement complet. Ni ce critère ni les deux précédents ne changent
+jamais le résultat optimal trouvé avec un budget suffisant — seulement la
+vitesse pour l'atteindre, et, en cas d'égalité stricte du critère de
+départage ci-dessous, lequel des réarrangements équivalents est renvoyé.
+
 Simplification volontaire (documentée, pas une approximation aléatoire) :
 pour une suite ancrée sur une tuile réelle précise, les positions
 intermédiaires utilisent la tuile réelle disponible dès qu'il y en a une, et
@@ -164,6 +180,15 @@ def _prochaine_cible(comptes, jokers):
 # --------------------------------------------------------------------------- #
 # Génération des combinaisons candidates
 # --------------------------------------------------------------------------- #
+#
+# Chaque candidat porte une « signature » (type, couleur/valeur, taille) —
+# voir ``_signatures_originales`` : elle sert uniquement à repérer, parmi
+# les candidats qui n'utilisent AUCUNE tuile de la main (ex-aequo à 0 sur
+# ``_score_rapide``), ceux qui reproduisent une combinaison déjà posée sur
+# le plateau avant ce tour. Les tenter en premier parmi ces ex-aequo évite
+# à la recherche de restructurer, par essais-erreurs coûteux, des zones du
+# plateau que la main ne concerne pas vraiment (voir rapport #190).
+
 
 def _candidats_groupe(comptes, jokers_total, valeur, couleur_forcee):
     """Groupes contenant obligatoirement ``(couleur_forcee, valeur)``."""
@@ -184,7 +209,8 @@ def _candidats_groupe(comptes, jokers_total, valeur, couleur_forcee):
                 tokens = [("T", c, valeur) for c in (couleur_forcee,) + combo]
                 if avec_joker:
                     tokens.append(("J",))
-                resultats.append({"tokens": tokens})
+                resultats.append({"tokens": tokens,
+                                  "signature": ("groupe", valeur, taille)})
     return resultats
 
 
@@ -202,7 +228,8 @@ def _candidats_groupe_joker(comptes, jokers_total):
                 continue
             for combo in combinations(disponibles, nb_reel):
                 tokens = [("T", c, valeur) for c in combo] + [("J",)]
-                resultats.append({"tokens": tokens})
+                resultats.append({"tokens": tokens,
+                                  "signature": ("groupe", valeur, taille)})
     return resultats
 
 
@@ -242,7 +269,8 @@ def _candidats_suite(comptes, jokers_total, couleur, valeur_ancre):
                     nb_jokers += 1
                     precedent_joker = True
             if ok and nb_jokers <= jokers_total:
-                resultats.append({"tokens": tokens})
+                resultats.append({"tokens": tokens,
+                                  "signature": ("suite", couleur, v2 - v1 + 1)})
     return resultats
 
 
@@ -268,7 +296,8 @@ def _candidats_suite_joker(comptes, jokers_total):
                         nb_jokers += 1
                         precedent_joker = True
                 if ok and 1 <= nb_jokers <= jokers_total:
-                    resultats.append({"tokens": tokens})
+                    resultats.append({"tokens": tokens,
+                                      "signature": ("suite", couleur, v2 - v1 + 1)})
     return resultats
 
 
@@ -313,11 +342,15 @@ def _appliquer(comptes, jokers, cand):
 # --------------------------------------------------------------------------- #
 
 class _Contexte:
-    def __init__(self, budget_temps, cle=lambda v: v):
+    def __init__(self, budget_temps, cle=lambda v: v, signatures_originales=frozenset()):
         self.limite = time.monotonic() + budget_temps
         self.appels = 0
         self.memo = {}
         self.cle = cle  # fonction de comparaison du triplet de valeur
+        # Signatures (voir ``_signatures_originales``) des combinaisons déjà
+        # posées sur le plateau avant ce tour — utilisées pour prioriser les
+        # candidats ex-aequo sur ``_score_rapide`` (voir ``_resoudre``).
+        self.signatures_originales = signatures_originales
 
     def verifier_budget(self):
         self.appels += 1
@@ -400,9 +433,19 @@ def _resoudre(comptes, jokers, ctx):
                      + _candidats_suite_joker(comptes, jokers[0]))
     # Essayer d'abord les candidats qui consomment le plus la main : atteint
     # le plafond optimiste (donc le `break` ci-dessous) beaucoup plus vite
-    # sur les plateaux chargés (voir _score_rapide). Ne change jamais le
-    # résultat trouvé, seulement la vitesse pour l'atteindre.
-    candidats.sort(key=lambda c: _score_rapide(comptes, jokers, c), reverse=True)
+    # sur les plateaux chargés (voir _score_rapide). Parmi les ex-aequo (le
+    # plus souvent des candidats à 0, qui ne consomment aucune tuile de la
+    # main pour CE nœud), préférer ceux qui reproduisent une combinaison
+    # déjà posée avant ce tour (voir ``_signatures_originales``) : cela
+    # évite de restructurer, par essais-erreurs, des zones du plateau que
+    # la main ne concerne pas — c'est la principale source de backtracking
+    # coûteux sur un plateau chargé (voir rapport #190). Ni l'un ni l'autre
+    # critère ne change le résultat OPTIMAL trouvé, seulement la vitesse et,
+    # en cas d'égalité stricte sur la valeur de départage, lequel des
+    # réarrangements équivalents est renvoyé.
+    candidats.sort(key=lambda c: (_score_rapide(comptes, jokers, c),
+                                  c["signature"] in ctx.signatures_originales),
+                   reverse=True)
 
     for cand in candidats:
         if meilleur is not None and meilleur[0][0] >= plafond:
@@ -477,6 +520,27 @@ def _reconstruire(plateau, chevalet, combos_solution):
     return nouveau_plateau, ids_main
 
 
+def _signatures_originales(plateau):
+    """Ensemble des signatures ``(type, couleur/valeur, taille)`` des
+    combinaisons FLEXIBLES du plateau avant ce tour (voir ``_resoudre`` et
+    la génération des candidats). Une signature n'identifie pas une
+    combinaison précise (deux suites rouges de 4 tuiles à des intervalles
+    différents partagent la même signature) : c'est volontaire, il s'agit
+    seulement de repérer « une forme qui existait déjà », pas de retrouver
+    LA combinaison d'origine tuile pour tuile."""
+    signatures = set()
+    for combo in plateau:
+        non_jokers = [t for t in combo if not t.est_joker]
+        if not non_jokers:
+            continue
+        valeurs = {t.valeur for t in non_jokers}
+        if len(valeurs) == 1:
+            signatures.add(("groupe", next(iter(valeurs)), len(combo)))
+        else:
+            signatures.add(("suite", non_jokers[0].couleur, len(combo)))
+    return signatures
+
+
 # --------------------------------------------------------------------------- #
 # Réduction de la taille du problème : combinaisons « gelées »
 # --------------------------------------------------------------------------- #
@@ -535,10 +599,12 @@ def _meilleur_rearrangement(plateau, chevalet, budget_temps, mise_min=None,
     la mise initiale (voir docstring du module : limite documentée, pas
     nécessairement l'optimum exact sous cette contrainte)."""
     comptes, jokers = _construire_etat(plateau, chevalet)
+    signatures = _signatures_originales(plateau)
     limite = time.monotonic() + budget_temps
 
     def passe(cle):
-        ctx = _Contexte(max(0.0, limite - time.monotonic()), cle=cle)
+        ctx = _Contexte(max(0.0, limite - time.monotonic()), cle=cle,
+                        signatures_originales=signatures)
         return _resoudre(comptes, jokers, ctx)
 
     resultat = passe(lambda v: v)

@@ -364,11 +364,73 @@ plus grand nombre possible de tuiles du chevalet, jokers compris.
 - **Règle supprimée** (#186, suite de #184) : Expert ne refuse plus de
   poser quand un adversaire a ≤ 3 tuiles (ancien comportement, retiré —
   la campagne de #184 n'a montré aucun avantage mesurable à la prudence).
+- **Recherche rendue « progressive » (#190, suite de #187)** : sur un
+  plateau chargé (≈ 70 tuiles, ~19 combinaisons), la quasi-totalité des
+  combinaisons se retrouvait « flexible » (`_separer_combos_figees` ne
+  gèle que celles ne partageant AUCUNE couleur/valeur avec la main — avec
+  seulement 4 couleurs, une main de 2-3 couleurs distinctes suffit à
+  déflexibiliser presque tout le plateau), forçant ~45 emplacements
+  obligatoires avec une quarantaine de candidats chacun. Dans cet arbre,
+  le premier chemin DFS (candidats triés pour maximiser l'usage de la
+  main, voir `_score_rapide`) tombait régulièrement sur une impasse
+  (emplacement obligatoire sans aucun candidat compatible avec l'état
+  réduit), forçant un retour en arrière coûteux — avant qu'AUCUN
+  réarrangement complet n'ait jamais été trouvé nulle part dans l'arbre,
+  le budget de production (1.5s) s'épuisait : repli systématique sur
+  Avancé, perte de l'essentiel de la force d'Expert en milieu/fin de
+  partie (mesuré sur `tests/donnees/cas_expert_budget_tour81.json`, avec
+  le solveur d'avant #190 : `BudgetDepasse` toujours levée jusqu'à 2.5s de
+  budget ; premier coup trouvé (3 tuiles) entre 2.5s et 3.0s — la mention
+  « 3 tuiles en 20s » du cas de test d'origine (#187) ne reflétait qu'une
+  marge large choisie pour le test à gros budget, pas le temps minimal
+  réellement nécessaire). Cause : la plupart des emplacements obligatoires ne touchent
+  en rien la main (aucun gain possible à les restructurer), mais la
+  recherche les traitait comme n'importe quel autre, essayant toutes les
+  régularisations possibles avant celle, triviale, qui reconduit la
+  combinaison déjà posée. Correctif : chaque candidat généré
+  (`_candidats_groupe`, `_candidats_suite`, et leurs variantes « joker »)
+  porte désormais une signature `(type, couleur/valeur, taille)`
+  (`_signatures_originales`) ; parmi les candidats ex-aequo sur
+  `_score_rapide` (typiquement ceux qui n'utilisent aucune tuile de la
+  main), celui qui reproduit une combinaison déjà posée avant ce tour est
+  tenté EN PREMIER — réduit radicalement les impasses/retours en arrière
+  sur les zones du plateau non concernées par la main, et donc le temps
+  nécessaire pour trouver un premier réarrangement complet valide. Sur le
+  cas de test ci-dessus, le solveur retrouve désormais le coup de 3
+  tuiles (11 noir, 11 noir, 7 rouge) dès 56 ms de budget, et le confirme
+  toujours au budget de production de 1.5s (aucun autre coup meilleur
+  trouvé en continuant à chercher jusqu'à expiration — voir « anytime »
+  ci-dessous) — au lieu de `BudgetDepasse` sans rien trouver jusqu'à 2.5s
+  avant #190. Soit environ 45 à 50× plus vite pour atteindre un premier
+  coup valide, pour une qualité de résultat au moins égale (mêmes 3
+  tuiles). La recherche continue ensuite d'essayer de faire mieux jusqu'à
+  expiration du budget (comportement « anytime » déjà en place via
+  `BudgetDepasse`, désormais effectif dès les tout premiers appels plutôt
+  qu'après plusieurs secondes — ce qui, sur un plateau chargé, consomme
+  maintenant systématiquement tout le budget restant même après avoir
+  trouvé un premier coup, puisque la recherche ne s'arrête que sur borne
+  prouvée ou budget épuisé). Ne change jamais le résultat OPTIMAL trouvé
+  avec un budget suffisant pour explorer exhaustivement, seulement la
+  vitesse pour l'atteindre (et, en cas d'égalité stricte de la valeur de
+  départage entre plusieurs réarrangements équivalents, lequel des deux
+  est renvoyé). **Important, voir CHANGELOG-190 pour le détail** : ce gain
+  ciblé ne se traduit PAS par une amélioration visible sur une campagne
+  Avancé vs Expert avec des plateaux tirés au hasard (taux de repli
+  d'Expert sur Avancé et temps moyen par tour, mesurés avant/après,
+  inchangés ou légèrement dégradés à cette taille d'échantillon) : le
+  correctif n'accélère que les nœuds à candidats ex-aequo sur
+  `_score_rapide` (plateaux structurellement proches du cas visé —
+  beaucoup de combinaisons non pertinentes pour la main), pas l'ensemble
+  des situations ; et le comportement « anytime » fait désormais consommer
+  tout le budget restant après un premier succès, ce qui tend à augmenter
+  le temps moyen par tour plutôt qu'à le réduire.
 - **Performance** : rapide en début de partie (plateau simple, < quelques
-  ms) ; au-delà d'une dizaine de combinaisons pertinentes pour la main
-  courante, la recherche consomme typiquement tout le budget de temps
-  (dégradation progressive ci-dessus, pas un échec total) — voir le
-  rapport de clôture #186 pour les mesures (temps moyen/maximal par tour).
+  ms) ; sur un plateau chargé, trouve désormais un premier coup jouable
+  en quelques dizaines de ms (voir ci-dessus), puis continue de chercher
+  mieux jusqu'à expiration du budget — le repli total sur Avancé par
+  manque de temps, fréquent avant #190, devient rare — voir le rapport
+  de clôture #190 (et #186 pour les mesures d'origine, temps moyen/
+  maximal par tour).
 - **Tests** : `tests/test_ia.py` — le solveur retrouve au moins aussi bien
   chaque scénario déjà couvert par Avancé (échange direct, détachement en
   bout, libérations combinées, groupe de 4, scission en milieu de suite,
@@ -409,7 +471,23 @@ plus grand nombre possible de tuiles du chevalet, jokers compris.
   voir `_anomalies_conservation`) ; un coup refusé par le garde-fou
   anti-disparition de `jouer_tour` (§4) est compté à part et clairement
   signalé dans le rapport (ne doit normalement jamais arriver, puisque
-  l'IA revalide ses propres coups avant de les proposer). Première
+  l'IA revalide ses propres coups avant de les proposer). **Depuis #190**,
+  le rapport affiche aussi le nombre de tours où Expert s'est replié sur
+  Avancé (`jouer_un_tour` appelle `jouer_niveau_expert(..., on_repli=...)`
+  directement pour le niveau Expert plutôt que le `jouer_ia` générique,
+  afin de compter ces replis sans dupliquer la logique de décision), **en
+  distinguant deux causes très différentes** : (1) le solveur dépasse son
+  budget sans avoir rien trouvé nulle part dans l'arbre
+  (`BudgetDepasse` — un problème de vitesse, la seule cause que
+  l'accélération de #190 peut réduire) et (2) le solveur conclut
+  légitimement qu'aucun réarrangement ne pose la moindre tuile (coup
+  impossible — Avancé ne fera pas mieux, aucun rapport avec la vitesse de
+  recherche). Les deux premières versions de ce compteur (avant la
+  distinction) les confondaient, ce qui rendait la mesure peu
+  interprétable : le taux de repli « toute cause » restait élevé et quasi
+  inchangé avant/après #190 (la plupart des replis étaient déjà, avant
+  tout correctif, de cause (2), sans rapport avec la vitesse) — voir
+  CHANGELOG-190 pour les chiffres corrigés. Première
   campagne (#184, Avancé vs Expert avant le solveur de réarrangement
   global, 50 donnes) : écart non significatif à 95 % (53 % / 47 % sur
   100 parties). **#186** (Expert = solveur de réarrangement global,
@@ -422,7 +500,9 @@ plus grand nombre possible de tuiles du chevalet, jokers compris.
   largement celui de #186 — écart non démontrable comme un effet du
   correctif avec cet échantillon), 0 anomalie de conservation des tuiles
   sur l'ensemble de la campagne — voir CHANGELOG-187 pour le détail
-  complet.
+  complet. **#190** (solveur rendu progressif, mêmes paramètres) : voir
+  CHANGELOG-190 pour les chiffres avant/après (taux de victoire, parties
+  bloquées, replis d'Expert sur Avancé, temps par tour).
 ## 10. Journal de parties et bilan par niveau d'IA (issue #185)
 
 - **Journal** (`persistance/journal.py`) : optionnel, activé par la clé
