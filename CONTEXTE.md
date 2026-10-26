@@ -50,6 +50,9 @@ src/rummikub/
                             et repli d'Expert).
     solveur.py              Solveur de réarrangement global du plateau,
                             utilisé par Expert (voir §8bis, #186).
+    description_coup.py     Résumé écrit + étapes du rejeu pas-à-pas d'un
+                            coup de l'IA, à partir du plateau avant/après
+                            (voir §12, #189).
   ui/
     application.py          ApplicationRummikub : fenêtre pywebview, etat_jeu (public),
                             naviguer_vers_jeu/accueil, reprendre_jeu, load_url.
@@ -58,7 +61,7 @@ src/rummikub/
     web/                    Front : accueil.html/css/js, jeu.html/css/js,
                             commun.css/js, avatars/.
 
-tests/                      pytest : test_moteur.py + test_ia.py.
+tests/                      pytest : test_moteur.py + test_ia.py + test_description_coup.py.
 ```
 
 ## 3. Moteur de jeu — fonctions publiques clés
@@ -169,7 +172,10 @@ icône `assets/rummikub.ico` (facultative, absente → aucune icône).
   valide.
 - `tests/test_bilan.py` : lecture des journaux de parties et calcul du bilan
   par niveau d'IA (voir §9).
-- État actuel : **81 tests passent** (`pytest -q` → `81 passed`).
+- `tests/test_description_coup.py` : résumé écrit d'un coup de l'IA (coup
+  simple/extension/groupe créé, joker récupéré, coup touchant plusieurs
+  combinaisons) et découpage en étapes du rejeu pas-à-pas (voir §12).
+- État actuel : **105 tests passent** (`pytest -q` → `105 passed`).
 
 ## 7. Vérification empirique d'un comportement front-end
 
@@ -494,3 +500,72 @@ plus grand nombre possible de tuiles du chevalet, jokers compris.
   mise initiale avec points d'ouverture, journaux anciens/corrompus ignorés
   proprement, distinction budget de production/généreux pour Expert, résumé
   et classement des coups ratés les plus importants).
+
+## 12. Rendre lisible un coup complexe de l'IA (issue #189, suite de #144/#149)
+
+Depuis le solveur de réarrangement global (#186), un coup de l'IA peut
+défaire et recomposer plusieurs combinaisons du plateau en un seul tour. Le
+rejeu animé existant (tuile par tuile, #144/#149) reste le comportement PAR
+DÉFAUT du bouton « ▶ Dernier coup joué par... », inchangé pour tous les
+coups — les aides ci-dessous sont des options accessibles à côté de ce
+bouton, jamais imposées, et ne modifient jamais l'état de la partie.
+
+- **Résumé écrit** (`moteur/description_coup.py::decrire_coup_ia`) : fonction
+  pure, testable séparément de l'UI, qui compare le plateau juste avant et
+  juste après un coup de pose et renvoie `{"texte", "tuiles_posees",
+  "nb_combinaisons_defaites", "nb_combinaisons_creees",
+  "nb_combinaisons_modifiees", "jokers_deplaces"}`. Classement interne : pour
+  chaque combinaison d'avant, la destination d'après qui reçoit une
+  **majorité stricte** (`> moitié`) de ses tuiles est sa continuation (elle
+  "survit", éventuellement modifiée) ; sans majorité claire, elle est
+  "défaite" (dispersée). Une combinaison d'après sans continuation unique est
+  "créée" (recomposée depuis la main et/ou des fragments dispersés). Un
+  joker qui quitte la continuation de sa combinaison d'origine est signalé
+  nommément (`jokers_deplaces`, "d'où" → "vers", descriptions en langage
+  simple via `_decrire_combo` : "le groupe de 7", "la suite rouge (5 à 9)").
+  Un coup ne touchant qu'une seule combinaison et aucun joker déplacé reste
+  résumé en **une seule phrase** ; au-delà, plusieurs phrases courtes.
+- **Rejeu pas-à-pas** (`moteur/description_coup.py::etapes_coup_ia`, PRIORITÉ
+  de l'issue) : découpe le même diff en une liste d'étapes
+  `{"texte", "plateau"}` — d'abord chaque combinaison défaite (retirée du
+  plateau de travail), puis chaque combinaison créée/modifiée (ajoutée dans
+  sa forme finale), puis chaque déplacement de joker (purement informatif,
+  même plateau que l'étape précédente). La toute dernière étape correspond
+  exactement au plateau d'après. **≥ 2 étapes** est le seuil utilisé côté
+  front-end pour afficher le bouton « 📋 Pas à pas » (sinon cette aide
+  n'apporte rien par rapport au résumé en une phrase).
+- **Calcul unique côté `api.py`** : `jeu_ia_jouer` (seul point d'entrée qui
+  construit `dernier_coup_ia`) appelle les deux fonctions ci-dessus
+  immédiatement après une pose, et stocke `resume` (texte) et `etapes`
+  (liste) directement dans `etat["dernier_coup_ia"]`, aux côtés de
+  `plateau_avant`/`plateau_apres` déjà existants — aucun nouvel aller-retour
+  JS → Python nécessaire, le front-end se contente d'afficher ce qui est déjà
+  dans l'état reçu.
+- **Front-end** (`jeu.js`/`jeu.html`/`jeu.css`) :
+  - `#resume-coup-ia` (div sous le bouton de rejeu) affiche `coup.resume` tel
+    quel ; vide (donc invisible, `:empty { display: none }`) pour une
+    pioche/un passage ou une ancienne partie reprise sans ce champ.
+  - `#btn-pas-a-pas-coup-ia` (`hidden` par défaut) n'est démasqué par
+    `rafraichirBoutonRejouerIA()` que si `coup.etapes.length >= 2`. Son clic
+    (`ouvrirPasAPas`) est totalement indépendant de `rejouerDernierCoupIA` —
+    aucun des deux ne déclenche jamais l'autre.
+  - `#overlay-pas-a-pas` : carte modale en LECTURE SEULE (aucun écouteur
+    d'interaction de jeu dans `rendreApercuPlateauPasAPas`, qui ne fait que
+    construire des `.groupe-combinaison`/tuiles via `tuileDepuisDict`, sans
+    toucher à `plateauLocal` ni à `etat`). Navigation Suivant/Précédent par
+    simple index local (`indexEtapePasAPas`) ; « Quitter » referme à tout
+    moment sans effet sur la partie.
+  - **Bascule Avant/Après (point 2 de l'issue) : NON implémentée dans cette
+    issue**, par manque de temps — signalé explicitement par l'issue #189
+    elle-même comme report possible vers une issue séparée. Seuls le résumé
+    écrit et le rejeu pas-à-pas (points 1 et 3, le pas-à-pas étant la
+    priorité n°1) sont livrés.
+- Tests : `tests/test_description_coup.py` (coup simple — extension de
+  suite, groupe créé depuis la main, aucun changement ; joker récupéré puis
+  rejoué dans un nouveau groupe ; démantèlement complet d'un groupe en 3
+  nouvelles combinaisons, avec vérification du nombre d'étapes et de
+  l'identité exacte de la dernière étape avec le plateau d'après). Vérifié
+  en complément par un scénario Playwright ad hoc sur `jeu.html` (méthode
+  §7, script non committé) : résumé affiché, bouton Pas à pas visible
+  seulement pour le coup complexe, navigation Suivant/Précédent/Quitter, et
+  plateau réel inchangé après fermeture.

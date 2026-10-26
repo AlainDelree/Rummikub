@@ -20,6 +20,15 @@
               class="btn-rejouer-coup-ia" disabled>
         ▶ Dernier coup joué par l'ordinateur
       </button>
+      <!-- Résumé écrit du dernier coup de l'IA (issue #189, suite de
+           #144/#149) : phrase(s) en français calculées côté Python à partir
+           du plateau avant/après (voir moteur/description_coup.py),
+           affichées telles quelles, sans jamais modifier l'état de la partie. -->
+      <div id="resume-coup-ia" class="resume-coup-ia"></div>
+      <button type="button" id="btn-pas-a-pas-coup-ia"
+              class="btn-pas-a-pas-coup-ia" disabled hidden>
+        📋 Pas à pas
+      </button>
       <div id="vitesse-rejeu-ia" role="group" aria-label="Vitesse du rejeu du dernier coup"
            title="Vitesse du rejeu du dernier coup">
         <span class="vitesse-rejeu-icone" aria-hidden="true">⏱</span>
@@ -127,6 +136,27 @@
         <button id="btn-confirm-rejeu-non" class="btn-secondaire">Annuler</button>
         <button id="btn-confirm-rejeu-oui" class="btn-primaire">Continuer</button>
       </div>
+    </div>
+  </div>
+
+  <!-- Rejeu pas-à-pas du dernier coup complexe de l'IA (issue #189, suite
+       de #144/#149) : lecture seule, piloté entièrement par le joueur
+       (Précédent/Suivant), ne modifie jamais l'état de la partie. N'est
+       proposé que si le coup touche au moins 2 étapes distinctes (voir
+       rafraichirBoutonRejouerIA). -->
+  <div id="overlay-pas-a-pas" class="overlay-cache">
+    <div class="carte carte-pas-a-pas">
+      <h2 id="titre-pas-a-pas">Rejeu pas à pas</h2>
+      <p id="texte-etape-pas-a-pas" class="texte-etape-pas-a-pas"></p>
+      <div id="zone-plateau-pas-a-pas" class="zone-plateau-pas-a-pas"></div>
+      <div class="boutons-pas-a-pas">
+        <button type="button" id="btn-pas-a-pas-precedent" class="btn-secondaire">← Précédent</button>
+        <span id="compteur-etape-pas-a-pas" class="compteur-etape-pas-a-pas"></span>
+        <button type="button" id="btn-pas-a-pas-suivant" class="btn-primaire">Suivant →</button>
+      </div>
+      <button type="button" id="btn-pas-a-pas-quitter" class="btn-secondaire btn-pas-a-pas-quitter">
+        Quitter le pas à pas
+      </button>
     </div>
   </div>
 

@@ -204,13 +204,24 @@ class Api:
         # permettre son rejeu/affichage à la demande (issue #144, corrigé en
         # #157 : avant ce correctif, seule une pose écrasait ce champ, si bien
         # qu'une pioche/passe laissait figé un ancien rejeu de pose périmé).
+        plateau_apres = copy.deepcopy(etat["plateau"])
         etat["dernier_coup_ia"] = {
             "type": type_reel,
             "joueur_index": idx,
             "nom": etat["joueurs"][idx]["nom"],
             "plateau_avant": plateau_avant,
-            "plateau_apres": copy.deepcopy(etat["plateau"]),
+            "plateau_apres": plateau_apres,
         }
+        if type_reel == "pose":
+            # Résumé écrit + étapes du rejeu pas-à-pas (issue #189, suite de
+            # #144/#149) : calculés une seule fois ici, à partir du plateau
+            # avant/après déjà disponible, puis simplement affichés côté JS.
+            from rummikub.moteur.description_coup import (
+                decrire_coup_ia, etapes_coup_ia)
+            resume = decrire_coup_ia(plateau_avant, plateau_apres)
+            etat["dernier_coup_ia"]["resume"] = resume["texte"]
+            etat["dernier_coup_ia"]["etapes"] = etapes_coup_ia(
+                plateau_avant, plateau_apres)
         self._app.etat_jeu = res["etat"]
         backup_debut_tour(self._app.etat_jeu)
         sauvegarder_partie(self._app.etat_jeu)
