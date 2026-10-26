@@ -155,3 +155,15 @@ def test_jouer_tour_refuse_si_des_tuiles_du_plateau_disparaissent():
     # Le plateau d'origine ne doit pas avoir été modifié par le coup refusé.
     assert etat["plateau"] == [[x.as_dict() for x in combo_a],
                                [x.as_dict() for x in combo_b]]
+
+
+def test_creer_partie_force_une_seule_manche_meme_si_regles_en_demandent_plus():
+    """Issue #192 : le réglage « nombre de manches » est retiré de l'UI car
+    la règle de fin de partie à plusieurs manches ne dispose d'aucun
+    compteur de manches correct. `creer_partie` doit donc toujours forcer
+    nb_manches=1, même si un appelant (anciens réglages sauvegardés en
+    config.json, par exemple) transmet une autre valeur."""
+    etat = creer_partie(
+        [{"nom": "A", "est_ia": False}, {"nom": "B", "est_ia": True, "niveau": "Facile"}],
+        {"nb_manches": 5, "valeur_joker_penalite": 30, "mise_initiale_min": 30})
+    assert etat["config"]["nb_manches"] == 1

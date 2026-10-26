@@ -95,9 +95,14 @@ tests/                      pytest : test_moteur.py + test_ia.py + test_descript
 - `backup_debut_tour(etat)` : deep-copy plateau + chevalet + index + tour_numero.
 - `annuler_tour(etat)` : restaure depuis le backup.
 - `nouvelle_manche(etat)` : redistribue, reset plateau/chevalets/mise,
-  **conserve score_cumul**. Rappelle `backup_debut_tour`.
+  **conserve score_cumul**. Rappelle `backup_debut_tour`. **Inactif depuis
+  #192** (voir §3bis) : plus aucun appelant de l'application ne l'invoque,
+  conservé pour une éventuelle réintroduction future des manches
+  multiples.
 - `est_fin_partie(etat)` : True si `nb_manches==1` et manche terminée, sinon
-  `tour_numero > nb_manches` (simplifié).
+  `tour_numero > nb_manches` (simplifié). **Depuis #192, `nb_manches` vaut
+  toujours 1** (voir §3bis) : la branche `else` n'est donc plus jamais
+  empruntée en pratique dans l'application, mais reste en place.
 - Helpers internes : `plateau_depuis_dict`, `_plateau_vers_dict`,
   `_points_tuiles_posees`, `_terminer_tour`, `_ajouter_historique`.
 
@@ -106,6 +111,55 @@ tests/                      pytest : test_moteur.py + test_ia.py + test_descript
   de leur chevalet ; gagnant (chevalet vide) = +somme des pénalités adverses.
   Met à jour `score_manche` et `score_cumul` en place.
 - `trouver_gagnant_manche(joueurs)` → index du meilleur `score_manche`.
+
+## 3bis. Manches multiples : réglage retiré, code moteur inactif (issue #192)
+
+Le jeu se joue désormais **toujours en une seule manche** — décision
+d'Alain, suite au constat que la règle de fin de partie pour plusieurs
+manches (`est_fin_partie`) comparait `tour_numero` au nombre de manches
+sans qu'aucun compteur de manches correct n'existe par ailleurs (aucun
+appel à `nouvelle_manche` nulle part dans l'application) : un joueur qui
+aurait choisi plus d'une manche depuis les réglages avait donc un
+comportement incorrect.
+
+- **Réglage retiré de l'UI** : le champ « Nombre de manches » (1-99) a été
+  retiré de `accueil.html` (onglet « Règles du jeu ») et des handlers JS
+  associés dans `accueil.js` (`remplirChampsReglages`, `sauvegarderReglages`,
+  `lancerPartie`). La clé `nb_manches` a aussi été retirée de
+  `reglages.DEFAUTS` (`reglages.py`) : elle n'est plus écrite par
+  l'application, mais une ancienne valeur déjà présente dans un
+  `config.json` existant reste lue sans erreur (fusion `{**DEFAUTS,
+  **json.loads(...)}`), simplement ignorée.
+- **Point d'enforcement unique : `creer_partie`** (`moteur/partie.py`) force
+  désormais `"nb_manches": 1` sans jamais lire `config_regles.get(
+  "nb_manches", ...)` — toute nouvelle partie a donc exactement une manche,
+  quelle que soit la valeur transmise par l'appelant (réglages UI,
+  `config.json` ancien, script). **Reprise d'une partie sauvegardée** :
+  `ApplicationRummikub.reprendre_jeu` (`ui/application.py`) force aussi
+  `etat["config"]["nb_manches"] = 1` sur l'état rechargé depuis SQLite, pour
+  qu'une partie créée avant #192 avec une autre valeur ne retombe pas dans
+  la branche `else` incorrecte de `est_fin_partie` une fois reprise.
+- **Code moteur lié aux manches volontairement conservé, mais inactif** :
+  `nouvelle_manche` et la branche `tour_numero > nb_manches` d'
+  `est_fin_partie` (`moteur/partie.py`), ainsi que `score_cumul`
+  (`score.py`, `partie.py`) restent en place tels quels — aucun appelant de
+  l'application ne les atteint plus en pratique puisque `nb_manches` vaut
+  toujours 1. Un compteur de manches correct (actuellement absent) reste à
+  écrire le jour où des manches multiples seraient réintroduites. L'écran
+  de fin de partie n'a pas été modifié.
+- **Non concerné** : `scripts/simulation_ia.py` et
+  `scripts/comparer_niveaux_ia.py` (§9) appellent directement
+  `creer_partie`/`nouvelle_manche` en dehors de l'application pour simuler
+  plusieurs manches IA vs IA — ces scripts de test/mesure restent
+  inchangés, seule l'application (UI + moteur côté parties jouées par un
+  humain) est concernée par le forçage à 1.
+- Tests : `tests/test_moteur.py::
+  test_creer_partie_force_une_seule_manche_meme_si_regles_en_demandent_plus`
+  (nouvelle partie toujours à 1 manche même si `config_regles` en demande
+  plus) ; `tests/test_playwright_accueil_reglages.py` (Playwright sur
+  `accueil.html`, voir §7 : champ absent du DOM, pas de trou dans le
+  panneau « Règles du jeu », réglages enregistrés/rechargés sans erreur
+  console même avec un ancien `nb_manches` > 1 simulé côté mock API).
 
 ## 4. Conventions importantes
 
@@ -175,7 +229,11 @@ icône `assets/rummikub.ico` (facultative, absente → aucune icône).
 - `tests/test_description_coup.py` : résumé écrit d'un coup de l'IA (coup
   simple/extension/groupe créé, joker récupéré, coup touchant plusieurs
   combinaisons) et découpage en étapes du rejeu pas-à-pas (voir §12).
-- État actuel : **105 tests passent** (`pytest -q` → `105 passed`).
+- `tests/test_playwright_pas_a_pas.py` et
+  `tests/test_playwright_accueil_reglages.py` : vérifications front-end via
+  Playwright (voir §7), sautées proprement si `playwright` ou chromium sont
+  absents.
+- État actuel : **122 tests passent** (`pytest -q` → `122 passed`).
 
 ## 7. Vérification empirique d'un comportement front-end
 

@@ -6,7 +6,6 @@ DEFAUTS = {
     "prenom": "Joueur",
     "avatar_index": 0,
     "mise_initiale_min": 30,
-    "nb_manches": 1,
     "valeur_joker_penalite": 30,
     "vitesse_ia": "Lente",
     # Vitesse du rejeu à la demande du dernier coup IA (issue #160, échelle

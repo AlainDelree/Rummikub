@@ -219,7 +219,6 @@ function remplirChampsReglages() {
   const r = etat.reglages || {};
   document.getElementById("rgl-prenom").value = r.prenom || "Joueur";
   document.getElementById("rgl-mise30").checked = (r.mise_initiale_min || 30) >= 30;
-  document.getElementById("rgl-manches").value = r.nb_manches || 1;
   document.getElementById("rgl-vitesse").value = r.vitesse_ia || "Normale";
   document.getElementById("rgl-ia-auto").checked = !!r.ia_auto;
   document.getElementById("rgl-dezoom-auto").checked = r.dezoom_auto !== false;
@@ -258,7 +257,6 @@ async function sauvegarderReglages() {
     prenom: document.getElementById("rgl-prenom").value.trim() || "Joueur",
     avatar_index: etat.avatarIndex,
     mise_initiale_min: document.getElementById("rgl-mise30").checked ? 30 : 0,
-    nb_manches: parseInt(document.getElementById("rgl-manches").value, 10) || 1,
     valeur_joker_penalite: jokerEl ? parseInt(jokerEl.value, 10) : 30,
     vitesse_ia: document.getElementById("rgl-vitesse").value,
     ia_auto: document.getElementById("rgl-ia-auto").checked,
@@ -304,7 +302,6 @@ async function lancerPartie() {
   const jokerEl = document.querySelector("input[name='joker-val']:checked");
   const regles = {
     mise_initiale_min: document.getElementById("rgl-mise30").checked ? 30 : 0,
-    nb_manches: parseInt(document.getElementById("rgl-manches").value, 10) || 1,
     valeur_joker_penalite: jokerEl ? parseInt(jokerEl.value, 10) : 30,
     vitesse_ia: document.getElementById("rgl-vitesse").value,
     ia_auto: document.getElementById("rgl-ia-auto").checked,

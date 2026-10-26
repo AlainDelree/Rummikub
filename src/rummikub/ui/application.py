@@ -61,6 +61,10 @@ class ApplicationRummikub:
         from rummikub.moteur.partie import backup_debut_tour
         from rummikub import reglages as Reglages
         self.etat_jeu = etat
+        # Force 1 manche même sur une partie sauvegardée avant #192 avec une
+        # autre valeur enregistrée : plus aucune nouvelle/reprise de partie
+        # ne doit dépendre du compteur de manches, resté inactif (§3bis).
+        self.etat_jeu.setdefault("config", {})["nb_manches"] = 1
         # Reflète toujours la préférence UI courante, même sur partie reprise.
         cfg = Reglages.charger()
         self.etat_jeu.setdefault("config", {})["mode_reorg"] = \

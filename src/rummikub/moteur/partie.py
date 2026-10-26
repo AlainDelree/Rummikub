@@ -70,7 +70,11 @@ def creer_partie(config_joueurs: list[dict], config_regles: dict) -> dict:
         "manche_terminee": False,
         "gagnant_manche_index": None,
         "config": {
-            "nb_manches": config_regles.get("nb_manches", 1),
+            # Toujours 1, quelle que soit la valeur transmise (issue #192) :
+            # le réglage « nombre de manches » est retiré de l'UI, et la
+            # règle de fin de partie pour plusieurs manches n'a jamais eu de
+            # compteur de manches correct (voir CONTEXTE.md §3bis).
+            "nb_manches": 1,
             "valeur_joker_penalite": config_regles.get(
                 "valeur_joker_penalite", 30),
             "mise_initiale_min": config_regles.get(
