@@ -372,9 +372,12 @@ plus grand nombre possible de tuiles du chevalet, jokers compris.
   réarrangement complet n'ait jamais été trouvé nulle part dans l'arbre,
   le budget de production (1.5s) s'épuisait : repli systématique sur
   Avancé, perte de l'essentiel de la force d'Expert en milieu/fin de
-  partie (mesuré sur `tests/donnees/cas_expert_budget_tour81.json` :
-  aucun coup trouvé en 1.5s ni même 3s, alors qu'un coup de 3 tuiles
-  existe). Cause : la plupart des emplacements obligatoires ne touchent
+  partie (mesuré sur `tests/donnees/cas_expert_budget_tour81.json`, avec
+  le solveur d'avant #190 : `BudgetDepasse` toujours levée jusqu'à 2.5s de
+  budget ; premier coup trouvé (3 tuiles) entre 2.5s et 3.0s — la mention
+  « 3 tuiles en 20s » du cas de test d'origine (#187) ne reflétait qu'une
+  marge large choisie pour le test à gros budget, pas le temps minimal
+  réellement nécessaire). Cause : la plupart des emplacements obligatoires ne touchent
   en rien la main (aucun gain possible à les restructurer), mais la
   recherche les traitait comme n'importe quel autre, essayant toutes les
   régularisations possibles avant celle, triviale, qui reconduit la
@@ -388,19 +391,33 @@ plus grand nombre possible de tuiles du chevalet, jokers compris.
   sur les zones du plateau non concernées par la main, et donc le temps
   nécessaire pour trouver un premier réarrangement complet valide. Sur le
   cas de test ci-dessus, le solveur retrouve désormais le coup de 3
-  tuiles en ~70-95 ms (mesuré : `BudgetDepasse` toujours levée à 50 ms,
-  coup trouvé à 80 ms — au lieu de ne rien trouver en 1.5s, ni même en
-  5s), soit environ 15 à 20× plus vite pour une qualité de résultat au
-  moins égale — et la
-  recherche continue ensuite d'essayer de faire mieux jusqu'à expiration
-  du budget (comportement « anytime » déjà en place via `BudgetDepasse`,
-  désormais effectif dès les tout premiers appels plutôt qu'après
-  plusieurs secondes). Ne change jamais le résultat OPTIMAL trouvé avec un
-  budget suffisant pour explorer exhaustivement, seulement la vitesse
-  pour l'atteindre (et, en cas d'égalité stricte de la valeur de
+  tuiles (11 noir, 11 noir, 7 rouge) dès 56 ms de budget, et le confirme
+  toujours au budget de production de 1.5s (aucun autre coup meilleur
+  trouvé en continuant à chercher jusqu'à expiration — voir « anytime »
+  ci-dessous) — au lieu de `BudgetDepasse` sans rien trouver jusqu'à 2.5s
+  avant #190. Soit environ 45 à 50× plus vite pour atteindre un premier
+  coup valide, pour une qualité de résultat au moins égale (mêmes 3
+  tuiles). La recherche continue ensuite d'essayer de faire mieux jusqu'à
+  expiration du budget (comportement « anytime » déjà en place via
+  `BudgetDepasse`, désormais effectif dès les tout premiers appels plutôt
+  qu'après plusieurs secondes — ce qui, sur un plateau chargé, consomme
+  maintenant systématiquement tout le budget restant même après avoir
+  trouvé un premier coup, puisque la recherche ne s'arrête que sur borne
+  prouvée ou budget épuisé). Ne change jamais le résultat OPTIMAL trouvé
+  avec un budget suffisant pour explorer exhaustivement, seulement la
+  vitesse pour l'atteindre (et, en cas d'égalité stricte de la valeur de
   départage entre plusieurs réarrangements équivalents, lequel des deux
-  est renvoyé) — voir CHANGELOG pour les mesures avant/après (campagne
-  Avancé vs Expert, taux de repli sur Avancé).
+  est renvoyé). **Important, voir CHANGELOG-190 pour le détail** : ce gain
+  ciblé ne se traduit PAS par une amélioration visible sur une campagne
+  Avancé vs Expert avec des plateaux tirés au hasard (taux de repli
+  d'Expert sur Avancé et temps moyen par tour, mesurés avant/après,
+  inchangés ou légèrement dégradés à cette taille d'échantillon) : le
+  correctif n'accélère que les nœuds à candidats ex-aequo sur
+  `_score_rapide` (plateaux structurellement proches du cas visé —
+  beaucoup de combinaisons non pertinentes pour la main), pas l'ensemble
+  des situations ; et le comportement « anytime » fait désormais consommer
+  tout le budget restant après un premier succès, ce qui tend à augmenter
+  le temps moyen par tour plutôt qu'à le réduire.
 - **Performance** : rapide en début de partie (plateau simple, < quelques
   ms) ; sur un plateau chargé, trouve désormais un premier coup jouable
   en quelques dizaines de ms (voir ci-dessus), puis continue de chercher
