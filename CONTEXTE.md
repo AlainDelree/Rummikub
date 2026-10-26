@@ -581,7 +581,7 @@ plus grand nombre possible de tuiles du chevalet, jokers compris.
   proprement, distinction budget de production/généreux pour Expert, résumé
   et classement des coups ratés les plus importants).
 
-## 12. Rendre lisible un coup complexe de l'IA (issue #189, suite de #144/#149)
+## 12. Rendre lisible un coup complexe de l'IA (issue #189, puis #191)
 
 Depuis le solveur de réarrangement global (#186), un coup de l'IA peut
 défaire et recomposer plusieurs combinaisons du plateau en un seul tour. Le
@@ -590,62 +590,111 @@ DÉFAUT du bouton « ▶ Dernier coup joué par... », inchangé pour tous les
 coups — les aides ci-dessous sont des options accessibles à côté de ce
 bouton, jamais imposées, et ne modifient jamais l'état de la partie.
 
-- **Résumé écrit** (`moteur/description_coup.py::decrire_coup_ia`) : fonction
-  pure, testable séparément de l'UI, qui compare le plateau juste avant et
-  juste après un coup de pose et renvoie `{"texte", "tuiles_posees",
-  "nb_combinaisons_defaites", "nb_combinaisons_creees",
-  "nb_combinaisons_modifiees", "jokers_deplaces"}`. Classement interne : pour
-  chaque combinaison d'avant, la destination d'après qui reçoit une
-  **majorité stricte** (`> moitié`) de ses tuiles est sa continuation (elle
-  "survit", éventuellement modifiée) ; sans majorité claire, elle est
-  "défaite" (dispersée). Une combinaison d'après sans continuation unique est
-  "créée" (recomposée depuis la main et/ou des fragments dispersés). Un
-  joker qui quitte la continuation de sa combinaison d'origine est signalé
-  nommément (`jokers_deplaces`, "d'où" → "vers", descriptions en langage
-  simple via `_decrire_combo` : "le groupe de 7", "la suite rouge (5 à 9)").
-  Un coup ne touchant qu'une seule combinaison et aucun joker déplacé reste
-  résumé en **une seule phrase** ; au-delà, plusieurs phrases courtes.
-- **Rejeu pas-à-pas** (`moteur/description_coup.py::etapes_coup_ia`, PRIORITÉ
-  de l'issue) : découpe le même diff en une liste d'étapes
-  `{"texte", "plateau"}` — d'abord chaque combinaison défaite (retirée du
-  plateau de travail), puis chaque combinaison créée/modifiée (ajoutée dans
-  sa forme finale), puis chaque déplacement de joker (purement informatif,
-  même plateau que l'étape précédente). La toute dernière étape correspond
-  exactement au plateau d'après. **≥ 2 étapes** est le seuil utilisé côté
-  front-end pour afficher le bouton « 📋 Pas à pas » (sinon cette aide
-  n'apporte rien par rapport au résumé en une phrase).
-- **Calcul unique côté `api.py`** : `jeu_ia_jouer` (seul point d'entrée qui
-  construit `dernier_coup_ia`) appelle les deux fonctions ci-dessus
-  immédiatement après une pose, et stocke `resume` (texte) et `etapes`
-  (liste) directement dans `etat["dernier_coup_ia"]`, aux côtés de
-  `plateau_avant`/`plateau_apres` déjà existants — aucun nouvel aller-retour
-  JS → Python nécessaire, le front-end se contente d'afficher ce qui est déjà
-  dans l'état reçu.
+L'issue #191 a entièrement revu le moteur `description_coup.py` introduit par
+#189 : le classement par simple comparaison avant/après donnait des étapes
+incohérentes (une même tuile visible deux fois à la fois, des phrases avec
+des tournures de message automatique). Le nouveau moteur suit **chaque
+tuile individuellement, par son identifiant**, de sa position d'avant à sa
+position d'après.
+
+- **Moteur commun** (`_construire_operations`, privé, partagé par les deux
+  fonctions publiques) : pour chaque combinaison d'avant, la destination
+  d'après qui reçoit une **majorité stricte** (`> moitié`) de ses tuiles est
+  sa continuation ("update" : elle garde son identité, peut à la fois perdre
+  et gagner des tuiles en un seul changement, ex. joker remplacé par une
+  tuile réelle). Sans majorité claire, elle se dissout et chacune de ses
+  tuiles est libérée par une opération **"retrait"** distincte, regroupée
+  par destination (jamais tout d'un coup si plusieurs destinations se
+  partagent ses tuiles — c'est ce qui permet d'afficher un état
+  "provisoire" entre deux retraits). Une combinaison d'après sans
+  continuation est "create" (entièrement recomposée depuis le cadre). Les
+  opérations sont ensuite triées par un **tri topologique causal** (une
+  tuile doit être libérée avant d'être réutilisée) qui **privilégie les
+  échanges de jokers dès qu'ils sont possibles** (issue #191, point 3bis) —
+  priorité aux opérations qui libèrent/consomment un joker, puis
+  update > create > retrait, puis ordre stable. Deux combinaisons
+  distinctes qui porteraient le même nom (ex. deux « groupe de 11 » à des
+  moments différents du coup) sont désambiguïsées en listant leurs couleurs
+  (`_desc_fabrique`, en comptant les identités distinctes — pas les simples
+  libellés — pour ne pas confondre une combinaison avec sa propre
+  continuation).
+- **Résumé écrit** (`decrire_coup_ia(plateau_avant, plateau_apres, nom=None)`)
+  : renvoie `{"texte", "tuiles_posees", "nb_combinaisons_defaites",
+  "nb_combinaisons_creees", "nb_combinaisons_modifiees", "jokers_deplaces"}`.
+  `nom` (le nom du joueur IA, passé par `api.py`) permet de commencer par
+  « <Nom> a posé... » plutôt que par un « Il » impersonnel. Un coup simple
+  (une seule combinaison touchée, aucun joker déplacé) reste **une seule
+  phrase** ; au-delà, plusieurs phrases courtes en français naturel, avec
+  contractions (« du groupe de 3 », « au groupe de 11 » — jamais « de le »/
+  « à le », cf. `_contracter`).
+- **Rejeu pas-à-pas** (`etapes_coup_ia`, PRIORITÉ de l'issue) : une suite
+  d'états où chaque tuile n'est qu'à un seul endroit à la fois — sur le
+  plateau (`"plateau"`, même format qu'avant) ou dans le cadre **« tuiles à
+  placer »** (`"cadre"` : `[{"tuile": dict, "origine": "main"|"plateau"}]`).
+  Structure : un écran **« Départ »** (titre dédié, plateau d'avant, cadre
+  rempli des tuiles de la main) ; si des jokers changent de combinaison, un
+  écran **« Les jokers »** juste après (vue d'ensemble : d'où chaque joker
+  vient, par quelle tuile il est remplacé et d'où elle vient, où il finit —
+  ne change rien à l'écran, titre dédié) ; puis une étape par opération
+  (titre vide), chacune avec `"provisoires"` (index dans `"plateau"` des
+  combinaisons mi-démantelées, temporairement invalides) et `"surbrillance"`
+  (ids des tuiles juste posées/libérées à cette étape, pour réutiliser la
+  surbrillance existante côté front). La toute dernière étape correspond
+  exactement au plateau d'après, cadre vide. `etapes_coup_ia([], [])` (ou
+  tout coup sans la moindre tuile posée) renvoie `[]`.
+- **Seuil d'affichage du bouton** : ce n'est PLUS `coup.etapes.length >= 2`
+  (les écrans "Départ"/"Les jokers" existent même pour un coup simple) mais
+  le nombre d'étapes à **titre vide** (changements réels) — voir
+  `nbChangementsPasAPas()` côté JS, dupliquant la même logique que `simple`
+  côté Python dans `decrire_coup_ia`.
+- **Calcul unique côté `api.py`** : `jeu_ia_jouer` appelle les deux fonctions
+  ci-dessus immédiatement après une pose (avec `nom=etat["joueurs"][idx]
+  ["nom"]`) et stocke `resume`/`etapes` dans `etat["dernier_coup_ia"]` —
+  aucun aller-retour JS → Python supplémentaire.
 - **Front-end** (`jeu.js`/`jeu.html`/`jeu.css`) :
-  - `#resume-coup-ia` (div sous le bouton de rejeu) affiche `coup.resume` tel
-    quel ; vide (donc invisible, `:empty { display: none }`) pour une
-    pioche/un passage ou une ancienne partie reprise sans ce champ.
-  - `#btn-pas-a-pas-coup-ia` (`hidden` par défaut) n'est démasqué par
-    `rafraichirBoutonRejouerIA()` que si `coup.etapes.length >= 2`. Son clic
-    (`ouvrirPasAPas`) est totalement indépendant de `rejouerDernierCoupIA` —
-    aucun des deux ne déclenche jamais l'autre.
-  - `#overlay-pas-a-pas` : carte modale en LECTURE SEULE (aucun écouteur
-    d'interaction de jeu dans `rendreApercuPlateauPasAPas`, qui ne fait que
-    construire des `.groupe-combinaison`/tuiles via `tuileDepuisDict`, sans
-    toucher à `plateauLocal` ni à `etat`). Navigation Suivant/Précédent par
-    simple index local (`indexEtapePasAPas`) ; « Quitter » referme à tout
-    moment sans effet sur la partie.
-  - **Bascule Avant/Après (point 2 de l'issue) : NON implémentée dans cette
-    issue**, par manque de temps — signalé explicitement par l'issue #189
-    elle-même comme report possible vers une issue séparée. Seuls le résumé
-    écrit et le rejeu pas-à-pas (points 1 et 3, le pas-à-pas étant la
-    priorité n°1) sont livrés.
-- Tests : `tests/test_description_coup.py` (coup simple — extension de
-  suite, groupe créé depuis la main, aucun changement ; joker récupéré puis
-  rejoué dans un nouveau groupe ; démantèlement complet d'un groupe en 3
-  nouvelles combinaisons, avec vérification du nombre d'étapes et de
-  l'identité exacte de la dernière étape avec le plateau d'après). Vérifié
-  en complément par un scénario Playwright ad hoc sur `jeu.html` (méthode
-  §7, script non committé) : résumé affiché, bouton Pas à pas visible
-  seulement pour le coup complexe, navigation Suivant/Précédent/Quitter, et
-  plateau réel inchangé après fermeture.
+  - `#resume-coup-ia` affiche `coup.resume` tel quel (inchangé depuis #189).
+  - `#zone-cadre-pas-a-pas`/`#cadre-tuiles-pas-a-pas` (NOUVEAU, au-dessus de
+    l'aperçu du plateau dans `#overlay-pas-a-pas`) : rendu par
+    `rendreCadrePasAPas`, une tuile par entrée de `etape.cadre`, pourtour
+    **vert `.ce-tour`** (tuile de la main) ou **orange `.deplacee-tapis`**
+    (tuile libérée du plateau) — mêmes classes que la légende existante
+    (`#legende-couleurs`), aucune nouvelle couleur introduite. Cadre vide
+    affiché comme tel (`.cadre-vide`, texte "vide").
+  - `#soustitre-etape-pas-a-pas` affiche `etape.titre` ("Départ"/"Les
+    jokers"/vide pour un changement normal).
+  - `rendreApercuPlateauPasAPas` ajoute `.combi-provisoire` (liseré ambre
+    pointillé + mention, visuellement distinct de `.combi-invalide` qui
+    reste réservée aux vraies erreurs du joueur sur le vrai tapis) sur les
+    combinaisons listées dans `etape.provisoires`, et `.tuile-ia-highlight`
+    (surbrillance déjà existante) sur les tuiles listées dans
+    `etape.surbrillance`.
+  - `#btn-pas-a-pas-coup-ia` démasqué par `rafraichirBoutonRejouerIA()`
+    seulement si `nbChangementsPasAPas(coup.etapes) >= 2`.
+  - `#overlay-pas-a-pas` reste une carte modale en LECTURE SEULE, totalement
+    indépendante de `rejouerDernierCoupIA` (bouton de rejeu animé,
+    inchangé) ; navigation Suivant/Précédent par index local
+    (`indexEtapePasAPas`), « Quitter » referme sans effet sur la partie.
+  - **Bascule Avant/Après (point 2 de l'issue #189) : toujours NON
+    implémentée**, hors périmètre de #191 également.
+- Tests : `tests/test_description_coup.py` — contractions (`_contracter`,
+  du/au/des/aux, groupe/suite) ; coups simples (extension de suite, groupe
+  créé depuis la main, aucun changement) ; joker récupéré puis rejoué dans
+  un nouveau groupe (avec vérification explicite que le joker transite par
+  le cadre AVANT d'être repris) ; démantèlement complet d'un groupe en 3
+  nouvelles combinaisons (désambiguïsation par couleurs, état provisoire
+  visible) ; le cas Bruno (3 bleu/11 bleu/11 noir) décrit dans l'issue, texte
+  du résumé comparé mot pour mot à l'exemple de l'issue ; le coup en chaîne
+  Bruno/Expert à 5 combinaisons d'avant (jokers + double suite coupée en
+  deux), avec vérification tuile par tuile de l'ordre causal (le 11 jaune
+  sort de la suite jaune avant de remplacer le joker, etc.) et que le 11
+  jaune est bien présenté comme venant du plateau, jamais de la main. Un
+  helper `_verifier_invariants` commun vérifie sur chaque scénario : aucune
+  tuile à deux endroits à aucune étape, pas d'étape sans changement visible,
+  cadre vide et plateau identique à `plateau_apres` à la toute dernière
+  étape. `tests/test_playwright_pas_a_pas.py` (nécessite `pip install
+  playwright` + `playwright install chromium`, absent de requirements.txt
+  — sauté proprement sinon) : charge `jeu.html` directement (jamais la
+  vraie app pywebview), injecte un `dernier_coup_ia` fictif et pilote les
+  boutons réels ; vérifie le cadre qui se vide progressivement avec les
+  bonnes couleurs de pourtour, l'absence de tuile commune cadre/plateau à
+  chaque étape, et que « Quitter » ne modifie rien.

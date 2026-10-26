@@ -147,7 +147,15 @@
   <div id="overlay-pas-a-pas" class="overlay-cache">
     <div class="carte carte-pas-a-pas">
       <h2 id="titre-pas-a-pas">Rejeu pas à pas</h2>
+      <p id="soustitre-etape-pas-a-pas" class="soustitre-etape-pas-a-pas"></p>
       <p id="texte-etape-pas-a-pas" class="texte-etape-pas-a-pas"></p>
+      <!-- Cadre « tuiles à placer » (issue #191) : au-dessus de l'aperçu du
+           plateau, contient les tuiles pas encore reposées (venues de la
+           main ou libérées du plateau) ; vide à la toute dernière étape. -->
+      <div id="zone-cadre-pas-a-pas" class="zone-cadre-pas-a-pas">
+        <div class="cadre-label">Tuiles à placer</div>
+        <div id="cadre-tuiles-pas-a-pas" class="cadre-tuiles-pas-a-pas"></div>
+      </div>
       <div id="zone-plateau-pas-a-pas" class="zone-plateau-pas-a-pas"></div>
       <div class="boutons-pas-a-pas">
         <button type="button" id="btn-pas-a-pas-precedent" class="btn-secondaire">← Précédent</button>
