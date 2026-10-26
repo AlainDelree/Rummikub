@@ -564,12 +564,21 @@ def resoudre_coup(etat, idx, budget_temps=1.5):
     """
     joueur = etat["joueurs"][idx]
     deja_faite = joueur["mise_initiale_faite"]
-    plateau = plateau_depuis_dict(etat.get("plateau", [])) if deja_faite else []
+    plateau = plateau_depuis_dict(etat.get("plateau", []))
     chevalet = [tuile_depuis_dict(d) if isinstance(d, dict) else d
                 for d in joueur["chevalet"]]
     mise_min = etat["config"]["mise_initiale_min"]
 
-    plateau_flexible, plateau_gele = _separer_combos_figees(plateau, chevalet)
+    if deja_faite:
+        plateau_flexible, plateau_gele = _separer_combos_figees(plateau, chevalet)
+    else:
+        # Mise initiale pas faite : une règle du jeu interdit de toucher aux
+        # combinaisons déjà posées (par d'autres joueurs) — tout le plateau
+        # est donc gelé, hors recherche (qui ne porte que sur le chevalet),
+        # mais reconduit à l'identique dans le résultat (voir issue #187 :
+        # auparavant le plateau était simplement ignoré, y compris dans le
+        # résultat renvoyé, ce qui faisait disparaître ses tuiles).
+        plateau_flexible, plateau_gele = [], plateau
 
     resultat = _meilleur_rearrangement(
         plateau_flexible, chevalet, budget_temps,

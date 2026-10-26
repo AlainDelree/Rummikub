@@ -117,6 +117,20 @@ tests/                      pytest : test_moteur.py + test_ia.py.
 - `etat["config"]` contient : `nb_manches, valeur_joker_penalite,
   mise_initiale_min` (+ `vitesse_ia` ajouté côté application.py, non utilisé
   par le moteur).
+- **Le plateau ne perd jamais de tuile** (#187) : une fin de tour (humain ou
+  IA, n'importe quel niveau) ne peut jamais faire disparaître une tuile
+  présente sur le plateau en début de tour — elle peut changer de
+  combinaison, jamais disparaître. Contrôlé de façon centrale dans
+  `jouer_tour` (`moteur/partie.py`) : si l'ensemble des IDs du plateau
+  proposé ne contient pas tous les IDs du plateau de début de tour, le coup
+  est refusé (`{"ok": False, "erreur": "Coup refusé : des tuiles du
+  plateau ont disparu (...)", "tuiles_disparues": [id, ...]}`), même si
+  chaque combinaison proposée est individuellement valide. Ce contrôle
+  protège aussi bien les coups humains que tous les niveaux d'IA présents
+  et futurs, puisque `jouer_tour` est le point d'entrée unique pour poser
+  un coup. Voir `test_jouer_tour_refuse_si_des_tuiles_du_plateau_
+  disparaissent` (`tests/test_moteur.py`) et §8bis (bug d'origine côté
+  solveur Expert).
 - **`backup_debut_tour` est appelé dans `api.py`** après chaque coup
   (jouer/piocher/passer/reprendre/IA) — **pas** dans le moteur lui-même.
 - Après chaque coup, `api.py` appelle `sauvegarder_partie` (SQLite).
@@ -300,14 +314,22 @@ plus grand nombre possible de tuiles du chevalet, jokers compris.
   chevalet effectivement jouées), puis, à égalité, celui qui utilise le
   moins de jokers du chevalet — un joker reste une ressource précieuse
   même quand il ne change pas le nombre de tuiles posées ce tour-ci.
-- **Mise initiale pas faite** : le solveur ignore alors le plateau (une
+- **Mise initiale pas faite** : la RECHERCHE ignore alors le plateau (une
   règle du jeu interdit d'y toucher avant la mise initiale) et cherche la
   meilleure combinaison formable depuis la seule main, sous la contrainte
   des points posés ≥ `mise_initiale_min` — avec un repli en 2 passes documenté
   dans `solveur.py` quand le réarrangement qui pose le plus de tuiles
   n'atteint pas ce minimum (limite documentée : pas nécessairement
   l'optimum exact sous cette contrainte, voir docstring de
-  `_meilleur_rearrangement`).
+  `_meilleur_rearrangement`). **Le plateau existant (posé par d'autres
+  joueurs) est intégralement gelé et reconduit tel quel dans le résultat**
+  — bug corrigé par #187 : avant ce correctif, `resoudre_coup` l'omettait
+  purement et simplement du plateau renvoyé, ce qui faisait disparaître ses
+  tuiles (constaté en jeu : un groupe de 12 déjà posé effacé par Expert à
+  sa première pose). Voir §4 (règle « le plateau ne perd jamais de tuile »)
+  et les tests `test_expert_conserve_le_plateau_quand_la_mise_initiale_n_
+  est_pas_faite` / `test_expert_conserve_plusieurs_combinaisons_du_
+  plateau_sans_mise_initiale` (`tests/test_ia.py`).
 - **Combinaisons gelées** (`_separer_combos_figees`) : une combinaison du
   plateau qui ne partage aucune couleur/valeur avec la main et ne contient
   aucun joker est reconduite telle quelle, hors recherche — borne
@@ -371,18 +393,28 @@ plus grand nombre possible de tuiles du chevalet, jokers compris.
   Affiche : victoires/taux/marge d'erreur (IC 95 %) par niveau, nombre
   moyen de tuiles/points de pénalité du perdant, durée moyenne en tours,
   répartition des fins de partie (chevalet vidé / pioche épuisée / arrêtée
-  par le garde-fou anti-blocage), et temps de calcul moyen/maximal d'un
+  par le garde-fou anti-blocage), temps de calcul moyen/maximal d'un
   tour de décision par niveau (repérage d'un emballement de la recherche de
-  libération de joker). Première campagne (#184, Avancé vs Expert avant le
-  solveur de réarrangement global, 50 donnes) : écart non significatif à
-  95 % (53 % / 47 % sur 100 parties). **Depuis #186** (Expert = solveur de
-  réarrangement global, §8bis), à budget de production (1.5s/tour),
-  40 parties (2 lots, voir CHANGELOG-186 pour le détail et la justification
-  de cet échantillon réduit par rapport aux 200/500 donnes souhaitées) :
-  écart significatif, Expert 80.0 % ± 12.4 pt, part de parties bloquées
-  (pioche épuisée) 10 % (contre 29 % en #184) — voir CHANGELOG-186 pour le
-  détail complet (temps de calcul par tour, effet du budget de temps sur la
-  force du solveur).
+  libération de joker), et, **depuis #187**, le nombre d'anomalies de
+  conservation des tuiles : à chaque coup, les 106 tuiles de référence
+  doivent être présentes exactement une fois (mains + plateau + pioche,
+  voir `_anomalies_conservation`) ; un coup refusé par le garde-fou
+  anti-disparition de `jouer_tour` (§4) est compté à part et clairement
+  signalé dans le rapport (ne doit normalement jamais arriver, puisque
+  l'IA revalide ses propres coups avant de les proposer). Première
+  campagne (#184, Avancé vs Expert avant le solveur de réarrangement
+  global, 50 donnes) : écart non significatif à 95 % (53 % / 47 % sur
+  100 parties). **#186** (Expert = solveur de réarrangement global,
+  §8bis), à budget de production (1.5s/tour), 40 parties (2 lots) : écart
+  significatif, Expert 80.0 % ± 12.4 pt, part de parties bloquées (pioche
+  épuisée) 10 % (contre 29 % en #184) — mesure **invalidée a posteriori**
+  par #187 (bug de disparition de tuiles non détecté à l'époque, faute du
+  contrôle de conservation ci-dessus). **#187** (mêmes paramètres, rejoués
+  après correctif) : Expert 72.5 % ± 13.8 pt (29/40, IC qui recouvre
+  largement celui de #186 — écart non démontrable comme un effet du
+  correctif avec cet échantillon), 0 anomalie de conservation des tuiles
+  sur l'ensemble de la campagne — voir CHANGELOG-187 pour le détail
+  complet.
 ## 10. Journal de parties et bilan par niveau d'IA (issue #185)
 
 - **Journal** (`persistance/journal.py`) : optionnel, activé par la clé

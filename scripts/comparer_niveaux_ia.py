@@ -50,8 +50,40 @@ from rummikub.moteur.partie import (  # noqa: E402
     passer_tour,
     piocher,
 )
+from rummikub.moteur.tuiles import creer_sac  # noqa: E402
 
 logger = logging.getLogger("comparer_niveaux_ia")
+
+# Les 106 IDs de référence (#187) : utilisés pour vérifier, à chaque coup,
+# qu'aucune tuile n'a disparu ni n'a été dupliquée entre les mains, le
+# plateau et la pioche (voir ``_anomalies_conservation``).
+_IDS_REFERENCE = frozenset(t.id for t in creer_sac())
+
+
+def _anomalies_conservation(etat: dict) -> list[str]:
+    """Vérifie que les 106 tuiles de référence sont chacune présentes une
+    seule fois, au total, entre les mains, le plateau et la pioche (#187) —
+    la campagne de #186 ne contrôlait pas cette invariant et n'avait donc
+    rien signalé quand le solveur Expert faisait disparaître des tuiles du
+    plateau tant que sa mise initiale n'était pas faite."""
+    compte: dict[str, int] = {}
+    for joueur in etat["joueurs"]:
+        for t in joueur["chevalet"]:
+            compte[t["id"]] = compte.get(t["id"], 0) + 1
+    for combo in etat["plateau"]:
+        for t in combo:
+            compte[t["id"]] = compte.get(t["id"], 0) + 1
+    for t in etat["pioche"]:
+        compte[t["id"]] = compte.get(t["id"], 0) + 1
+
+    anomalies = []
+    for tid in sorted(_IDS_REFERENCE):
+        n = compte.pop(tid, 0)
+        if n != 1:
+            anomalies.append(f"{tid} présent {n} fois (attendu 1)")
+    for tid in sorted(compte):
+        anomalies.append(f"{tid} inconnu (en trop)")
+    return anomalies
 
 
 # --------------------------------------------------------------------------- #
@@ -59,14 +91,18 @@ logger = logging.getLogger("comparer_niveaux_ia")
 # la décision IA par niveau).
 # --------------------------------------------------------------------------- #
 
-def jouer_un_tour(etat: dict, idx: int, temps_par_niveau: dict) -> tuple[dict, bool]:
+def jouer_un_tour(etat: dict, idx: int, temps_par_niveau: dict) -> tuple[dict, bool, bool]:
     """Joue le tour de l'IA à l'index ``idx``.
 
     Chronomètre l'appel à ``jouer_ia`` et l'ajoute à
-    ``temps_par_niveau[niveau]``. Retourne ``(etat, coup_invalide)`` ;
-    ``coup_invalide`` est True si l'IA a proposé un coup rejeté (ou une
-    exception), auquel cas on se replie sur une pioche de secours, comme côté
-    UI (``Api.jeu_ia_jouer``).
+    ``temps_par_niveau[niveau]``. Retourne ``(etat, coup_invalide,
+    tuiles_disparues)`` ; ``coup_invalide`` est True si l'IA a proposé un
+    coup rejeté (ou une exception), auquel cas on se replie sur une pioche
+    de secours, comme côté UI (``Api.jeu_ia_jouer``). ``tuiles_disparues``
+    est True si le rejet vient spécifiquement du garde-fou anti-disparition
+    de tuiles (#187) — distingué des autres motifs de rejet (ex. mise
+    initiale insuffisante) pour que ce type d'anomalie, bien plus grave,
+    ressorte clairement dans le rapport de la campagne.
     """
     niveau = etat["joueurs"][idx]["niveau"]
     backup_debut_tour(etat)
@@ -78,27 +114,33 @@ def jouer_un_tour(etat: dict, idx: int, temps_par_niveau: dict) -> tuple[dict, b
         temps_par_niveau.setdefault(niveau, []).append(time.monotonic() - debut)
         logger.exception("Exception de l'IA %s au tour %d", niveau, etat["tour_numero"])
         annuler_tour(etat)
-        return piocher(etat)["etat"], True
+        return piocher(etat)["etat"], True, False
     temps_par_niveau.setdefault(niveau, []).append(time.monotonic() - debut)
 
     action = res_ia.get("action")
     if action == "jouer":
         res = jouer_tour(etat, res_ia["ids_tuiles"], res_ia["nouveau_plateau"])
         if res["ok"]:
-            return res["etat"], False
-        logger.warning("Coup invalide (%s) au tour %d : %s",
-                       niveau, etat["tour_numero"], res["erreur"])
+            return res["etat"], False, False
+        tuiles_disparues = bool(res.get("tuiles_disparues"))
+        if tuiles_disparues:
+            logger.error("ANOMALIE : coup refusé (%s) au tour %d car des "
+                         "tuiles du plateau auraient disparu : %s",
+                         niveau, etat["tour_numero"], res["erreur"])
+        else:
+            logger.warning("Coup invalide (%s) au tour %d : %s",
+                           niveau, etat["tour_numero"], res["erreur"])
         annuler_tour(etat)
-        return piocher(etat)["etat"], True
+        return piocher(etat)["etat"], True, tuiles_disparues
     if action == "piocher":
-        return piocher(etat)["etat"], False
+        return piocher(etat)["etat"], False, False
     if action == "passer":
-        return passer_tour(etat)["etat"], False
+        return passer_tour(etat)["etat"], False, False
 
     logger.warning("Action IA inconnue %r (%s) au tour %d",
                    action, niveau, etat["tour_numero"])
     annuler_tour(etat)
-    return piocher(etat)["etat"], True
+    return piocher(etat)["etat"], True, False
 
 
 # --------------------------------------------------------------------------- #
@@ -115,6 +157,8 @@ def jouer_partie(config_joueurs: list[dict], max_tours: int,
 
     tours = 0
     coups_invalides = 0
+    coups_tuiles_disparues = 0
+    anomalies_conservation = 0
     arretee_garde_fou = False
 
     while not etat["manche_terminee"]:
@@ -123,9 +167,17 @@ def jouer_partie(config_joueurs: list[dict], max_tours: int,
             arretee_garde_fou = True
             break
         idx = etat["index_joueur_actuel"]
-        etat, invalide = jouer_un_tour(etat, idx, temps_par_niveau)
+        etat, invalide, tuiles_disparues = jouer_un_tour(
+            etat, idx, temps_par_niveau)
         if invalide:
             coups_invalides += 1
+        if tuiles_disparues:
+            coups_tuiles_disparues += 1
+        anomalies = _anomalies_conservation(etat)
+        if anomalies:
+            anomalies_conservation += len(anomalies)
+            logger.error("ANOMALIE DE CONSERVATION au tour %d : %s",
+                        tours, "; ".join(anomalies))
         backup_debut_tour(etat)
 
     pioche_vide = (not arretee_garde_fou and len(etat["pioche"]) == 0
@@ -137,6 +189,8 @@ def jouer_partie(config_joueurs: list[dict], max_tours: int,
         "arretee_garde_fou": arretee_garde_fou,
         "pioche_vide": pioche_vide,
         "coups_invalides": coups_invalides,
+        "coups_tuiles_disparues": coups_tuiles_disparues,
+        "anomalies_conservation": anomalies_conservation,
     }
 
 
@@ -156,6 +210,8 @@ def comparer(niveau_a: str, niveau_b: str, nb_donnes: int, seed: int,
     fins = {"chevalet_vide": 0, "pioche_vide": 0, "garde_fou": 0}
     temps_par_niveau: dict[str, list[float]] = {}
     coups_invalides_total = 0
+    coups_tuiles_disparues_total = 0
+    anomalies_conservation_total = 0
 
     for i, graine in enumerate(graines):
         for ordre, camps in enumerate((("A", "B"), ("B", "A"))):
@@ -168,6 +224,8 @@ def comparer(niveau_a: str, niveau_b: str, nb_donnes: int, seed: int,
             ]
             resultat = jouer_partie(config_joueurs, max_tours, temps_par_niveau)
             coups_invalides_total += resultat["coups_invalides"]
+            coups_tuiles_disparues_total += resultat["coups_tuiles_disparues"]
+            anomalies_conservation_total += resultat["anomalies_conservation"]
 
             if resultat["arretee_garde_fou"]:
                 fins["garde_fou"] += 1
@@ -204,6 +262,8 @@ def comparer(niveau_a: str, niveau_b: str, nb_donnes: int, seed: int,
         "tours_decidees": tours_decidees,
         "temps_par_niveau": temps_par_niveau,
         "coups_invalides_total": coups_invalides_total,
+        "coups_tuiles_disparues_total": coups_tuiles_disparues_total,
+        "anomalies_conservation_total": anomalies_conservation_total,
         "nb_donnes": nb_donnes,
         "nb_parties": 2 * nb_donnes,
     }
@@ -269,6 +329,13 @@ def afficher_rapport(resume: dict) -> None:
     if resume["coups_invalides_total"]:
         print(f"  Coups invalides proposés par l'IA (repli pioche) : "
              f"{resume['coups_invalides_total']}")
+    print(f"  Anomalies de conservation des tuiles (#187, attendu 0) : "
+         f"{resume['anomalies_conservation_total']}")
+    if resume["coups_tuiles_disparues_total"]:
+        print(f"  *** ANOMALIE : {resume['coups_tuiles_disparues_total']} "
+             f"coup(s) refusé(s) par le garde-fou anti-disparition de "
+             f"tuiles (#187) — un niveau d'IA a proposé un plateau ayant "
+             f"perdu des tuiles déjà posées. ***")
 
     print("-" * 70)
     print("  Temps de calcul par tour (décision IA), par niveau :")

@@ -891,3 +891,108 @@ def test_expert_se_replie_sur_avance_si_budget_depasse():
     coup_avance = jouer_niveau_avance(etat, 1)
     assert coup_replie["action"] == coup_avance["action"] == "jouer"
     assert set(coup_replie["ids_tuiles"]) == set(coup_avance["ids_tuiles"])
+
+
+# --------------------------------------------------------------------------- #
+# Issue #187 : le solveur ne doit jamais faire disparaître une combinaison
+# déjà posée (par un autre joueur) tant que la mise initiale n'est pas
+# faite — avant ce correctif, le plateau était simplement ignoré, y compris
+# dans le résultat renvoyé.
+# --------------------------------------------------------------------------- #
+
+def _etat_plateau_non_vide_sans_mise_initiale(niveau):
+    """Reproduit le scénario constaté en jeu (#187) : un groupe de 12 déjà
+    posé par un autre joueur (joker_1 + rouge_12_a + noir_12_a), et le bot
+    courant qui n'a pas encore fait sa mise initiale mais peut l'ouvrir
+    avec une suite en main."""
+    etat = _partie_2j(niveau)
+    etat["index_joueur_actuel"] = 1
+    bot = etat["joueurs"][1]
+    bot["mise_initiale_faite"] = False
+    etat["plateau"] = [[
+        {"id": "joker_1", "valeur": None, "couleur": None, "est_joker": True},
+        {"id": "rouge_12_a", "valeur": 12, "couleur": "rouge", "est_joker": False},
+        {"id": "noir_12_a", "valeur": 12, "couleur": "noir", "est_joker": False},
+    ]]
+    bot["chevalet"] = [
+        {"id": "bleu_11_a", "valeur": 11, "couleur": "bleu", "est_joker": False},
+        {"id": "bleu_12_a", "valeur": 12, "couleur": "bleu", "est_joker": False},
+        {"id": "bleu_13_a", "valeur": 13, "couleur": "bleu", "est_joker": False},
+    ]
+    return etat
+
+
+def test_expert_conserve_le_plateau_quand_la_mise_initiale_n_est_pas_faite():
+    """Avec un plateau non vide (posé par un autre joueur) et la mise
+    initiale pas encore faite, le solveur ne doit jamais faire disparaître
+    la combinaison déjà posée, même s'il ne peut légalement pas la
+    toucher (règle du jeu : interdiction de retoucher le plateau avant sa
+    propre mise initiale) — et le nombre total de tuiles doit être
+    conservé (plateau + main restante == plateau + main de départ)."""
+    etat = _etat_plateau_non_vide_sans_mise_initiale("Expert")
+    bot = etat["joueurs"][1]
+    ids_avant = ({tt["id"] for combo in etat["plateau"] for tt in combo}
+                | {tt["id"] for tt in bot["chevalet"]})
+
+    coup = jouer_niveau_expert(etat, 1)
+    assert coup["action"] == "jouer"
+
+    nouveau_plateau = [[tuile_depuis_dict(d) for d in c]
+                       for c in coup["nouveau_plateau"]]
+    assert valider_plateau(nouveau_plateau)["valide"]
+
+    combos_ids = [{tt.id for tt in combo} for combo in nouveau_plateau]
+    assert {"joker_1", "rouge_12_a", "noir_12_a"} in combos_ids, \
+        "la combinaison déjà posée a disparu du plateau (#187)"
+
+    ids_apres = ({tt.id for combo in nouveau_plateau for tt in combo}
+                | ({tt["id"] for tt in bot["chevalet"]}
+                   - set(coup["ids_tuiles"])))
+    assert ids_apres == ids_avant, "des tuiles ont disparu (ou sont apparues)"
+
+    # Le coup doit aussi passer le garde-fou central de jouer_tour (#187).
+    from rummikub.moteur.partie import jouer_tour
+    res = jouer_tour(etat, coup["ids_tuiles"], coup["nouveau_plateau"])
+    assert res["ok"], res.get("erreur")
+
+
+def test_expert_conserve_plusieurs_combinaisons_du_plateau_sans_mise_initiale():
+    """Comme ci-dessus, mais avec PLUSIEURS combinaisons déjà présentes sur
+    le plateau : aucune ne doit disparaître ni être altérée."""
+    etat = _partie_2j("Expert")
+    etat["index_joueur_actuel"] = 1
+    bot = etat["joueurs"][1]
+    bot["mise_initiale_faite"] = False
+    combo1 = [
+        {"id": "joker_1", "valeur": None, "couleur": None, "est_joker": True},
+        {"id": "rouge_12_a", "valeur": 12, "couleur": "rouge", "est_joker": False},
+        {"id": "noir_12_a", "valeur": 12, "couleur": "noir", "est_joker": False},
+    ]
+    combo2 = [
+        {"id": "jaune_1_a", "valeur": 1, "couleur": "jaune", "est_joker": False},
+        {"id": "jaune_2_a", "valeur": 2, "couleur": "jaune", "est_joker": False},
+        {"id": "jaune_3_a", "valeur": 3, "couleur": "jaune", "est_joker": False},
+        {"id": "jaune_4_a", "valeur": 4, "couleur": "jaune", "est_joker": False},
+    ]
+    etat["plateau"] = [combo1, combo2]
+    bot["chevalet"] = [
+        {"id": "bleu_11_a", "valeur": 11, "couleur": "bleu", "est_joker": False},
+        {"id": "bleu_12_a", "valeur": 12, "couleur": "bleu", "est_joker": False},
+        {"id": "bleu_13_a", "valeur": 13, "couleur": "bleu", "est_joker": False},
+    ]
+    ids_avant = ({tt["id"] for tt in combo1} | {tt["id"] for tt in combo2}
+                | {tt["id"] for tt in bot["chevalet"]})
+
+    coup = jouer_niveau_expert(etat, 1)
+    assert coup["action"] == "jouer"
+
+    nouveau_plateau = [[tuile_depuis_dict(d) for d in c]
+                       for c in coup["nouveau_plateau"]]
+    combos_ids = [{tt.id for tt in combo} for combo in nouveau_plateau]
+    assert {"joker_1", "rouge_12_a", "noir_12_a"} in combos_ids
+    assert {"jaune_1_a", "jaune_2_a", "jaune_3_a", "jaune_4_a"} in combos_ids
+
+    ids_apres = ({tt.id for combo in nouveau_plateau for tt in combo}
+                | ({tt["id"] for tt in bot["chevalet"]}
+                   - set(coup["ids_tuiles"])))
+    assert ids_apres == ids_avant

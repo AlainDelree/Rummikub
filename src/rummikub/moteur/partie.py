@@ -163,6 +163,19 @@ def jouer_tour(etat: dict,
                 + " ; ".join(validation["erreurs"]),
                 "combos_invalides": validation["combos_invalides"]}
 
+    # 2bis. Garde-fou (#187) : aucune tuile déjà posée sur le plateau en
+    # début de tour ne peut disparaître (elle peut changer de combinaison,
+    # jamais être perdue) — contrôle central, valable pour un coup humain
+    # comme pour n'importe quel niveau d'IA, présent ou futur.
+    ids_avant = {t["id"] for combo in etat.get("plateau", []) for t in combo}
+    ids_apres = {t.id for combo in plateau for t in combo}
+    ids_disparues = ids_avant - ids_apres
+    if ids_disparues:
+        return {"ok": False, "erreur":
+                "Coup refusé : des tuiles du plateau ont disparu ("
+                + ", ".join(sorted(ids_disparues)) + ")",
+                "tuiles_disparues": sorted(ids_disparues)}
+
     joueur = etat["joueurs"][etat["index_joueur_actuel"]]
     ids_posees = set(ids_tuiles_posees)
 

@@ -119,3 +119,39 @@ def test_annuler_tour():
     piocher(etat, 3)
     annuler_tour(etat)
     assert len(etat["joueurs"][0]["chevalet"]) == nb_avant
+
+
+def test_jouer_tour_refuse_si_des_tuiles_du_plateau_disparaissent():
+    """Issue #187 : jouer_tour doit refuser tout coup dont le plateau
+    résultant ne contient plus toutes les tuiles présentes en début de
+    tour, même si chaque combinaison proposée est individuellement valide
+    (ex. une combinaison déjà posée, amputée par erreur du plateau
+    résultant)."""
+    etat = creer_partie(
+        [{"nom": "A", "est_ia": False}, {"nom": "B", "est_ia": True, "niveau": "Facile"}],
+        {"nb_manches": 1, "valeur_joker_penalite": 30, "mise_initiale_min": 30})
+    combo_a = [t(5, "rouge"), t(6, "rouge"), t(7, "rouge")]
+    combo_b = [t(7, "bleu"), t(7, "jaune"), t(7, "noir")]
+    etat["plateau"] = [[x.as_dict() for x in combo_a],
+                       [x.as_dict() for x in combo_b]]
+    etat["index_joueur_actuel"] = 0
+    etat["joueurs"][0]["mise_initiale_faite"] = True
+    etat["joueurs"][0]["chevalet"] = [t(1, "noir").as_dict(),
+                                      t(2, "noir").as_dict(),
+                                      t(3, "noir").as_dict()]
+
+    # Plateau proposé : combo_a conservée, mais combo_b a disparu (remplacée
+    # par une nouvelle combinaison valide formée depuis la main seule) —
+    # exactement le symptôme du bug #187 (coup individuellement valide,
+    # mais qui perd des tuiles déjà posées).
+    nouveau_plateau = [[x.as_dict() for x in combo_a],
+                       [t(1, "noir").as_dict(), t(2, "noir").as_dict(),
+                        t(3, "noir").as_dict()]]
+    res = jouer_tour(etat, ["noir_1_a", "noir_2_a", "noir_3_a"], nouveau_plateau)
+
+    assert res["ok"] is False
+    assert "disparu" in res["erreur"]
+    assert set(res["tuiles_disparues"]) == {"bleu_7_a", "jaune_7_a", "noir_7_a"}
+    # Le plateau d'origine ne doit pas avoir été modifié par le coup refusé.
+    assert etat["plateau"] == [[x.as_dict() for x in combo_a],
+                               [x.as_dict() for x in combo_b]]
