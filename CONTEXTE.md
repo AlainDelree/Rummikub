@@ -1023,6 +1023,111 @@ au moteur) :
   précède la plus ancienne ; un nom hors format est exclu dès qu'un filtre
   est demandé.
 
+### 11quinquies. Compter les tuiles RÉELLEMENT posées depuis la main, pas les tuiles déplacées (issue #201, suite de #193)
+
+**Bug corrigé** : pour un coup HUMAIN, `data["ids_tuiles"]` envoyé par
+`jeu.js` (variable `tuilesCeTour`, voir `jeu.js:prendreTuileTapis`) mélange
+les tuiles venues de la main ET celles du plateau déplacées pendant le
+tour (le jeu s'en sert pour colorer « tuile du tapis déplacée ce tour »,
+pas pour compter ce qui a été posé). Avant #201, `ui/api.py:jeu_jouer_coup`
+journalisait `nb_tuiles_posees = len(data["ids_tuiles"])` : pour un coup
+humain qui déplace des tuiles déjà posées, ce compte était donc GONFLÉ par
+rapport au nombre réel de tuiles sorties de la main — faussant, dans
+`persistance/coups_rates.py`, les listes « solveur battu », les poses
+sous-optimales (masquées par l'inflation) et les statistiques de style
+d'`--joueur` (cas réel observé : `posé 18, solveur 7`, alors que la
+description du coup montrait 4 tuiles réellement sorties de la main). Pour
+une IA, `ids_tuiles` vient du solveur (`moteur/solveur.py::resoudre_coup`,
+qui le nomme explicitement `ids_main`) et ne contient JAMAIS de tuile
+déplacée : son compte n'a jamais été affecté.
+
+- **Analyse corrigée à la source** (`extraire_toutes_decisions`, qui
+  alimente TOUTE l'analyse de #193/#196/#198 ci-dessus, IA comme humain) :
+  `nb_tuiles_jouees` n'est plus lu depuis le champ `nb_tuiles_posees` du
+  journal, mais calculé comme `len(ids_tuiles_reelles)` — la différence
+  entre la main d'avant et la main d'après le coup, déjà calculée pour
+  `ids_tuiles_reelles` (utilisée par `detecter_reserves_joueur`). Ce calcul
+  corrige AUSSI les journaux ANCIENS (écrits avant la correction du journal
+  ci-dessous) : il ne dépend jamais du champ `nb_tuiles_posees`/
+  `nb_tuiles_deplacees` du journal, seulement des deux instantanés de main
+  déjà présents dans tout journal post-#185. Une seule fonction corrigée
+  répare donc, en cascade, `analyser_decision_complete` (détection
+  `joueur_bat_solveur`/`pose_sous_optimale`), `resume_joueur_humain`
+  (statistiques de style), `detecter_reserves_joueur`, et
+  `_enregistrer_cas_reference` (`attendu_min_tuiles` des cas humains).
+- **Journal corrigé** (`ui/api.py:jeu_jouer_coup`, `persistance/journal.py`)
+  : capture la main du joueur AVANT d'appeler `jouer_tour` (qui la mute en
+  place), puis journalise dans `nb_tuiles_posees` le nombre de tuiles de
+  `ids_tuiles` réellement présentes dans cette main d'avant, et dans la
+  nouvelle clé `nb_tuiles_deplacees` le reste (tuiles du plateau déplacées
+  sans venir de la main). `logger_action` accepte le nouveau paramètre
+  `nb_tuiles_deplacees` (défaut 0, rétrocompatible) ; un journal écrit avant
+  #201 n'a simplement pas cette clé (lue comme 0 par convention, mais en
+  pratique AUCUN lecteur ne s'appuie sur elle — voir point suivant).
+  `ui/api.py:jeu_ia_jouer` (coup d'IA) reste inchangé : son calcul
+  (`len(res_ia["ids_tuiles"])`) était déjà correct.
+- **Autres lecteurs de `nb_tuiles_posees` vérifiés** : `persistance/bilan.py
+  :extraire_partie` recopie ce champ dans `decisions[i]["nb_tuiles_posees"]`
+  mais ne s'en sert JAMAIS dans `calculer_bilan`/`_finaliser` (seuls
+  `action`/`moment` sont lus) — aucune adaptation nécessaire. Les deux
+  vérifications `(a.get("nb_tuiles_posees") or 0) > 0` de
+  `extraire_decisions_ia`/`extraire_toutes_decisions` (détection de
+  « mise initiale déjà faite ») restent correctes : une pose RÉUSSIE
+  implique toujours que `jouer_tour` a validé la mise initiale (ou qu'elle
+  l'était déjà), donc `ids_tuiles` — gonflé ou non — y est toujours non vide ;
+  ces vérifications ne portent que sur la présence d'une pose antérieure,
+  jamais sur son nombre exact.
+- **Usage de `ids_tuiles` par le moteur, VÉRIFIÉ, NON MODIFIÉ** (point 3 de
+  l'issue — `moteur/partie.py`) : `jouer_tour(etat, ids_tuiles_posees,
+  nouveau_plateau)` ne fait AUCUNE hypothèse sur l'origine des ids reçus.
+  Étape 4 (retrait du chevalet) filtre `chevalet` par appartenance à
+  `ids_posees` : un id qui n'est pas dans le chevalet (tuile déplacée, pas
+  posée) n'y correspond simplement à rien et ne cause aucun effet. Étape 3
+  (`_points_tuiles_posees(plateau, ids_posees)`, calcul des points de la
+  MISE INITIALE) additionne la valeur de CHAQUE id de `ids_posees` trouvé
+  dans une combinaison valide du nouveau plateau — **y compris un id de
+  tuile DÉPLACÉE, pas posée depuis la main** : si un joueur n'ayant pas
+  encore fait sa mise initiale rearrange des combinaisons déjà présentes
+  sur le plateau (posées par d'autres joueurs lors de tours précédents) en
+  y ajoutant peu de valeur depuis sa main, les points des tuiles déplacées
+  s'additionnent À TORT à ceux de ses propres tuiles pour juger s'il
+  atteint le minimum requis. **Signalé ici comme un bug potentiel de la
+  RÈGLE DE MISE INITIALE** (distinct du bug de journalisation corrigé
+  ci-dessus), mais PAS corrigé dans cette issue : son périmètre est
+  volontairement limité à l'analyse/au journal (voir consigne de l'issue —
+  « ne rien modifier au comportement du jeu sauf bug évident ») ; il
+  nécessite d'exposer au moteur une distinction main/plateau que
+  `jeu_jouer_coup` calcule désormais (`ids_main_avant`, voir ci-dessus) mais
+  ne transmet pas à `jouer_tour`, qui continue de recevoir la liste brute
+  `ids_tuiles` — à traiter dans une future issue dédiée si Alain le
+  confirme. En pratique rare : il faut qu'un joueur n'ayant pas encore posé
+  choisisse de manipuler le plateau plutôt que de simplement poser depuis
+  sa main.
+- **Cas de référence humains régénérables** (`--ecraser` du script,
+  `_enregistrer_cas_reference(..., ecraser=False)`) : le comportement par
+  défaut (ne jamais écraser un fichier `cas_expert_*.json` existant) est
+  conservé ; la nouvelle option `--ecraser` lève ce garde-fou pour
+  régénérer `tests/donnees/cas_expert_humain_*.json` (dont les trois
+  fichiers déjà présents portent l'ancien `attendu_min_tuiles` gonflé,
+  jamais vérifié par un test automatisé — voir `test_ia.py`, liste
+  paramétrée de non-régression #199, qui n'utilise que `etat`/`idx` de ces
+  fichiers, jamais leur `attendu_min_tuiles`). Marche à suivre pour Alain
+  (hors de ce worktree, sur les vrais journaux de `RACINE_DATA/logs_parties`
+  — absents de ce worktree isolé, voir note de #193 ci-dessus) :
+  `python scripts/analyser_coups_rates.py --tous --joueur "Alain"
+  --enregistrer-cas-reference --ecraser`. Le solveur n'est jamais modifié.
+- Tests : `tests/test_coups_rates_tuiles_main.py` (nouveau fichier) —
+  reproduit le cas réel (journal `nb_tuiles_posees=18`, main qui ne perd
+  que 4 tuiles) et vérifie que l'analyse compte 4 et classe le coup en
+  `pose_sous_optimale` (jamais `joueur_bat_solveur`, contrairement à ce que
+  le champ gonflé aurait produit) ; un journal ANCIEN sans `nb_tuiles_posees`
+  ni `nb_tuiles_deplacees` reste lisible ; un journal d'IA cohérent où le
+  nombre recalculé coïncide avec le champ du journal.
+  `tests/test_api_journal.py` (nouveau fichier) — appelle réellement
+  `Api.jeu_jouer_coup` sur un coup qui fusionne deux combinaisons déjà
+  posées (3 tuiles déplacées) en y ajoutant 1 tuile de la main, et vérifie
+  que le journal écrit porte `nb_tuiles_posees=1`, `nb_tuiles_deplacees=3`.
+
 ## 12. Rendre lisible un coup complexe de l'IA (issue #189, puis #191)
 
 Depuis le solveur de réarrangement global (#186), un coup de l'IA peut

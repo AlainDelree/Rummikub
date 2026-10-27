@@ -300,6 +300,43 @@ def top_coups_rates(resultats: list, n: int = 5) -> list:
 # raté/une pose sous-optimale (point 2 de l'issue).
 BUDGETS_SERIE_DEFAUT = (1.5, 3.0, 6.0, 10.0, 20.0, 30.0)
 
+# =========================================================================== #
+# Issue #201 (suite de #193) : compter les tuiles RÉELLEMENT posées depuis
+# la main, pas les tuiles déplacées.
+# =========================================================================== #
+#
+# Pour un coup HUMAIN, ``data["ids_tuiles"]`` envoyé par ``jeu.js`` (variable
+# ``tuilesCeTour``) mélange les tuiles venues de la main ET celles du plateau
+# déplacées pendant le tour sans venir de la main (voir
+# ``jeu.js:prendreTuileTapis``, qui alimente ``tuilesCeTour`` pour COLORER la
+# tuile, pas pour compter ce qui a été posé). Avant #201, ``ui/api.py``
+# journalisait ``nb_tuiles_posees = len(data["ids_tuiles"])`` : pour un coup
+# humain qui déplace des tuiles déjà posées, ce compte est donc GONFLÉ par
+# rapport au nombre réel de tuiles sorties de la main — faussant les listes
+# « solveur battu », les poses sous-optimales (masquées par l'inflation) et
+# les statistiques de style d'``--joueur``. Pour une IA, ``ids_tuiles`` ne
+# contient JAMAIS que des tuiles de la main (voir ``moteur/solveur.py``,
+# ``ids_main`` ; ``moteur/ia.py``) : son compte n'a jamais été affecté.
+#
+# Correctif (``extraire_toutes_decisions``, qui alimente TOUTE l'analyse
+# ci-dessous, IA comme humain) : ``nb_tuiles_jouees`` n'est plus lu depuis le
+# champ ``nb_tuiles_posees`` du journal, mais calculé comme
+# ``len(ids_tuiles_reelles)`` — la différence entre la main d'avant et la
+# main d'après le coup (déjà calculée pour ``ids_tuiles_reelles``, utilisée
+# pour la détection de la technique de la « réserve »). Ce calcul corrige
+# AUSSI les anciens journaux (écrits avant la correction de ``jeu_jouer_coup``
+# ci-dessous) : il ne dépend jamais du champ ``nb_tuiles_posees``/
+# ``nb_tuiles_deplacees`` du journal, seulement des deux instantanés de main
+# (avant/après) déjà présents dans tout journal post-#185.
+#
+# ``ui/api.py:jeu_jouer_coup`` est corrigé en parallèle (changement de
+# comportement du JOURNAL seulement, jamais du jeu) : il journalise
+# désormais dans ``nb_tuiles_posees`` le nombre de tuiles de ``ids_tuiles``
+# réellement présentes dans la main du joueur avant le coup, et le nombre de
+# tuiles déplacées dans ``nb_tuiles_deplacees`` — mais ce module ne lit
+# JAMAIS ces deux champs, précisément pour rester correct sur les journaux
+# déjà écrits avant ce correctif (qui ne portent pas ``nb_tuiles_deplacees``).
+
 
 # --------------------------------------------------------------------------- #
 # Description en français + complexité d'un coup (issue #196, suite de #193).
@@ -532,7 +569,17 @@ def extraire_toutes_decisions(data: dict, predicat_joueur) -> list:
             "niveau": joueurs[idx].get("niveau"),
             "nom": joueurs[idx].get("nom"),
             "action": action,
-            "nb_tuiles_jouees": actuelle.get("nb_tuiles_posees") or 0,
+            # Nombre de tuiles RÉELLEMENT sorties de la main (issue #201) :
+            # calculé à partir de la variation de la main (``ids_tuiles_reelles``
+            # ci-dessus), jamais depuis le champ ``nb_tuiles_posees`` du
+            # journal — qui, pour un coup HUMAIN écrit avant #201, comptait
+            # aussi les tuiles du plateau déplacées ce tour (voir
+            # ``ui/api.py:jeu_jouer_coup`` et sa docstring). Toujours 0 pour
+            # une pioche/passe (``ids_tuiles_reelles`` reste vide). Pour une
+            # IA, coïncide avec le champ du journal (``ids_tuiles`` du
+            # solveur ne contient jamais que des tuiles de la main) — voir
+            # test d'intégration dédié.
+            "nb_tuiles_jouees": len(ids_tuiles_reelles),
             "ids_tuiles_reelles": ids_tuiles_reelles,
             "plateau_apres_reel": plateau_apres_reel,
             "moment": "apres_mise" if mise_initiale_faite else "avant_mise",

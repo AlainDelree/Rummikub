@@ -75,6 +75,12 @@ class Api:
         if not self._tour_est_humain(etat):
             return {"ok": False, "erreur": "Pas votre tour"}
         idx = etat["index_joueur_actuel"]
+        # ``data["ids_tuiles"]`` (= ``tuilesCeTour`` côté JS) mélange les
+        # tuiles venues de la main ET celles du plateau déplacées ce tour
+        # (voir jeu.js:prendreTuileTapis) : capturer la main AVANT le coup
+        # (jouer_tour la mute en place) permet de les distinguer dans le
+        # journal (issue #201) sans changer le comportement du jeu.
+        ids_main_avant = {t["id"] for t in etat["joueurs"][idx]["chevalet"]}
         res = jouer_tour(etat, data["ids_tuiles"], data["nouveau_plateau"])
         if res["ok"]:
             self._app.etat_jeu = res["etat"]
@@ -82,8 +88,11 @@ class Api:
             from rummikub.persistance.stockage import sauvegarder_partie
             sauvegarder_partie(self._app.etat_jeu)
             from rummikub.persistance.journal import logger_action
+            ids_tuiles = set(data["ids_tuiles"])
+            nb_posees = len(ids_tuiles & ids_main_avant)
             logger_action(self._app.etat_jeu, "pose", auteur_index=idx,
-                         nb_tuiles_posees=len(data["ids_tuiles"]))
+                         nb_tuiles_posees=nb_posees,
+                         nb_tuiles_deplacees=len(ids_tuiles) - nb_posees)
         return res
 
     def jeu_piocher(self):

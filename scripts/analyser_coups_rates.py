@@ -46,6 +46,11 @@ Usage :
     python scripts/analyser_coups_rates.py --tous --joueur "Alain"
     python scripts/analyser_coups_rates.py --tous --depuis 20261001
 
+    # Régénérer les cas de référence humains (tests/donnees/cas_expert_humain_*.json)
+    # avec le bon attendu_min_tuiles, après la correction du comptage de #201 :
+    python scripts/analyser_coups_rates.py --tous --joueur "Alain" \
+        --enregistrer-cas-reference --ecraser
+
 Cette analyse ne modifie jamais l'IA ni le moteur : elle se limite à relire
 des journaux déjà écrits et à interroger le solveur en lecture pure.
 """
@@ -378,14 +383,20 @@ def _nom_fichier_cas(prefixe: str, fichier: str, tour) -> str:
 
 
 def _enregistrer_cas_reference(decision: dict, attendu_min_tuiles: int, prefixe: str,
-                               dossier: Path) -> Path:
+                               dossier: Path, ecraser: bool = False) -> Path:
     """Enregistre ``decision`` au même format que ``tests/donnees/
-    cas_expert_*.json`` (clé ``attendu_min_tuiles``), SANS JAMAIS écraser un
-    fichier existant (point 6 bis de l'issue #193). Retourne le chemin écrit,
-    ou ``None`` si un fichier de ce nom existait déjà."""
+    cas_expert_*.json`` (clé ``attendu_min_tuiles``), SANS écraser un fichier
+    existant PAR DÉFAUT (point 6 bis de l'issue #193) — ``ecraser=True``
+    (``--ecraser`` du script, issue #201) lève ce garde-fou, nécessaire pour
+    RÉGÉNÉRER un cas ``cas_expert_humain_*.json`` existant avec le bon
+    ``attendu_min_tuiles`` après la correction du comptage de #201 (ces
+    fichiers, enregistrés avant #201, portent l'ancien nombre gonflé — voir
+    la docstring de ``persistance/coups_rates.py``, section #201). Retourne
+    le chemin écrit, ou ``None`` si un fichier de ce nom existait déjà et
+    ``ecraser`` est resté à ``False``."""
     nom = _nom_fichier_cas(prefixe, decision["fichier"], decision["tour"])
     chemin = dossier / nom
-    if chemin.exists():
+    if chemin.exists() and not ecraser:
         return None
     data = {"idx": decision["idx"], "etat": decision["etat"],
             "attendu_min_tuiles": attendu_min_tuiles}
@@ -594,7 +605,17 @@ def main(argv=None) -> int:
                         help="Enregistre les coups ratés/poses sous-optimales (ou, avec "
                              "--joueur, les cas où le joueur bat le solveur) les plus "
                              "importants comme nouveaux fichiers tests/donnees/"
-                             "cas_expert_*.json (n'écrase jamais un fichier existant).")
+                             "cas_expert_*.json (n'écrase jamais un fichier existant, "
+                             "sauf --ecraser).")
+    parser.add_argument("--ecraser", action="store_true",
+                        help="(--enregistrer-cas-reference) Écrase un fichier "
+                             "cas_expert_*.json existant au lieu de le laisser intact "
+                             "(défaut : jamais). Sert à RÉGÉNÉRER les fichiers "
+                             "cas_expert_humain_*.json avec le bon attendu_min_tuiles "
+                             "après la correction du comptage de tuiles posées (issue "
+                             "#201) : lancer `--joueur <nom> --enregistrer-cas-reference "
+                             "--ecraser` avec --tous sur les mêmes journaux qui ont "
+                             "servi à produire les anciens fichiers.")
     parser.add_argument("--joueur", default=None,
                         help="Nom d'un joueur HUMAIN : applique la même analyse à ses "
                              "décisions plutôt qu'à celles d'une IA (point 6 ter).")
@@ -640,7 +661,8 @@ def main(argv=None) -> int:
                                key=lambda dr: dr[1]["nb_tuiles_excedentaires"], reverse=True)
             for d, r in candidats[:3]:
                 chemin = _enregistrer_cas_reference(
-                    d, r["nb_tuiles_reel"], "humain", _dossier_donnees_test())
+                    d, r["nb_tuiles_reel"], "humain", _dossier_donnees_test(),
+                    ecraser=args.ecraser)
                 if chemin:
                     print(f"Cas de référence enregistré : {chemin}", file=sys.stderr)
         print(AVERTISSEMENT)
@@ -716,7 +738,8 @@ def main(argv=None) -> int:
             if decision is None:
                 continue
             chemin_ecrit = _enregistrer_cas_reference(
-                decision, r["nb_tuiles_solveur"], "ia", _dossier_donnees_test())
+                decision, r["nb_tuiles_solveur"], "ia", _dossier_donnees_test(),
+                ecraser=args.ecraser)
             if chemin_ecrit:
                 print(f"Cas de référence enregistré : {chemin_ecrit}", file=sys.stderr)
 

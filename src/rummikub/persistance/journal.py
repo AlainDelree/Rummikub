@@ -25,7 +25,18 @@ Chaque entrée de ``actions`` porte, en plus des champs de débogage déjà
 existants (mains, plateau, pioche...) :
     ``auteur_index`` : index du joueur qui a pris la décision de ce tour.
     ``action`` : ``"pose"``, ``"pioche"``, ``"passe"`` ou ``"annulation"``.
-    ``nb_tuiles_posees`` : nombre de tuiles posées (0 sauf pour ``"pose"``).
+    ``nb_tuiles_posees`` : nombre de tuiles RÉELLEMENT sorties de la main du
+    joueur par cette décision (0 sauf pour ``"pose"`` — voir issue #201 :
+    avant ce correctif, ce champ comptait aussi les tuiles du plateau
+    déplacées ce tour pour un coup HUMAIN, ce qui le rendait supérieur au
+    nombre réel de tuiles posées depuis la main ; un coup d'IA n'a jamais
+    été affecté, ``ids_tuiles`` ne contenant pour elle que des tuiles de la
+    main — voir ``moteur/solveur.py``/``moteur/ia.py``).
+    ``nb_tuiles_deplacees`` : nombre de tuiles du plateau déplacées ce tour
+    sans venir de la main (0 sauf pour ``"pose"`` d'un joueur humain — champ
+    ajouté par #201, absent des journaux antérieurs : à lire comme 0 dans ce
+    cas, voir ``persistance/coups_rates.py`` qui ne s'appuie d'ailleurs
+    jamais sur ce champ, seulement sur la variation réelle de la main).
     ``termine`` : ``True`` si la partie est terminée après cette action.
     ``gagnant_index`` : index du gagnant de la manche si ``termine``, sinon
     ``None``.
@@ -116,7 +127,8 @@ def _creer_journal(etat: dict) -> dict:
 
 
 def logger_action(etat: dict, action: str, *,
-                   auteur_index: int = None, nb_tuiles_posees: int = 0) -> None:
+                   auteur_index: int = None, nb_tuiles_posees: int = 0,
+                   nb_tuiles_deplacees: int = 0) -> None:
     """Enregistre une action de jeu dans le journal de la partie courante.
 
     ``action`` : type de décision prise (``"pose"``, ``"pioche"``, ``"passe"``
@@ -124,8 +136,13 @@ def logger_action(etat: dict, action: str, *,
     ``auteur_index`` : index (dans ``etat["joueurs"]``) du joueur qui a pris
     cette décision — à distinguer de ``etat["index_joueur_actuel"]``, déjà
     avancé au joueur suivant au moment de l'appel.
-    ``nb_tuiles_posees`` : nombre de tuiles posées par cette décision (0 pour
-    ``"pioche"``/``"passe"``/``"annulation"``).
+    ``nb_tuiles_posees`` : nombre de tuiles RÉELLEMENT sorties de la main du
+    joueur par cette décision (0 pour ``"pioche"``/``"passe"``/``"annulation"``,
+    et pour une IA, dont ``ids_tuiles`` ne contient jamais que des tuiles de
+    la main — voir issue #201).
+    ``nb_tuiles_deplacees`` : nombre de tuiles du plateau déplacées (pas
+    posées) par cette même décision (0 sauf, potentiellement, pour une pose
+    humaine — voir ``ui/api.py:jeu_jouer_coup``).
 
     No-op immédiat si ``config.LOG_PARTIES`` est ``False``. Toute erreur d'écriture
     est silencieusement ignorée : le journal ne doit jamais interrompre le jeu.
@@ -147,6 +164,7 @@ def logger_action(etat: dict, action: str, *,
             "joueur_actuel": etat.get("index_joueur_actuel"),
             "auteur_index": auteur_index,
             "nb_tuiles_posees": nb_tuiles_posees,
+            "nb_tuiles_deplacees": nb_tuiles_deplacees,
             "termine": bool(etat.get("terminee")),
             "gagnant_index": etat.get("gagnant_manche_index"),
             "main_humain": _main_humain(etat),
