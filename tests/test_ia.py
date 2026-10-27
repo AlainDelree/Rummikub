@@ -1067,4 +1067,55 @@ def test_solveur_plateau_charge_trouve_un_coup_avec_budget_de_production():
     # ×6 ci-dessus protège le TEMPS de la mesure sur une machine lente,
     # pas la qualité attendue du résultat).
     assert len(coup["ids_tuiles"]) >= 3
+
+
+# --------------------------------------------------------------------------- #
+# Issue #194 (suite de #190) : plateau chargé (52 tuiles) où le coup
+# optimal à 3 tuiles exige d'enchaîner les reconfigurations à travers la
+# quasi-totalité du plateau (tour 57 de Bruno — voir ``tests/donnees/
+# cas_expert_bruno_tour57.json`` et le rapport de clôture #194 pour
+# l'analyse : avant #194, le solveur ne trouvait RIEN à 1,5 s/3 s, et
+# seulement 2 tuiles à 6 s ; il lui fallait 10 s pour atteindre 3 tuiles).
+# --------------------------------------------------------------------------- #
+
+def _charger_cas_bruno_tour57():
+    with open(_DONNEES / "cas_expert_bruno_tour57.json", encoding="utf-8") as f:
+        data = json.load(f)
+    return data["etat"], data["idx"], data["attendu_min_tuiles"]
+
+
+def test_solveur_cascade_joker_trouve_trois_tuiles_avec_gros_budget():
+    """Avec un budget confortable (10 s), le solveur doit trouver le coup à
+    3 tuiles de ce cas de référence (rouge_11_b, jaune_8_a, jaune_13_a),
+    sans jamais perdre de tuile du plateau — qu'il le trouve vite (nouvelle
+    stratégie, #194) ou lentement n'est pas ce que ce test vérifie (voir
+    ``test_solveur_cascade_joker_trouve_un_coup_avec_budget_de_production``
+    ci-dessous pour la vitesse)."""
+    etat, idx, attendu = _charger_cas_bruno_tour57()
+    coup = resoudre_coup(etat, idx, budget_temps=10.0)
+    assert coup is not None
+    assert coup["action"] == "jouer"
+    assert len(coup["ids_tuiles"]) >= attendu
+    _verifier_coup_valide_sans_perte(etat, idx, coup)
+
+
+def test_solveur_cascade_joker_trouve_un_coup_avec_budget_de_production():
+    """Avec le budget de production d'Expert, le solveur doit désormais
+    trouver le coup à 3 tuiles de ce cas (avant #194 : rien à 1,5 s, 2
+    tuiles seulement à 6 s). Tolérance de temps large (×6, comme pour le
+    cas #190 ci-dessus) pour ne pas échouer par hasard sur une machine de
+    CI nettement plus lente que celle utilisée pour mesurer la cible de
+    production (le solveur trouve ce coup en ~0,15 s en développement avec
+    la nouvelle stratégie, #194 — bien avant l'expiration même du seul
+    budget de production à 1,5 s)."""
+    etat, idx, attendu = _charger_cas_bruno_tour57()
+    budget_test = BUDGET_TEMPS_EXPERT * 6
+    coup = resoudre_coup(etat, idx, budget_temps=budget_test)
+    assert coup is not None, (
+        f"aucun coup trouvé même avec {budget_test} s (× 6 le budget de "
+        f"production de {BUDGET_TEMPS_EXPERT} s) — régression de vitesse "
+        f"du solveur sur ce plateau")
+    assert coup["action"] == "jouer"
+    assert len(coup["ids_tuiles"]) >= attendu
+    _verifier_coup_valide_sans_perte(etat, idx, coup)
     _verifier_coup_valide_sans_perte(etat, idx, coup)

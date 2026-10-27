@@ -348,12 +348,19 @@ def test_cas_reference_bruno_detecte_avec_budget_suffisant():
 
 
 def test_cas_reference_bruno_budget_trop_court_signale_inconclusif():
-    """Avec un budget délibérément trop court pour ce cas (voir l'issue :
-    non résolu à 1,5 s/3 s/6 s sur la machine de référence), l'outil ne doit
+    """Avec un budget délibérément trop court pour ce cas, l'outil ne doit
     JAMAIS conclure « pas de coup raté » — seulement « inconclusif », pour
-    ne pas sous-compter les coups ratés à tort (point 3 de l'issue)."""
+    ne pas sous-compter les coups ratés à tort (point 3 de l'issue #193).
+    Budget nul (et non plus 0,05 s) : depuis la nouvelle stratégie de
+    recherche du solveur (#194, paliers croissants + réordonnancement par
+    valeur), ce cas de référence précis est désormais résolu en ~0,1 s —
+    bien plus rapide qu'avant #194 (6 à 10 s) —, donc tout budget non nul,
+    même minuscule, suffirait maintenant à le résoudre. Un budget nul
+    déclenche la vérification dès le premier appel (voir
+    ``solveur._Contexte.verifier_budget``), ce qui reste robuste à la
+    vitesse de la machine."""
     decision, _ = _decision_bruno_pose_une_tuile()
-    r = CR.analyser_decision_complete(decision, budget_genereux=0.05)
+    r = CR.analyser_decision_complete(decision, budget_genereux=0.0)
     assert r["inconclusif"] is True
     assert r["pose_sous_optimale"] is False
     assert r["coup_rate"] is False

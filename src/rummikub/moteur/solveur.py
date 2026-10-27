@@ -117,7 +117,21 @@ _COULEUR_IDX = {c: i for i, c in enumerate(COULEURS)}
 
 
 def _ordre_slot(slot):
-    return (_COULEUR_IDX[slot[0]], slot[1])
+    """Ordre de visite des emplacements obligatoires (#194, voir rapport de
+    clôture) : par VALEUR d'abord, puis par couleur — pas l'inverse. Un
+    groupe réunit plusieurs couleurs à la MÊME valeur ; visiter TOUTES les
+    valeurs d'UNE SEULE couleur avant de passer à la couleur suivante (ordre
+    d'origine) force la recherche à épuiser tout un bloc de couleur —
+    souvent très combinatoire dès que cette couleur est partagée avec la
+    main (voir ``_calculer_restrictions``) — avant même d'atteindre un
+    groupe qui n'a besoin que d'UNE tuile de la main pour une couleur
+    totalement différente (ex. compléter un groupe de 3 en 4 avec la
+    couleur manquante). Visiter par valeur croissante atteint ces groupes
+    dès que leur valeur revient, sans attendre d'avoir fini les autres
+    couleurs — un coup simple à 1 ou 2 tuiles est alors trouvé, et le
+    palier correspondant (voir ``_Contexte.objectif``) coupe la recherche,
+    au lieu de la laisser retomber dans le bloc de couleur combinatoire."""
+    return (slot[1], _COULEUR_IDX[slot[0]])
 
 
 def _construire_etat(plateau, chevalet):
@@ -342,7 +356,8 @@ def _appliquer(comptes, jokers, cand):
 # --------------------------------------------------------------------------- #
 
 class _Contexte:
-    def __init__(self, budget_temps, cle=lambda v: v, signatures_originales=frozenset()):
+    def __init__(self, budget_temps, cle=lambda v: v, signatures_originales=frozenset(),
+                 objectif=None):
         self.limite = time.monotonic() + budget_temps
         self.appels = 0
         self.memo = {}
@@ -351,6 +366,14 @@ class _Contexte:
         # posées sur le plateau avant ce tour — utilisées pour prioriser les
         # candidats ex-aequo sur ``_score_rapide`` (voir ``_resoudre``).
         self.signatures_originales = signatures_originales
+        # Palier visé (#194, voir ``_meilleur_rearrangement``) : dès qu'une
+        # branche atteint ce nombre de tuiles du chevalet (peu importe où
+        # dans l'arbre), il est inutile de continuer à chercher MIEUX pour
+        # CETTE passe — seule l'existence d'un coup à ``objectif`` tuiles
+        # est en jeu, pas son optimalité. ``None`` désactive ce
+        # raccourci (comportement d'origine : seul le plafond optimiste
+        # local coupe la recherche).
+        self.objectif = objectif
 
     def verifier_budget(self):
         self.appels += 1
@@ -398,6 +421,18 @@ def _main_disponible(comptes, jokers):
     return total
 
 
+def _seuil_atteint(valeur, plafond, objectif):
+    """Vrai si ``valeur`` (nombre de tuiles du chevalet déjà posées dans
+    CETTE sous-arborescence) ne peut/doit plus être amélioré : soit le
+    plafond optimiste local est atteint (aucune branche ne peut faire
+    mieux, comportement d'origine), soit le palier visé par la passe en
+    cours l'est (voir ``_Contexte.objectif``) — dans ce second cas, une
+    branche MEILLEURE pourrait exister ailleurs dans l'arbre, mais cette
+    passe ne cherche qu'à prouver qu'au moins ``objectif`` tuiles sont
+    posables, pas à trouver l'optimum."""
+    return valeur[0] >= plafond or (objectif is not None and valeur[0] >= objectif)
+
+
 def _resoudre(comptes, jokers, ctx):
     ctx.verifier_budget()
     etat = _snapshot(comptes, jokers)
@@ -423,6 +458,12 @@ def _resoudre(comptes, jokers, ctx):
             del comptes_sans[info]
             sous = _resoudre(comptes_sans, jokers, ctx)
         meilleur = sous
+        if _seuil_atteint(meilleur[0], plafond, ctx.objectif):
+            # Le palier visé (ou le plafond local) est déjà atteint sans
+            # même tenter de poser cette ressource — inutile de générer les
+            # candidats de ce nœud (voir #194).
+            ctx.memo[etat] = meilleur
+            return meilleur
 
     if nature == "slot":
         couleur, valeur = info
@@ -448,8 +489,8 @@ def _resoudre(comptes, jokers, ctx):
                    reverse=True)
 
     for cand in candidats:
-        if meilleur is not None and meilleur[0][0] >= plafond:
-            break  # aucune autre branche ne peut faire mieux (borne atteinte)
+        if meilleur is not None and _seuil_atteint(meilleur[0], plafond, ctx.objectif):
+            break  # aucune autre branche ne peut/ne doit faire mieux
         nouveaux_comptes, nouveaux_jokers, gain = _appliquer(comptes, jokers, cand)
         try:
             sous = _resoudre(nouveaux_comptes, nouveaux_jokers, ctx)
@@ -597,17 +638,50 @@ def _meilleur_rearrangement(plateau, chevalet, budget_temps, mise_min=None,
     insuffisants (< ``mise_min``), une seconde passe maximisant les points —
     seule façon d'ouvrir quand le réarrangement le plus large ne couvre pas
     la mise initiale (voir docstring du module : limite documentée, pas
-    nécessairement l'optimum exact sous cette contrainte)."""
+    nécessairement l'optimum exact sous cette contrainte).
+
+    La passe principale (nombre de tuiles) procède par PALIERS croissants
+    (#194, voir ``_Contexte.objectif`` et ``_seuil_atteint``) : elle cherche
+    d'abord « au moins 1 tuile posable », puis, si trouvé, « au moins 2 »,
+    etc. Sur un plateau chargé où prouver l'OPTIMUM exact prend plusieurs
+    secondes, chaque palier intermédiaire coupe la recherche dès qu'IL est
+    atteint n'importe où dans l'arbre (pas seulement au plafond optimiste
+    global) — beaucoup moins coûteux que de prouver qu'aucun réarrangement
+    ne fait mieux. Si le budget s'épuise en cours de palier, le dernier
+    palier PROUVÉ atteignable est renvoyé (recherche interrompue mais pas
+    perdue) plutôt que de tout perdre comme le ferait une passe unique sans
+    palier (voir rapport de clôture #194). Tant que tous les paliers jusqu'au
+    plafond optimiste aboutissent dans le budget, le dernier palier est
+    strictement équivalent à l'ancienne passe unique (même résultat, même
+    départage) : les conditions de coupure supplémentaires ne déclenchent
+    jamais plus tôt que le plafond optimiste local à ce palier-là."""
     comptes, jokers = _construire_etat(plateau, chevalet)
     signatures = _signatures_originales(plateau)
     limite = time.monotonic() + budget_temps
 
-    def passe(cle):
+    def passe(cle, objectif=None):
         ctx = _Contexte(max(0.0, limite - time.monotonic()), cle=cle,
-                        signatures_originales=signatures)
+                        signatures_originales=signatures, objectif=objectif)
         return _resoudre(comptes, jokers, ctx)
 
-    resultat = passe(lambda v: v)
+    meilleur = None
+    k = 1
+    plafond_total = _main_disponible(comptes, jokers)
+    while k <= plafond_total:
+        try:
+            r = passe(lambda v: v, objectif=k)
+        except BudgetDepasse:
+            if meilleur is None:
+                raise
+            break
+        if r is None or r[0][0] < k:
+            # Palier k prouvé hors de portée (recherche exhaustive, pas un
+            # abandon par budget) : le dernier palier atteint est l'optimum.
+            break
+        meilleur = r
+        k = r[0][0] + 1
+
+    resultat = meilleur
     if mise_min is not None and resultat is not None and resultat[0][1] < mise_min \
             and deux_passes:
         resultat_points = passe(lambda v: (v[1], v[0], v[2]))
