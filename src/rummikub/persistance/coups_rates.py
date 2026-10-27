@@ -661,7 +661,23 @@ def analyser_decision_complete(decision: dict, budget_genereux: float = 10.0,
     ids_solveur = sorted(coup["ids_tuiles"]) if coup else []
 
     action = decision["action"]
-    nb_reel = decision.get("nb_tuiles_jouees", 0) if action == "pose" else 0
+    # Issue #200 : ``nb_tuiles_jouees`` (``nb_tuiles_posees`` du journal, voir
+    # ``ui/api.py::jeu_jouer_coup``) compte la longueur BRUTE de la liste
+    # d'ids envoyée par le client JS pour une pose humaine — elle peut
+    # dépasser la taille réelle du chevalet d'avant-coup (bug de comptage
+    # côté IHM, pas une violation des règles : ``jouer_tour`` ne retire
+    # jamais du chevalet que les ids qui y figurent réellement, via un
+    # ``set()``). ``ids_tuiles_reelles`` (calculé juste au-dessus, par
+    # différence entre le chevalet d'avant et celui d'après la pose) est la
+    # mesure fiable — bornée par construction par la taille du chevalet
+    # d'avant-coup — et sert déjà de référence à ``detecter_reserves_joueur``.
+    # Avant ce correctif, trois cas de référence humains
+    # (``tests/donnees/cas_expert_humain_*.json``) enregistraient un
+    # ``attendu_min_tuiles`` supérieur au nombre de tuiles du chevalet
+    # capturé — cible physiquement impossible pour le solveur, qui ne peut
+    # jamais poser plus de tuiles que le chevalet n'en contient (voir le
+    # rapport de clôture #200, pas une incomplétude du solveur).
+    nb_reel = len(decision.get("ids_tuiles_reelles") or []) if action == "pose" else 0
     ecart = None if inconclusif else nb_solveur - nb_reel
 
     coup_rate = (not inconclusif) and action in ("pioche", "passe") and nb_solveur > 0
