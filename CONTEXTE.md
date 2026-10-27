@@ -1007,6 +1007,75 @@ position d'après.
   bonnes couleurs de pourtour, l'absence de tuile commune cadre/plateau à
   chaque étape, et que « Quitter » ne modifie rien.
 
+### 12bis. Tuiles identiques interchangeables (issue #197)
+
+Le jeu contient deux exemplaires de chaque tuile (même valeur/couleur). Le
+suivi tuile-par-tuile de `description_coup.py` (§12), qui identifie chaque
+tuile par son identifiant individuel, prenait littéralement « la tuile A
+sort, la tuile B entre » comme un changement réel même quand A et B sont
+visuellement indiscernables — bruit supplémentaire dans le pas-à-pas, et
+**plantage réel en jeu** (`KeyError` sur `del cadre[...]`, une tuile libérée
+par un échange annulé n'étant jamais déposée dans le cadre avant d'être
+consommée ailleurs).
+
+- **Séparation bookkeeping/affichage** (`_retrait_ajout_bruts` +
+  `_annuler_par_aspect`, dans `_construire_operations`) : pour chaque
+  continuation ("update"), les tuiles RÉELLEMENT parties/arrivées
+  (`retirees`/`ajoutees`, par identifiant — toujours utilisées pour le
+  cadre et le graphe de dépendances, donc JAMAIS d'exception) sont
+  distinctes des tuiles À AFFICHER (`retirees_vues`/`ajoutees_vues` —
+  réduites en annulant deux à deux une tuile partie et une tuile arrivée de
+  même aspect, `_aspect()` : même valeur/couleur, ou n'importe quel joker).
+  Une opération dont les deux listes "vues" sont vides est ajoutée au
+  cadre/plateau comme d'habitude mais n'affiche AUCUNE étape
+  (`etapes_coup_ia`) et ne compte dans aucun total (`decrire_coup_ia`,
+  `_desc_fabrique`, `_jokers_deplaces`) — couvre l'échange dans une même
+  combinaison (point 1), une tuile de la main identique à une tuile du
+  plateau qui se déplace (point 2 : les deux « tuiles » s'annulent au sein
+  d'une même opération), et deux jokers qui se remplacent dans une même
+  combinaison (point 3, premier cas — `_jokers_deplaces` ne considère un
+  joker comme déplacé que s'il figure dans `retirees_vues` de sa propre
+  opération, jamais via `libere` brut).
+- **Échange cyclique entre deux combinaisons** (`_composantes_fortement_
+  connexes` — Tarjan, puis `_detecter_blocs_silencieux`) : quand deux
+  combinaisons s'échangent leurs tuiles (chacune a besoin d'une tuile
+  libérée par l'autre), le graphe de dépendances causales a un cycle
+  strict, impossible à sérialiser normalement — **c'est le cas réel qui
+  faisait planter le jeu**. Un cycle où TOUTES les opérations impliquées
+  sont des "update" entièrement invisibles est traité comme un seul
+  **bloc** : le tri topologique le place comme une unité, et
+  `etapes_coup_ia` applique en un seul geste toutes les tuiles libérées du
+  bloc au cadre, PUIS toutes les tuiles consommées du bloc, sans jamais
+  dépendre de l'ordre interne entre ses membres. Un cycle qui ne qualifie
+  pas (un "retrait"/"create" dedans, ou une "update" partiellement
+  visible) reste sur le repli pré-existant (ordre arbitraire) — cas
+  extrême resté hors de portée, jamais rencontré avec un coup réellement
+  joué.
+- **Repli d'urgence déjà en place côté `ui/api.py`** (`jeu_ia_jouer`,
+  issue #196) : si malgré tout `decrire_coup_ia`/`etapes_coup_ia` levaient
+  une exception, le tour de l'IA n'est jamais bloqué — résumé/étapes vides,
+  et les deux plateaux sont sauvegardés dans
+  `RACINE_DATA/erreurs_description/<horodatage>.json`
+  (`{"erreur", "plateau_avant", "plateau_apres"}`) pour reproduire le cas.
+  `tests/donnees/erreur_description_20261027_115033.json` est un exemple
+  réel ainsi capturé (le `KeyError: 'jaune_3_a'` ci-dessus), rejoué dans
+  `tests/test_description_coup.py` comme test de non-régression.
+- **Complexité des coups ratés** (`persistance/coups_rates.py`,
+  `_complexite_coup`) : réutilise tel quel `decrire_coup_ia`/
+  `etapes_coup_ia` corrigés — un échange de tuiles identiques n'est donc
+  plus compté dans `nb_combinaisons_touchees` ni `nb_etapes`, sans
+  changement de code dans `coups_rates.py` lui-même.
+- **Tests** (`tests/test_description_coup.py`) : échange main/plateau dans
+  une même combinaison, échange cyclique entre deux combinaisons (sans
+  autre changement), régression bout en bout sur le cas réel ayant
+  planté, deux jokers (un remplacé par l'autre dans une même combinaison —
+  pas un déplacement — et un second qui change réellement de combinaison
+  — reste un déplacement). `tests/test_coups_rates_description.py` : un
+  échange de tuiles identiques, seul changement d'un coup, est classé
+  "simple" (0 combinaison touchée, 0 étape). Les cas déjà couverts avant
+  #197 (chaîne Bruno/Expert, échange de joker, démantèlement de groupe)
+  gardent EXACTEMENT le même nombre d'étapes qu'avant (pas de régression).
+
 ## 13. Pistes d'amélioration de l'IA à tester (issue #195)
 
 Idées formulées par Alain au fil des parties de calibrage contre Expert,

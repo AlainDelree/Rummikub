@@ -258,3 +258,29 @@ def test_decrire_coup_sur_cas_reference_bruno_ne_plante_pas():
     assert description["texte"]
     assert description["complexite"]["nb_combinaisons_touchees"] >= 3
     assert description["complexite"]["categorie"] == "complexe"
+
+
+def test_complexite_ignore_un_echange_de_tuiles_identiques():
+    """Point 5 de l'issue #197 : ``decrire_coup`` réutilise tel quel
+    ``moteur/description_coup.py`` corrigé, donc un échange de tuiles
+    identiques (même valeur/couleur) ne compte ni comme une combinaison
+    touchée, ni comme une étape du rejeu — un coup qui ne fait QUE cet
+    échange, sans rien poser de plus, est classé "simple"."""
+    avant = [
+        [_tuile("jaune_1_a", 1, "jaune"), _tuile("jaune_2_a", 2, "jaune"),
+         _tuile("jaune_3_a", 3, "jaune")],
+        [_tuile("jaune_3_b", 3, "jaune"), _tuile("noir_3_a", 3, "noir"),
+         _tuile("bleu_3_a", 3, "bleu")],
+    ]
+    apres = [
+        [_tuile("jaune_1_a", 1, "jaune"), _tuile("jaune_2_a", 2, "jaune"),
+         _tuile("jaune_3_b", 3, "jaune")],
+        [_tuile("jaune_3_a", 3, "jaune"), _tuile("noir_3_a", 3, "noir"),
+         _tuile("bleu_3_a", 3, "bleu")],
+    ]
+
+    description = CR.decrire_coup(avant, apres)
+
+    assert description["complexite"]["nb_combinaisons_touchees"] == 0
+    assert description["complexite"]["nb_etapes"] == 0
+    assert description["complexite"]["categorie"] == "simple"

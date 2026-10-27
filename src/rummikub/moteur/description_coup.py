@@ -83,39 +83,120 @@ def _aspect(d: dict):
     return (d["valeur"], d["couleur"])
 
 
-def _annuler_par_aspect(avant_dicts: list, apres_dicts: list) -> tuple:
-    """Retire deux à deux, d'une liste de tuiles d'avant et d'une liste de
-    tuiles d'après (même combinaison), les tuiles qui s'annulent sans
-    déplacement réel : d'abord celles de même identifiant (inchangées), puis
-    — à défaut — une tuile d'avant restante avec une tuile d'après restante
-    de même aspect (échange de tuiles identiques, issue #197 points 1 et 3).
+def _retrait_ajout_bruts(avant_dicts: list, apres_dicts: list) -> tuple:
+    """Pour une combinaison qui garde son identité d'une étape à l'autre,
+    sépare par IDENTIFIANT (sans tenir compte de l'aspect) les tuiles qui
+    sont RÉELLEMENT parties (``retirees``) de celles RÉELLEMENT arrivées
+    (``ajoutees``). C'est la vérité du suivi causal : le cadre « tuiles à
+    placer » et le graphe de dépendances (issue #197) restent TOUJOURS basés
+    sur ce résultat brut, jamais sur la version « affichée » après
+    annulation par aspect (``_annuler_par_aspect``) — sinon une tuile
+    réellement libérée ici, mais annulée à l'affichage, ne serait jamais
+    déposée dans le cadre, et une opération plus loin qui la consomme
+    échouerait (``KeyError``, bug d'origine de l'issue #197 point 0)."""
+    ids_apres = {d["id"] for d in apres_dicts}
+    ids_avant = {d["id"] for d in avant_dicts}
+    retirees = [d for d in avant_dicts if d["id"] not in ids_apres]
+    ajoutees = [d for d in apres_dicts if d["id"] not in ids_avant]
+    return retirees, ajoutees
 
-    Retourne ``(retirees, ajoutees)`` : les tuiles qui restent de chaque côté
-    une fois ces annulations faites, dans leur ordre d'origine. Si les deux
-    listes reviennent vides, la combinaison est inchangée à l'écran, même si
-    les identifiants littéraux ont changé de place."""
-    ids_apres_restants = {d["id"] for d in apres_dicts}
-    avant_restants = []
-    for d in avant_dicts:
-        if d["id"] in ids_apres_restants:
-            ids_apres_restants.discard(d["id"])
-        else:
-            avant_restants.append(d)
 
-    ordre_apres = {d["id"]: i for i, d in enumerate(apres_dicts)}
-    apres_par_id = {d["id"]: d for d in apres_dicts}
-    ajoutees = sorted((apres_par_id[tid] for tid in ids_apres_restants),
-                       key=lambda d: ordre_apres[d["id"]])
+def _annuler_par_aspect(retirees: list, ajoutees: list) -> tuple:
+    """Retire deux à deux, d'une liste de tuiles parties et d'une liste de
+    tuiles arrivées (même combinaison, résultat de ``_retrait_ajout_bruts``),
+    celles qui s'échangent sans changement réel À L'ÉCRAN : une tuile partie
+    appariée à une tuile arrivée de même aspect (même valeur/couleur, ou
+    deux jokers quelconques — issue #197 points 1 et 3).
 
-    retirees = []
-    for d in avant_restants:
+    Retourne ``(retirees_vues, ajoutees_vues)`` : les tuiles qui restent de
+    chaque côté une fois ces annulations faites, dans leur ordre d'origine —
+    à utiliser UNIQUEMENT pour la phrase/l'étape affichées, jamais pour le
+    suivi causal (cf. ``_retrait_ajout_bruts``). Si les deux listes
+    reviennent vides, la combinaison est inchangée à l'écran, même si les
+    identifiants littéraux ont changé de place."""
+    ajoutees = list(ajoutees)
+    retirees_vues = []
+    for d in retirees:
         aspect = _aspect(d)
         match = next((a for a in ajoutees if _aspect(a) == aspect), None)
         if match is not None:
             ajoutees.remove(match)
         else:
-            retirees.append(d)
-    return retirees, ajoutees
+            retirees_vues.append(d)
+    return retirees_vues, ajoutees
+
+
+def _composantes_fortement_connexes(deps: dict, n: int) -> list:
+    """Algorithme de Tarjan : regroupe les indices ``[0, n)`` en composantes
+    fortement connexes du graphe de dépendances causales (``deps[k]`` =
+    indices que l'opération ``k`` doit attendre). Une composante de taille
+    supérieure à 1 signale un cycle de dépendances strictes : deux
+    combinaisons (ou plus) qui s'échangent des tuiles de même aspect,
+    chacune attendant une tuile libérée par l'autre (issue #197, point 1 —
+    impossible à sérialiser normalement, cf. ``_detecter_blocs_silencieux``)."""
+    compteur = [0]
+    pile, sur_pile = [], [False] * n
+    indices, liens_bas = [None] * n, [None] * n
+    composantes = []
+
+    def _lier(v):
+        indices[v] = liens_bas[v] = compteur[0]
+        compteur[0] += 1
+        pile.append(v)
+        sur_pile[v] = True
+        for w in deps.get(v, ()):
+            if indices[w] is None:
+                _lier(w)
+                liens_bas[v] = min(liens_bas[v], liens_bas[w])
+            elif sur_pile[w]:
+                liens_bas[v] = min(liens_bas[v], indices[w])
+        if liens_bas[v] == indices[v]:
+            composante = []
+            while True:
+                w = pile.pop()
+                sur_pile[w] = False
+                composante.append(w)
+                if w == v:
+                    break
+            composantes.append(composante)
+
+    for v in range(n):
+        if indices[v] is None:
+            _lier(v)
+    return composantes
+
+
+def _detecter_blocs_silencieux(ops: list, deps: dict) -> dict:
+    """Repère, parmi les cycles de dépendances (``_composantes_fortement_
+    connexes``), ceux où TOUTES les opérations impliquées sont des "update"
+    entièrement sans effet visible (``retirees_vues``/``ajoutees_vues``
+    vides) : un échange de tuiles identiques entre deux combinaisons (ou
+    plus), où chacune attend une tuile libérée par l'autre — le cas réel qui
+    a fait planter ``etapes_coup_ia`` (issue #197 point 0, ``KeyError`` sur
+    une tuile jamais déposée dans le cadre avant d'être consommée).
+
+    Retourne ``{indice_op: id_bloc, ...}`` pour les opérations concernées :
+    traitées ensemble en un seul geste par l'appelant (toutes les tuiles
+    libérées du bloc ajoutées au cadre, PUIS toutes les tuiles consommées du
+    bloc retirées du cadre), sans jamais dépendre de l'ordre entre elles.
+    Un cycle qui ne qualifie pas (opération "retrait"/"create", ou "update"
+    avec un effet visible) reste géré par le repli déjà existant (ordre
+    arbitraire) — cas resté hors de portée de #197, non rencontré en
+    pratique avec un coup réellement joué."""
+    bloc_de = {}
+    for composante in _composantes_fortement_connexes(deps, len(ops)):
+        if len(composante) < 2:
+            continue
+        qualifie = all(ops[k]["kind"] == "update"
+                        and not ops[k]["retirees_vues"]
+                        and not ops[k]["ajoutees_vues"]
+                        for k in composante)
+        if not qualifie:
+            continue
+        id_bloc = min(composante)
+        for k in composante:
+            bloc_de[k] = id_bloc
+    return bloc_de
 
 
 def _type_combo(tuiles_dicts: list) -> str:
@@ -264,21 +345,22 @@ def _construire_operations(plateau_avant: list, plateau_apres: list) -> dict:
             for d in tuiles:
                 id_vers_op_producteur[d["id"]] = idx
 
-    # 2) "update" : continuations dont la composition change réellement, une
-    #    fois annulés les échanges de tuiles identiques (même aspect, issue
-    #    #197) qui ne changent rien à l'écran.
-    realignements = []
+    # 2) "update" : toute continuation devient une opération, MÊME si elle
+    #    n'a aucun effet visible une fois annulés les échanges de tuiles
+    #    identiques (même aspect, issue #197) — le suivi causal (cadre,
+    #    dépendances) reste basé sur les listes BRUTES (``retirees``,
+    #    ``ajoutees``) ; seules les listes « vues » (``retirees_vues``,
+    #    ``ajoutees_vues``), réduites par ``_annuler_par_aspect``, décident
+    #    de ce qui est affiché (texte, étape). Une tuile libérée ici mais
+    #    annulée à l'affichage reste ainsi normalement déposée dans le cadre
+    #    pour une opération suivante qui la consomme (issue #197 point 0).
     for i, j in continuation.items():
-        retirees, ajoutees = _annuler_par_aspect(plateau_avant[i], plateau_apres[j])
-        if not retirees and not ajoutees:
-            # Combinaison inchangée à l'aspect près : aucune étape à
-            # montrer, mais le plateau doit malgré tout, en coulisses,
-            # finir par refléter exactement la composition d'après.
-            realignements.append((i, j))
-            continue
+        retirees, ajoutees = _retrait_ajout_bruts(plateau_avant[i], plateau_apres[j])
+        retirees_vues, ajoutees_vues = _annuler_par_aspect(retirees, ajoutees)
         op = {"kind": "update", "avant_idx": i, "apres_idx": j,
               "tuiles_avant": plateau_avant[i], "tuiles_apres": plateau_apres[j],
               "retirees": retirees, "ajoutees": ajoutees,
+              "retirees_vues": retirees_vues, "ajoutees_vues": ajoutees_vues,
               "consomme": {d["id"] for d in ajoutees},
               "libere": [d["id"] for d in retirees]}
         ops.append(op)
@@ -323,17 +405,41 @@ def _construire_operations(plateau_avant: list, plateau_apres: list) -> dict:
             secondaire = op.get("apres_idx", 999)
         return (tier_joker, rang_kind[op["kind"]], primaire, secondaire)
 
-    restant = set(range(len(ops)))
-    faites = set()
+    # Les cycles de dépendances entre "update" entièrement invisibles (deux
+    # combinaisons qui s'échangent des tuiles de même aspect, chacune
+    # attendant une tuile libérée par l'autre) sont regroupés en BLOCS : le
+    # tri topologique les traite comme une unité unique (``_etapes_coup_ia``
+    # applique alors les deux côtés d'un bloc en un seul geste, sans jamais
+    # dépendre de l'ordre interne — issue #197 point 0).
+    blocs = _detecter_blocs_silencieux(ops, deps)
+    for k, op in enumerate(ops):
+        op["bloc"] = blocs.get(k)
+
+    unites = {}
+    for k in range(len(ops)):
+        unites.setdefault(blocs.get(k, k), []).append(k)
+
+    deps_unite = {}
+    for u, membres in unites.items():
+        externes = set()
+        for m in membres:
+            externes |= {blocs.get(p, p) for p in deps[m]}
+        deps_unite[u] = externes - {u}
+
+    def cle_tri_unite(u):
+        return min(cle_tri(m) for m in unites[u])
+
+    restant = set(unites)
+    faites_unites = set()
     ordre = []
     while restant:
-        prets = [k for k in restant if deps[k] <= faites]
+        prets = [u for u in restant if deps_unite[u] <= faites_unites]
         if not prets:
             prets = list(restant)  # dépendance cyclique improbable : repli
-        k = min(prets, key=cle_tri)
-        ordre.append(k)
-        faites.add(k)
-        restant.discard(k)
+        u = min(prets, key=cle_tri_unite)
+        ordre.extend(sorted(unites[u]))
+        faites_unites.add(u)
+        restant.discard(u)
 
     # id_vers_op_producteur référence encore les index AVANT tri topologique ;
     # on les reporte vers leur nouvelle position dans la liste réordonnée.
@@ -349,7 +455,6 @@ def _construire_operations(plateau_avant: list, plateau_apres: list) -> dict:
         "id_vers_op_producteur": id_vers_op_producteur,
         "dissolvantes": dissolvantes,
         "continuation": continuation,
-        "realignements": realignements,
     }
 
 
@@ -365,6 +470,11 @@ def _desc_fabrique(r: dict):
     comptes = {}
     for op in r["ops"]:
         if op["kind"] == "update":
+            if not op["retirees_vues"] and not op["ajoutees_vues"]:
+                # Échange de tuiles identiques sans effet visible (issue
+                # #197) : cette combinaison n'est jamais mentionnée, inutile
+                # de la compter pour la désambiguïsation par couleurs.
+                continue
             ident = frozenset(d["id"] for d in op["tuiles_avant"])
             reference = op["tuiles_apres"]
         elif op["kind"] == "create":
@@ -402,17 +512,30 @@ def _provenance(tid: str, ops: list, ids_main: set, id_vers_op_producteur: dict,
 
 def _jokers_deplaces(ops: list, id_vers_tuile: dict) -> list:
     """Reconstitue, pour chaque joker déjà sur le plateau avant le coup et
-    qui change de combinaison, son trajet complet : origine, tuile(s) qui le
-    remplacent dans la combinaison d'origine (s'il y a lieu), destination
-    finale. Les descriptions restent à construire par l'appelant (l'article
-    défini/indéfini dépend du contexte où la phrase est utilisée)."""
+    qui change VISIBLEMENT de combinaison, son trajet complet : origine,
+    tuile(s) qui le remplacent dans la combinaison d'origine (s'il y a
+    lieu), destination finale. Les descriptions restent à construire par
+    l'appelant (l'article défini/indéfini dépend du contexte où la phrase
+    est utilisée).
+
+    Un joker libéré par une opération "update" sans effet visible (annulé
+    par aspect contre l'autre joker arrivé à sa place, issue #197 point 3)
+    n'est PAS considéré comme déplacé, même s'il réapparaît ailleurs : du
+    point de vue du joueur, rien ne distingue les deux jokers, donc rien ne
+    s'est produit à cette combinaison."""
     deplacements = []
     for op in ops:
+        if op["kind"] == "update":
+            liberes_vus = {d["id"] for d in op["retirees_vues"]}
+        else:
+            liberes_vus = set(op.get("libere", []))
         for tid in op.get("libere", []):
+            if tid not in liberes_vus:
+                continue
             if not id_vers_tuile.get(tid, {}).get("est_joker"):
                 continue
-            remplacant = (op["ajoutees"]
-                          if op["kind"] == "update" and op.get("ajoutees")
+            remplacant = (op["ajoutees_vues"]
+                          if op["kind"] == "update" and op.get("ajoutees_vues")
                           else None)
             destination_tuiles = None
             for op2 in ops:
@@ -482,7 +605,11 @@ def _decrire_coup_ia(plateau_avant: list, plateau_apres: list,
     ops = r["ops"]
     desc = _desc_fabrique(r)
 
-    updates = [op for op in ops if op["kind"] == "update"]
+    # Seules les "update" avec un effet VISIBLE comptent : une opération
+    # entièrement annulée par aspect (échange de tuiles identiques, issue
+    # #197) ne touche aucune combinaison du point de vue du joueur.
+    updates = [op for op in ops if op["kind"] == "update"
+               and (op["retirees_vues"] or op["ajoutees_vues"])]
     creates = [op for op in ops if op["kind"] == "create"]
     nb_defaites = len(r["dissolvantes"])
     jokers = _jokers_deplaces(ops, r["id_vers_tuile"])
@@ -519,17 +646,17 @@ def _decrire_coup_ia(plateau_avant: list, plateau_apres: list,
         for op in creates:
             phrases.append(f"Il a créé {desc(op['tuiles_apres'], indef=True)}.")
         for op in updates:
-            if op["retirees"] and op["ajoutees"]:
+            if op["retirees_vues"] and op["ajoutees_vues"]:
                 phrases.append(
                     f"Il a complété {desc(op['tuiles_apres'])} en remplaçant "
-                    f"{_lister_tuiles_def(op['retirees'])} par "
-                    f"{_lister_tuiles_def(op['ajoutees'])}.")
-            elif op["ajoutees"]:
+                    f"{_lister_tuiles_def(op['retirees_vues'])} par "
+                    f"{_lister_tuiles_def(op['ajoutees_vues'])}.")
+            elif op["ajoutees_vues"]:
                 phrases.append(f"Il a complété {desc(op['tuiles_apres'])} "
-                                f"avec {_lister_tuiles_def(op['ajoutees'])}.")
-            elif op["retirees"]:
+                                f"avec {_lister_tuiles_def(op['ajoutees_vues'])}.")
+            elif op["retirees_vues"]:
                 phrases.append(
-                    f"Il a retiré {_lister_tuiles_def(op['retirees'])} "
+                    f"Il a retiré {_lister_tuiles_def(op['retirees_vues'])} "
                     f"{_contracter('de', desc(op['tuiles_avant']))}.")
         for i in r["dissolvantes"]:
             phrases.append(_phrase_sujet(plateau_avant[i], "défait", desc))
@@ -657,13 +784,6 @@ def _etapes_coup_ia(plateau_avant: list, plateau_apres: list) -> list:
     etapes.append(etat_courant("Départ", texte_depart,
                                 [d["id"] for d in r["tuiles_posees"]]))
 
-    # Réalignement silencieux (sans étape visible) des combinaisons dont
-    # seuls des échanges de tuiles identiques distinguent avant et après
-    # (issue #197) : le plateau doit malgré tout finir par montrer
-    # exactement la composition d'après.
-    for i, j in r["realignements"]:
-        working[f"a{i}"] = list(plateau_apres[j])
-
     # Écran « Les jokers » : vue d'ensemble si des jokers changent de main.
     jokers = _jokers_deplaces(ops, r["id_vers_tuile"])
     if jokers:
@@ -688,9 +808,39 @@ def _etapes_coup_ia(plateau_avant: list, plateau_apres: list) -> list:
         etapes.append(etat_courant("Les jokers", " ".join(phrases),
                                     [depl["id"] for depl in jokers]))
 
-    # Une étape par opération, dans l'ordre causal déjà calculé.
-    for op in ops:
+    # Une étape par opération, dans l'ordre causal déjà calculé. Pour une
+    # "update", le cadre/plateau sont TOUJOURS mis à jour avec les listes
+    # BRUTES (suivi causal exact, issue #197) ; seules les listes « vues »
+    # décident si une étape est effectivement affichée. Les opérations d'un
+    # même BLOC (échange cyclique entre deux combinaisons ou plus, issue
+    # #197 point 0) sont regroupées : impossible de les sérialiser (chacune
+    # attend une tuile libérée par l'autre), donc traitées en un seul geste
+    # — toutes les tuiles libérées du bloc ajoutées au cadre, PUIS toutes
+    # les tuiles consommées du bloc retirées, sans jamais dépendre de
+    # l'ordre entre elles. Un bloc est par construction entièrement
+    # invisible (aucune étape affichée pour ses membres).
+    i = 0
+    while i < len(ops):
+        bloc = ops[i].get("bloc")
+        if bloc is not None:
+            membres = [ops[i]]
+            i += 1
+            while i < len(ops) and ops[i].get("bloc") == bloc:
+                membres.append(ops[i])
+                i += 1
+            for op in membres:
+                for d in op["retirees"]:
+                    cadre[d["id"]] = {"tuile": d, "origine": "plateau"}
+            for op in membres:
+                for d in op["ajoutees"]:
+                    del cadre[d["id"]]
+                working[f"a{op['avant_idx']}"] = list(op["tuiles_apres"])
+            continue
+
+        op = ops[i]
+        i += 1
         ids_touchees = []
+        invisible = False
         if op["kind"] == "retrait":
             ids_touchees = [d["id"] for d in op["tuiles"]]
             slot = f"a{op['avant_idx']}"
@@ -712,20 +862,26 @@ def _etapes_coup_ia(plateau_avant: list, plateau_apres: list) -> list:
             for d in op["retirees"]:
                 cadre[d["id"]] = {"tuile": d, "origine": "plateau"}
             working[slot] = list(op["tuiles_apres"])
-            ids_touchees = [d["id"] for d in op["retirees"] + op["ajoutees"]]
-            cible = desc(op["tuiles_apres"])
-            if op["retirees"] and op["ajoutees"]:
-                verbe = "remplace" if len(op["ajoutees"]) == 1 else "remplacent"
-                texte = (f"{_maj(_lister_tuiles_def(op['ajoutees']))} {verbe} "
-                          f"{_lister_tuiles_def(op['retirees'])} dans {cible}.")
-            elif op["ajoutees"]:
-                verbe = "complète" if len(op["ajoutees"]) == 1 else "complètent"
-                texte = (f"{_maj(_lister_tuiles_def(op['ajoutees']))} {verbe} "
-                          f"{cible}.")
+            if not op["retirees_vues"] and not op["ajoutees_vues"]:
+                # Échange de tuiles identiques sans effet visible (issue
+                # #197) : le cadre/plateau ci-dessus restent à jour pour les
+                # opérations suivantes, mais aucune étape n'est affichée.
+                invisible = True
             else:
-                verbe = "sort" if len(op["retirees"]) == 1 else "sortent"
-                texte = (f"{_maj(_lister_tuiles_def(op['retirees']))} {verbe} "
-                          f"{_contracter('de', desc(op['tuiles_avant']))}.")
+                ids_touchees = [d["id"] for d in op["retirees_vues"] + op["ajoutees_vues"]]
+                cible = desc(op["tuiles_apres"])
+                if op["retirees_vues"] and op["ajoutees_vues"]:
+                    verbe = "remplace" if len(op["ajoutees_vues"]) == 1 else "remplacent"
+                    texte = (f"{_maj(_lister_tuiles_def(op['ajoutees_vues']))} {verbe} "
+                              f"{_lister_tuiles_def(op['retirees_vues'])} dans {cible}.")
+                elif op["ajoutees_vues"]:
+                    verbe = "complète" if len(op["ajoutees_vues"]) == 1 else "complètent"
+                    texte = (f"{_maj(_lister_tuiles_def(op['ajoutees_vues']))} {verbe} "
+                              f"{cible}.")
+                else:
+                    verbe = "sort" if len(op["retirees_vues"]) == 1 else "sortent"
+                    texte = (f"{_maj(_lister_tuiles_def(op['retirees_vues']))} {verbe} "
+                              f"{_contracter('de', desc(op['tuiles_avant']))}.")
 
         else:  # create
             slot = f"c{op['apres_idx']}"
@@ -736,7 +892,8 @@ def _etapes_coup_ia(plateau_avant: list, plateau_apres: list) -> list:
             texte = (f"{_maj(_lister_tuiles_def(op['ajoutees']))} forment "
                       f"{desc(op['tuiles_apres'], indef=True)}.")
 
-        etapes.append(etat_courant("", texte, ids_touchees))
+        if not invisible:
+            etapes.append(etat_courant("", texte, ids_touchees))
 
     return _sans_etapes_sans_effet(etapes)
 

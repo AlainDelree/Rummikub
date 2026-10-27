@@ -341,3 +341,124 @@ def test_chaine_bruno_expert_enchainement_tuile_par_tuile():
     # Dernière étape = plateau d'après exactement, cadre vide (déjà vérifié
     # par _verifier_invariants, répété ici pour la lisibilité du test).
     assert etapes[-1]["cadre"] == []
+
+
+# ------------------------------------------------- tuiles identiques (#197)
+
+def test_echange_tuiles_identiques_main_contre_plateau_dans_une_combinaison():
+    """Point 2 de l'issue #197 (recoupe le point 1 : l'échange reste dans
+    une seule combinaison) : le 3 jaune déjà posé quitte la suite jaune
+    (1 à 3) pour former un nouveau groupe de 3, et le 3 jaune de la main
+    prend exactement sa place dans la suite — les deux tuiles sont
+    indiscernables à l'écran, donc la suite n'est jamais mentionnée."""
+    avant = [[t(1, "jaune"), t(2, "jaune"), t(3, "jaune")]]
+    apres = [
+        [t(1, "jaune"), t(2, "jaune"), t(3, "jaune", "b")],
+        [t(3, "jaune"), t(3, "noir"), t(3, "bleu")],
+    ]
+
+    r = decrire_coup_ia(avant, apres)
+    assert r["nb_combinaisons_modifiees"] == 0
+    assert r["nb_combinaisons_creees"] == 1
+    assert "suite" not in r["texte"]
+    assert sorted(d["id"] for d in r["tuiles_posees"]) == \
+        ["bleu_3_a", "jaune_3_b", "noir_3_a"]
+
+    etapes = etapes_coup_ia(avant, apres)
+    _verifier_invariants(avant, apres, etapes)
+    changements = [e for e in etapes if not e["titre"]]
+    assert len(changements) == 1  # une seule étape visible : le nouveau groupe
+
+
+def test_echange_tuiles_identiques_entre_deux_combinaisons_sans_la_main():
+    """Point 1 de l'issue #197 : deux combinaisons du plateau s'échangent
+    leurs tuiles de même aspect (chacune attend une tuile libérée par
+    l'autre, un cycle de dépendances strict — c'est le cas réel qui faisait
+    planter ``etapes_coup_ia`` avec un ``KeyError``, issue #197 point 0).
+    Un coup sans aucun autre changement est donc entièrement sans effet."""
+    avant = [
+        [t(1, "jaune"), t(2, "jaune"), t(3, "jaune", "a")],
+        [t(3, "jaune", "b"), t(3, "noir"), t(3, "bleu")],
+    ]
+    apres = [
+        [t(1, "jaune"), t(2, "jaune"), t(3, "jaune", "b")],
+        [t(3, "jaune", "a"), t(3, "noir"), t(3, "bleu")],
+    ]
+
+    r = decrire_coup_ia(avant, apres)
+    assert r["texte"] == "N'a rien changé sur le plateau."
+    assert r["nb_combinaisons_modifiees"] == 0
+
+    etapes = etapes_coup_ia(avant, apres)
+    changements = [e for e in etapes if not e["titre"]]
+    assert changements == []
+
+
+def test_regression_echange_cyclique_entre_deux_combinaisons_avec_coup_reel():
+    """Reproduction du plantage réel (issue #197 point 0, cas fourni par
+    Alain après l'incident : ``tests/donnees/erreur_description_*.json``) :
+    un coup de l'IA qui, en même temps qu'il pose un nouveau groupe de 12,
+    échange deux paires de tuiles indiscernables entre combinaisons
+    existantes (3 jaune et 4 rouge). Avant la correction, le suivi par
+    identifiant plantait avec ``KeyError: 'jaune_3_a'`` (``del cadre[...]``
+    sur une tuile jamais déposée dans le cadre)."""
+    import json
+    from pathlib import Path
+
+    chemin = Path(__file__).resolve().parent / "donnees" / \
+        "erreur_description_20261027_115033.json"
+    donnees = json.loads(chemin.read_text(encoding="utf-8"))
+    avant, apres = donnees["plateau_avant"], donnees["plateau_apres"]
+
+    r = decrire_coup_ia(avant, apres, nom="Bruno")
+    assert "12 jaune" in r["texte"]
+    assert "remplace" not in r["texte"]
+    assert "suite" not in r["texte"]
+    assert r["nb_combinaisons_modifiees"] == 0  # les deux échanges s'annulent
+    assert r["nb_combinaisons_creees"] == 1
+
+    etapes = etapes_coup_ia(avant, apres)
+    _verifier_invariants(avant, apres, etapes)
+    changements = [e for e in etapes if not e["titre"]]
+    assert len(changements) == 1  # seule la formation du groupe de 12 est visible
+
+
+def test_deux_jokers_echange_dans_une_combinaison_vs_vrai_deplacement():
+    """Point 3 de l'issue #197, les deux clauses en un seul coup : le
+    joker du groupe de 5 est remplacé par l'AUTRE joker (pas un
+    déplacement, aucune étape ni mention) ; le premier joker, libéré,
+    forme un nouveau groupe de 9 ; le second joker, lui, part RÉELLEMENT
+    du groupe de 11 (remplacé par le 11 jaune de la main) pour rejoindre
+    le groupe de 5 — un vrai déplacement, qui doit rester décrit même si
+    deux jokers existent dans ce coup."""
+    avant = [
+        [t(5, "rouge"), t(5, "noir"), j(1)],
+        [t(11, "bleu"), t(11, "noir"), j(2)],
+    ]
+    apres = [
+        [t(5, "rouge"), t(5, "noir"), j(2)],
+        [t(11, "bleu"), t(11, "noir"), t(11, "jaune")],
+        [t(9, "bleu"), t(9, "noir"), j(1)],
+    ]
+
+    r = decrire_coup_ia(avant, apres)
+    assert len(r["jokers_deplaces"]) == 1
+    depl = r["jokers_deplaces"][0]
+    assert "groupe de 11" in depl["depuis"]
+    assert "groupe de 5" in depl["vers"]
+    # Le groupe de 5 (destination du SEUL joker réellement déplacé) n'est
+    # jamais décrit comme "modifié" : son propre échange (joker1 <-> joker2)
+    # est invisible.
+    assert r["nb_combinaisons_modifiees"] == 1  # seul le groupe de 11
+    assert r["nb_combinaisons_creees"] == 1  # le nouveau groupe de 9
+
+    etapes = etapes_coup_ia(avant, apres)
+    _verifier_invariants(avant, apres, etapes)
+    jokers_ecran = next(e for e in etapes if e["titre"] == "Les jokers")
+    assert "groupe de 11" in jokers_ecran["texte"]
+    assert "groupe de 5" in jokers_ecran["texte"]
+    # Exactement 2 changements visibles : le remplacement dans le groupe de
+    # 11, puis la formation du groupe de 9 — jamais une étape pour le
+    # groupe de 5 (l'échange des deux jokers y est indiscernable).
+    changements = [e for e in etapes if not e["titre"]]
+    assert len(changements) == 2
