@@ -505,5 +505,6 @@
   "config": {
    "mise_initiale_min": 30
   }
- }
+ },
+ "attendu_exact_tuiles": 3
 }

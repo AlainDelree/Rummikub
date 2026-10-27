@@ -276,5 +276,6 @@
    "mise_initiale_min": 30
   }
  },
- "attendu_min_tuiles": 6
+ "attendu_min_tuiles": 6,
+ "attendu_exact_tuiles": 6
 }

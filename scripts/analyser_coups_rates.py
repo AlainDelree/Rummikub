@@ -200,10 +200,12 @@ def _decisions_ia_par_cle(chemins):
 
 
 def _analyser_tous_journaux_ia(chemins, budget_genereux=10.0,
-                               budget_production=BUDGET_TEMPS_EXPERT):
+                               budget_production=BUDGET_TEMPS_EXPERT, solveur=None):
     """Retourne la liste des résultats (avec ``fichier`` ajouté sur chaque
     entrée) sur toutes les parties, IA uniquement — les fichiers d'une même
-    partie reprise sont reliés et analysés d'un seul tenant (issue #202)."""
+    partie reprise sont reliés et analysés d'un seul tenant (issue #202).
+    ``solveur`` (issue #204, ``--juge-exact``) : voir
+    ``persistance/coups_rates.analyser_decision_complete``."""
     tous = []
     for partie in _charger_parties(chemins):
         fichiers = partie["fichiers"]
@@ -221,7 +223,7 @@ def _analyser_tous_journaux_ia(chemins, budget_genereux=10.0,
         for decision in decisions:
             resultat = analyser_decision_complete(
                 decision, budget_genereux=budget_genereux,
-                budget_production=budget_production)
+                budget_production=budget_production, solveur=solveur)
             resultat["fichier"] = etiq
             marque = ""
             if resultat.get("mise_initiale_inconnue"):
@@ -374,7 +376,7 @@ def _retenter_inconclusifs(resultats, decisions_par_cle, budget_inconclusifs,
 # --------------------------------------------------------------------------- #
 
 def _detailer_tour(chemins, tour: int, budget_genereux: float, budget_production: float,
-                   nom_joueur=None):
+                   nom_joueur=None, solveur=None):
     """Cherche, dans ``chemins``, les décisions (IA, ou du joueur
     ``nom_joueur`` si fourni) au tour ``tour`` et les analyse une par une,
     indépendamment du reste du script — ``--fichier F --tour N`` (point 2 de
@@ -394,7 +396,8 @@ def _detailer_tour(chemins, tour: int, budget_genereux: float, budget_production
             if d["tour"] != tour:
                 continue
             resultat = analyser_decision_complete(
-                d, budget_genereux=budget_genereux, budget_production=budget_production)
+                d, budget_genereux=budget_genereux, budget_production=budget_production,
+                solveur=solveur)
             trouvees.append((etiq, d, resultat))
     return trouvees
 
@@ -461,7 +464,7 @@ def _enregistrer_cas_reference(decision: dict, attendu_min_tuiles: int, prefixe:
 # --------------------------------------------------------------------------- #
 
 def _analyser_joueur(chemins, nom_joueur, budget_genereux, budget_production,
-                     verifier_reserve_pioche):
+                     verifier_reserve_pioche, solveur=None):
     """Analyse ``nom_joueur`` partie par partie (les fichiers d'une partie
     reprise sont reliés d'abord, issue #202 : la détection de réserve compare
     deux tours CONSÉCUTIFS du même joueur dans la MÊME partie — y compris à
@@ -484,7 +487,8 @@ def _analyser_joueur(chemins, nom_joueur, budget_genereux, budget_production,
         print(f"Analyse de {etiq} ({len(decisions)} décision(s) de "
               f"{nom_joueur})...", file=sys.stderr)
         resultats = [analyser_decision_complete(d, budget_genereux=budget_genereux,
-                                                budget_production=budget_production)
+                                                budget_production=budget_production,
+                                                solveur=solveur)
                     for d in decisions]
         reserves = detecter_reserves_joueur(
             decisions, resultats, verifier_a_evite_pioche=verifier_reserve_pioche)
@@ -674,7 +678,37 @@ def main(argv=None) -> int:
                         help="(--joueur) Pour chaque réserve réussie, vérifie si elle a "
                              "évité une pioche au tour suivant (appel solveur "
                              "supplémentaire — coûteux).")
+    parser.add_argument("--juge-exact", action="store_true",
+                        help="Utilise le solveur EXACT de la bibliothèque "
+                             "rummikub-solver (licence MIT, dépendance de DÉVELOPPEMENT) "
+                             "comme JUGE à la place du solveur maison : il n'y a alors "
+                             "plus ni décision « inconclusive » ni coup manqué à cause du "
+                             "gel de combinaisons. Désactivé par défaut ; si la "
+                             "bibliothèque est absente, le signale clairement et s'arrête "
+                             "(voir scripts/solveur_exact.py et CONTEXTE.md §14).")
     args = parser.parse_args(argv)
+
+    # Juge exact optionnel (issue #204) : callable injecté dans l'analyse à la
+    # place du solveur maison. Importé seulement si demandé (la bibliothèque
+    # est une dépendance de développement, absente en production).
+    solveur_juge = None
+    if args.juge_exact:
+        _racine = Path(__file__).resolve().parent
+        if str(_racine) not in sys.path:
+            sys.path.insert(0, str(_racine))
+        try:
+            import solveur_exact
+        except Exception as exc:  # pragma: no cover
+            print(f"--juge-exact : impossible d'importer l'adaptateur du solveur "
+                  f"exact ({exc}).", file=sys.stderr)
+            return 1
+        if not solveur_exact.DISPONIBLE:
+            print(solveur_exact.MESSAGE_INSTALLATION, file=sys.stderr)
+            return 1
+        solveur_juge = solveur_exact.resoudre_coup_exact
+        print(f"JUGE EXACT activé (backend {solveur_exact._backend_defaut()}) : "
+              f"plus aucune décision « inconclusive » ni coup gelé — le maximum "
+              f"affiché est l'optimum exact du tour.\n", file=sys.stderr)
 
     if args.budget < 10.0:
         print(f"AVERTISSEMENT : --budget {args.budget} s est inférieur au budget "
@@ -701,11 +735,13 @@ def main(argv=None) -> int:
 
     if args.joueur:
         agrege = _analyser_joueur(chemins, args.joueur, args.budget,
-                                  budget_production or 1.5, args.verifier_reserve_evite_pioche)
+                                  budget_production or 1.5, args.verifier_reserve_evite_pioche,
+                                  solveur=solveur_juge)
         afficher_resume_joueur(args.joueur, agrege)
         if args.tour is not None:
             trouvees = _detailer_tour(chemins, args.tour, args.budget,
-                                      budget_production or 1.5, nom_joueur=args.joueur)
+                                      budget_production or 1.5, nom_joueur=args.joueur,
+                                      solveur=solveur_juge)
             afficher_detail_tour(trouvees, args.tour)
         if args.enregistrer_cas_reference:
             candidats = sorted(agrege.get("_decisions_solveur_bat", []),
@@ -719,7 +755,7 @@ def main(argv=None) -> int:
         print(AVERTISSEMENT)
         return 0
 
-    kwargs = {"budget_genereux": args.budget}
+    kwargs = {"budget_genereux": args.budget, "solveur": solveur_juge}
     if budget_production is not None:
         kwargs["budget_production"] = budget_production
 
@@ -740,10 +776,14 @@ def main(argv=None) -> int:
 
     if args.tour is not None:
         trouvees = _detailer_tour(chemins, args.tour, args.budget,
-                                  budget_production or BUDGET_TEMPS_EXPERT)
+                                  budget_production or BUDGET_TEMPS_EXPERT,
+                                  solveur=solveur_juge)
         afficher_detail_tour(trouvees, args.tour)
 
-    if args.budget_mesure:
+    if args.budget_mesure and solveur_juge is not None:
+        print("--budget-mesure est sans objet avec --juge-exact (le solveur exact "
+              "n'a pas de budget de temps) : mesure ignorée.\n", file=sys.stderr)
+    elif args.budget_mesure:
         a_mesurer = [r for r in resultats if r["coup_rate"] or r["pose_sous_optimale"]]
         print(f"=== Budget nécessaire (mesuré sur {len(a_mesurer)} coup(s) "
               f"raté(s)/sous-optimal(aux)) ===")

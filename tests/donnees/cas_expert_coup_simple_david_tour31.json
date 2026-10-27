@@ -281,5 +281,6 @@
   }
  },
  "attendu_min_tuiles": 1,
+ "attendu_exact_tuiles": 1,
  "coup_simple_existe": true
 }

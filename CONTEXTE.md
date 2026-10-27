@@ -1680,3 +1680,90 @@ une au fur et à mesure que de futures issues les testent/implémentent.
   et appliqué par défaut, pas seulement une préférence de lisibilité pour
   le pas-à-pas — contrairement aux pistes 2 et 5 ci-dessus (évaluation de
   la main restante, rôle des points), qui restent, elles, à tester.
+
+## 14. Solveur exact de vérification — bibliothèque `rummikub-solver` (licence MIT, issue #204, suite de #201)
+
+Notre solveur d'Expert (`moteur/solveur.py`) est à la fois le joueur **et** le
+juge de l'analyse des coups ratés (§11) : s'il manque un coup, l'analyse ne le
+voit pas non plus — ses résultats sont une **borne basse**. L'issue #204
+ajoute une **mesure indépendante et exacte** à l'aide de la bibliothèque libre
+`rummikub-solver` (PyPI, licence MIT), qui résout l'optimum d'un tour par
+programmation linéaire en nombres entiers (den Hertog & Hulshof, *The Computer
+Journal*, 2006). **Le solveur d'Expert, le jeu livré et les niveaux d'IA ne
+sont pas modifiés.**
+
+### Dépendance de DÉVELOPPEMENT seulement — NE PAS l'ajouter au jeu livré
+
+- **Absente de `requirements.txt` et du build Windows** (`rummikub.spec`). À
+  installer dans un venv de développement (Python 3.11+), isolé du jeu :
+
+  ```
+  python -m venv .venv-solveur-exact
+  .venv-solveur-exact/bin/pip install 'rummikub-solver[highs]' pytest
+  ```
+
+  L'extra `highs` installe le solveur HiGHS (MIT, recommandé). **Ne jamais
+  installer l'extra `glpk_mi`** (GLPK, GPL-3.0 — incompatible avec une
+  distribution propriétaire).
+
+- Tout le code qui en dépend se **saute proprement si elle est absente** (comme
+  les tests Playwright) : `scripts/solveur_exact.DISPONIBLE` vaut alors
+  `False`, les scripts affichent un message d'installation et s'arrêtent, et
+  `tests/test_solveur_exact.py` se saute via `pytest.importorskip`.
+
+### Fichiers (tous sous `scripts/` ou `tests/`, hors du paquet livré `src/`)
+
+- **`scripts/solveur_exact.py`** — adaptateur. Convertit un de nos états
+  (plateau, main, drapeau de mise initiale) vers la bibliothèque et
+  inversement. Correspondance des couleurs : **noir → BLACK, bleu → BLUE,
+  jaune → ORANGE, rouge → RED** ; entier d'une tuile = `couleur_index*13 +
+  valeur` (noir=0…rouge=3), joker = 53. La bibliothèque renvoie des ensembles
+  **non ordonnés** : `_ordonner_combinaison` les **remet dans l'ordre** (suite
+  triée par valeur, joker inséré dans chaque trou puis aux extrémités ; groupe
+  indifférent). `resoudre_exact` renvoie un `ResultatExact` (nombre de tuiles
+  posées, combinaisons `Tuile` ordonnées, `nouveau_plateau` dict, durée) après
+  **deux contrôles indépendants** : chaque combinaison validée par
+  `valider_combinaison`, et conservation des tuiles du plateau.
+  `resoudre_coup_exact(etat, idx, budget_temps=None)` est une variante
+  « drop-in » à la signature de `moteur/solveur.resoudre_coup` (budget ignoré :
+  l'exact n'a pas de budget), pour servir de juge (voir ci-dessous).
+
+- **`scripts/comparer_solveur_exact.py`** — comparaison. Pour chaque
+  `tests/donnees/cas_expert_*.json` **et** `reference_*.json`, affiche le
+  nombre de tuiles de notre solveur à **1,5 s** (production) et **10 s**
+  (généreux), celui du solveur exact et sa durée, et l'écart ; en fin de
+  sortie : cas ratés à 1,5 s, écart moyen/maximal, temps total exact,
+  résultats des deux contrôles. Option `--journaux [--tous] [--dossier …]`
+  pour comparer sur de **vrais journaux de parties** (l'utilisateur fournit
+  les journaux ; le dossier de travail de l'agent n'en contient pas).
+
+- **`scripts/analyser_coups_rates.py --juge-exact`** — utilise le solveur
+  exact comme **juge** à la place du solveur maison (§11) : plus aucune
+  décision « inconclusive » ni coup manqué par gel de combinaisons. Désactivé
+  par défaut ; signale clairement si la bibliothèque est absente. Mécanisme :
+  `persistance/coups_rates.analyser_decision_complete` accepte un paramètre
+  `solveur` (callable, défaut = solveur maison) — **le module `coups_rates`
+  n'importe jamais la bibliothèque**, il reçoit un simple callable, injecté
+  seulement par le script.
+
+- **`tests/donnees/*.json`** — clé **`attendu_exact_tuiles`** (maximum exact)
+  ajoutée à côté de `attendu_min_tuiles` (conservée). Le cas pivot
+  `reference_victoire_manquee_ines_tour85.json` (Expert avec 2 tuiles en main
+  n'en pose qu'une ; exact = 2, victoire manquée) est le **test de
+  non-régression** de la suite.
+
+- **`RAPPORT_SOLVEUR_EXACT_204.md`** — rapport complet : répartition des
+  écarts, durées, taille d'installation et démarrage, deux voies
+  d'embarquement éventuel (a : la bibliothèque telle quelle avec cvxpy/scipy ;
+  b : modèle maison direct sur `highspy`+`numpy`, ~3× plus léger), et licences.
+
+### Ce que la mesure exacte établit (voir le rapport pour le détail chiffré)
+
+Sur les 10 cas de référence : notre solveur rate des tuiles sur **5/10 cas à
+1,5 s** ; le solveur exact calcule l'optimum prouvé en **~84 ms/cas**. Deux cas
+restent sous l'optimum **même à 10 s** (faiblesse d'algorithme, pas de
+budget) : **Bruno tour 57** (3 vs 4 — tuile manquante `rouge_12`, obtenue en
+scindant la suite rouge 6–10) et **Ines tour 85** (1 vs 2). Le solveur exact
+trouve donc le maximum **nettement plus vite** que le nôtre — c'est le chiffre
+qui décidera s'il faut un jour remplacer le solveur d'Expert (voie b du
+rapport : `highspy` direct, embarquable et MIT).

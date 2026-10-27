@@ -731,13 +731,25 @@ def extraire_decisions_joueur(data: dict, nom: str,
 # --------------------------------------------------------------------------- #
 
 def analyser_decision_complete(decision: dict, budget_genereux: float = 10.0,
-                                budget_production: float = BUDGET_TEMPS_EXPERT) -> dict:
+                                budget_production: float = BUDGET_TEMPS_EXPERT,
+                                solveur=None) -> dict:
     """Généralise :func:`analyser_decision` aux poses (point 1 de l'issue
     #193) : pour une décision ``"pose"``, compare le nombre de tuiles
     RÉELLEMENT posées au maximum trouvé par le solveur (budget généreux),
     plutôt que de chercher un coup raté. Fonctionne pour n'importe quel
     joueur (IA ou humain) — ``budget_limite`` (distinction budget de
     production/généreux) ne reste calculé que pour le niveau ``"Expert"``.
+
+    ``solveur`` (issue #204) : callable ``(etat, idx, budget_temps=...) ->
+    coup|None`` servant de JUGE, à la place du solveur maison
+    ``moteur/solveur.resoudre_coup`` (défaut si ``None``). Permet à
+    ``scripts/analyser_coups_rates.py --juge-exact`` d'injecter le solveur
+    EXACT de la bibliothèque ``rummikub-solver`` (voir
+    ``scripts/solveur_exact.py``) : comme celui-ci trouve toujours l'optimum
+    sans budget de temps, il n'y a alors plus ni décision « inconclusive » ni
+    coup manqué à cause du gel de combinaisons du solveur maison. Ce module
+    reste sans dépendance vers la bibliothèque (il reçoit un simple callable) :
+    elle n'est jamais importée ici, seulement, le cas échéant, par le script.
 
     ``ecart = nb_tuiles_solveur - nb_tuiles_reel`` :
       - ``ecart > 0`` et action ``"pioche"``/``"passe"`` : ``coup_rate``.
@@ -779,9 +791,11 @@ def analyser_decision_complete(decision: dict, budget_genereux: float = 10.0,
             "mise_initiale_inconnue": True,
         }
 
+    _resoudre = solveur or resoudre_coup
+
     def _essayer(budget):
         try:
-            return resoudre_coup(decision["etat"], decision["idx"], budget_temps=budget)
+            return _resoudre(decision["etat"], decision["idx"], budget_temps=budget)
         except BudgetDepasse:
             return "budget_depasse"
 
@@ -869,13 +883,15 @@ def analyser_decision_complete(decision: dict, budget_genereux: float = 10.0,
 
 def analyser_decisions_completes(decisions: list, budget_genereux: float = 10.0,
                                   budget_production: float = BUDGET_TEMPS_EXPERT,
-                                  on_resultat=None) -> list:
+                                  on_resultat=None, solveur=None) -> list:
     """Applique :func:`analyser_decision_complete` à une liste de décisions
-    (callback de progression optionnel, comme :func:`analyser_journal`)."""
+    (callback de progression optionnel, comme :func:`analyser_journal`).
+    ``solveur`` (issue #204) : voir :func:`analyser_decision_complete`."""
     resultats = []
     for decision in decisions:
         resultat = analyser_decision_complete(
-            decision, budget_genereux=budget_genereux, budget_production=budget_production)
+            decision, budget_genereux=budget_genereux,
+            budget_production=budget_production, solveur=solveur)
         resultats.append(resultat)
         if on_resultat is not None:
             on_resultat(decision, resultat)
