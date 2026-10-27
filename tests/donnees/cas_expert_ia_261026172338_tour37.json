@@ -1,0 +1,280 @@
+{
+ "idx": 1,
+ "etat": {
+  "joueurs": [
+   {
+    "chevalet": [],
+    "mise_initiale_faite": true
+   },
+   {
+    "chevalet": [
+     {
+      "id": "bleu_4_a",
+      "valeur": 4,
+      "couleur": "bleu",
+      "est_joker": false
+     },
+     {
+      "id": "bleu_7_b",
+      "valeur": 7,
+      "couleur": "bleu",
+      "est_joker": false
+     },
+     {
+      "id": "jaune_12_b",
+      "valeur": 12,
+      "couleur": "jaune",
+      "est_joker": false
+     },
+     {
+      "id": "noir_2_b",
+      "valeur": 2,
+      "couleur": "noir",
+      "est_joker": false
+     },
+     {
+      "id": "rouge_7_b",
+      "valeur": 7,
+      "couleur": "rouge",
+      "est_joker": false
+     },
+     {
+      "id": "bleu_4_b",
+      "valeur": 4,
+      "couleur": "bleu",
+      "est_joker": false
+     },
+     {
+      "id": "bleu_5_b",
+      "valeur": 5,
+      "couleur": "bleu",
+      "est_joker": false
+     },
+     {
+      "id": "rouge_7_a",
+      "valeur": 7,
+      "couleur": "rouge",
+      "est_joker": false
+     },
+     {
+      "id": "bleu_3_a",
+      "valeur": 3,
+      "couleur": "bleu",
+      "est_joker": false
+     }
+    ],
+    "mise_initiale_faite": true
+   }
+  ],
+  "plateau": [
+   [
+    {
+     "id": "noir_9_b",
+     "valeur": 9,
+     "couleur": "noir",
+     "est_joker": false
+    },
+    {
+     "id": "joker_1",
+     "valeur": null,
+     "couleur": "rouge",
+     "est_joker": true
+    },
+    {
+     "id": "noir_11_a",
+     "valeur": 11,
+     "couleur": "noir",
+     "est_joker": false
+    },
+    {
+     "id": "noir_12_b",
+     "valeur": 12,
+     "couleur": "noir",
+     "est_joker": false
+    }
+   ],
+   [
+    {
+     "id": "rouge_1_b",
+     "valeur": 1,
+     "couleur": "rouge",
+     "est_joker": false
+    },
+    {
+     "id": "bleu_1_a",
+     "valeur": 1,
+     "couleur": "bleu",
+     "est_joker": false
+    },
+    {
+     "id": "noir_1_a",
+     "valeur": 1,
+     "couleur": "noir",
+     "est_joker": false
+    }
+   ],
+   [
+    {
+     "id": "rouge_2_a",
+     "valeur": 2,
+     "couleur": "rouge",
+     "est_joker": false
+    },
+    {
+     "id": "bleu_2_b",
+     "valeur": 2,
+     "couleur": "bleu",
+     "est_joker": false
+    },
+    {
+     "id": "noir_2_a",
+     "valeur": 2,
+     "couleur": "noir",
+     "est_joker": false
+    }
+   ],
+   [
+    {
+     "id": "rouge_2_b",
+     "valeur": 2,
+     "couleur": "rouge",
+     "est_joker": false
+    },
+    {
+     "id": "rouge_3_b",
+     "valeur": 3,
+     "couleur": "rouge",
+     "est_joker": false
+    },
+    {
+     "id": "rouge_4_a",
+     "valeur": 4,
+     "couleur": "rouge",
+     "est_joker": false
+    }
+   ],
+   [
+    {
+     "id": "noir_6_b",
+     "valeur": 6,
+     "couleur": "noir",
+     "est_joker": false
+    },
+    {
+     "id": "rouge_6_b",
+     "valeur": 6,
+     "couleur": "rouge",
+     "est_joker": false
+    },
+    {
+     "id": "bleu_6_b",
+     "valeur": 6,
+     "couleur": "bleu",
+     "est_joker": false
+    },
+    {
+     "id": "jaune_6_a",
+     "valeur": 6,
+     "couleur": "jaune",
+     "est_joker": false
+    }
+   ],
+   [
+    {
+     "id": "rouge_8_b",
+     "valeur": 8,
+     "couleur": "rouge",
+     "est_joker": false
+    },
+    {
+     "id": "jaune_8_a",
+     "valeur": 8,
+     "couleur": "jaune",
+     "est_joker": false
+    },
+    {
+     "id": "noir_8_b",
+     "valeur": 8,
+     "couleur": "noir",
+     "est_joker": false
+    }
+   ],
+   [
+    {
+     "id": "rouge_10_a",
+     "valeur": 10,
+     "couleur": "rouge",
+     "est_joker": false
+    },
+    {
+     "id": "rouge_11_a",
+     "valeur": 11,
+     "couleur": "rouge",
+     "est_joker": false
+    },
+    {
+     "id": "rouge_12_b",
+     "valeur": 12,
+     "couleur": "rouge",
+     "est_joker": false
+    },
+    {
+     "id": "rouge_13_b",
+     "valeur": 13,
+     "couleur": "rouge",
+     "est_joker": false
+    }
+   ],
+   [
+    {
+     "id": "bleu_9_b",
+     "valeur": 9,
+     "couleur": "bleu",
+     "est_joker": false
+    },
+    {
+     "id": "bleu_10_a",
+     "valeur": 10,
+     "couleur": "bleu",
+     "est_joker": false
+    },
+    {
+     "id": "bleu_11_b",
+     "valeur": 11,
+     "couleur": "bleu",
+     "est_joker": false
+    }
+   ],
+   [
+    {
+     "id": "jaune_1_b",
+     "valeur": 1,
+     "couleur": "jaune",
+     "est_joker": false
+    },
+    {
+     "id": "jaune_2_b",
+     "valeur": 2,
+     "couleur": "jaune",
+     "est_joker": false
+    },
+    {
+     "id": "jaune_3_a",
+     "valeur": 3,
+     "couleur": "jaune",
+     "est_joker": false
+    },
+    {
+     "id": "jaune_4_b",
+     "valeur": 4,
+     "couleur": "jaune",
+     "est_joker": false
+    }
+   ]
+  ],
+  "config": {
+   "mise_initiale_min": 30
+  }
+ },
+ "attendu_min_tuiles": 6
+}
