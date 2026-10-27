@@ -931,3 +931,75 @@ position d'après.
   boutons réels ; vérifie le cadre qui se vide progressivement avec les
   bonnes couleurs de pourtour, l'absence de tuile commune cadre/plateau à
   chaque étape, et que « Quitter » ne modifie rien.
+
+## 13. Pistes d'amélioration de l'IA à tester (issue #195)
+
+Idées formulées par Alain au fil des parties de calibrage contre Expert,
+tirées de sa façon de jouer. **Aucune n'est implémentée** : ce sont des
+pistes pour la future révision des niveaux de difficulté, à cocher une par
+une au fur et à mesure que de futures issues les testent/implémentent.
+
+- [ ] **Piste 1 — Réserve d'un coup (garder un coup pour le tour
+  suivant)** : plutôt que de poser toutes les tuiles possibles en un tour,
+  en garder une pour le tour suivant afin d'éviter de piocher (deux tours à
+  une tuile plutôt qu'une pose de deux tuiles suivie d'une pioche).
+  **Risque** : l'adversaire peut occuper la place laissée libre entre les
+  deux tours. **Test** : nécessite d'évaluer un coup sur deux tours, pas un
+  seul ; l'analyse des coups d'un joueur humain (§11, et la fiabilisation à
+  venir de cette analyse) donnera les premières statistiques sur
+  l'efficacité réelle de cette technique chez un humain avant d'envisager
+  de l'implémenter côté IA.
+- [ ] **Piste 2 — Éliminer en priorité les doublons de la main** : quand la
+  main contient deux tuiles identiques (même valeur, même couleur), chercher
+  à en poser une le plus vite possible, car deux tuiles identiques ne
+  peuvent jamais entrer dans la même combinaison et sont donc plus
+  difficiles à placer. Exemple d'Alain : main `1 rouge, 2 rouge, 2 rouge,
+  3 rouge, 3 bleu, 3 noir` → jouer la suite 1-2-3 rouge plutôt que le groupe
+  de 3, pour faire partir un des deux `2 rouge`. **Hypothèse** : à nombre de
+  tuiles posées égal, préférer le coup qui laisse la main restante la plus
+  facile à placer (moins de doublons, moins de tuiles isolées).
+  **Test** : le départage actuel du solveur entre coups équivalents se fait
+  par points puis par économie de jokers (§8bis) ; ajouter un critère
+  d'évaluation de la main restante, puis comparer les deux versions avec
+  `scripts/comparer_niveaux_ia.py` (§9, donnes jouées en miroir, plusieurs
+  dizaines de donnes) pour voir si le taux de victoire change de façon
+  significative.
+- [ ] **Piste 3 — Plus de temps de réflexion pour Expert, ou un niveau
+  au-dessus** : la force d'Expert dépend directement de son budget de temps
+  (voir les mesures de #187 et #190, §8bis/§9). Un niveau supplémentaire qui
+  réfléchirait plus longtemps, ou qui calculerait sur deux tours, pourrait
+  se situer au-dessus du niveau de jeu d'un humain.
+- [ ] **Piste 4 — Procédure commune d'évaluation d'une piste** : comparer
+  deux versions de l'IA avec les parties jouées en miroir de
+  `scripts/comparer_niveaux_ia.py` (§9), vérifier le nombre de parties et la
+  marge d'erreur (IC 95 %) affichés par le script, et ne retenir une piste
+  que si le gain est significatif ET que le temps de calcul par tour reste
+  raisonnable.
+- [ ] **Piste 5 — Rôle des points dans le départage** : le solveur
+  départage aujourd'hui les coups équivalents en préférant celui qui pose
+  le plus de points (§8bis). Dans une partie d'une seule manche (§3bis,
+  configuration actuelle de l'application), ces points ne changent le
+  vainqueur que si la partie se termine **bloquée** (pioche épuisée, plus
+  aucun coup possible) : gagne alors celui dont les tuiles restantes valent
+  le moins. Sinon, la partie est gagnée par celui qui vide son chevalet en
+  premier, et les points ne changent que la marge affichée en fin de
+  partie. **Hypothèse** : le critère des points ne devrait passer en
+  premier que si la pioche est vide ou presque, ou si plusieurs manches
+  sont jouées (score cumulé) ; le reste du temps, il devrait laisser la
+  place à l'évaluation de la main restante (piste 2). **Test** : comparaison
+  par simulation, comme pour la piste 2.
+- [ ] **Constat (non corrigé ici) — fiabilité du réglage « Nombre de
+  manches »** : ce réglage a existé dans les réglages de l'écran d'accueil,
+  mais la règle de fin de partie pour plus d'une manche (`est_fin_partie`
+  dans `moteur/partie.py`) comparait le numéro de tour au nombre de manches,
+  ce qui ne compte pas de vraies manches (aucun compteur de manches
+  n'existe) — plusieurs manches ne fonctionnaient donc pas correctement.
+  **Décision d'Alain** (#192, §3bis) : le jeu se joue désormais en une seule
+  manche, et le réglage est masqué côté UI. La piste 5 ci-dessus ne vaut
+  donc, en pratique, que pour les parties bloquées. Entre joueurs humains,
+  Alain n'a jamais observé de partie bloquée : les fins de partie bloquées
+  vues en simulation (29 % au départ selon #184, environ 5 à 10 % avec le
+  solveur d'Expert selon #186/#187, §9) sont un signe de faiblesse de l'IA
+  plutôt qu'un phénomène normal du jeu, et leur proportion est un
+  **indicateur de qualité à suivre** : elle doit baisser quand l'IA
+  progresse.
