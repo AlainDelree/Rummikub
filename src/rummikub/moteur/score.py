@@ -50,3 +50,26 @@ def trouver_gagnant_manche(joueurs: list[dict]) -> int:
             meilleur_score = joueur["score_manche"]
             meilleur_index = i
     return meilleur_index
+
+
+def trouver_gagnant_match(joueurs: list[dict]) -> int:
+    """Index du joueur au plus haut score cumulé (= vainqueur du MATCH, toutes
+    manches confondues — issue #203). En cas d'égalité au sommet, retourne le
+    premier dans l'ordre des joueurs ; voir :func:`egalite_sommet_match` pour
+    savoir si le sommet est partagé."""
+    meilleur_index = 0
+    meilleur_score = joueurs[0].get("score_cumul", 0)
+    for i, joueur in enumerate(joueurs):
+        if joueur.get("score_cumul", 0) > meilleur_score:
+            meilleur_score = joueur.get("score_cumul", 0)
+            meilleur_index = i
+    return meilleur_index
+
+
+def egalite_sommet_match(joueurs: list[dict]) -> bool:
+    """Vrai si au moins deux joueurs partagent le plus haut score cumulé
+    (égalité en tête du classement final — issue #203)."""
+    if len(joueurs) < 2:
+        return False
+    meilleur = max(j.get("score_cumul", 0) for j in joueurs)
+    return sum(1 for j in joueurs if j.get("score_cumul", 0) == meilleur) >= 2

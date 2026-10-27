@@ -226,6 +226,14 @@ function remplirChampsReglages() {
   document.querySelectorAll("input[name='joker-val']").forEach((el) => {
     el.checked = el.value === jokerVal;
   });
+  // Nombre de manches (issue #203) : 1 à 9, défaut 1. Un ancien config.json
+  // sans la clé (ou avec une valeur hors bornes) retombe proprement sur 1.
+  const champManches = document.getElementById("rgl-manches");
+  if (champManches) {
+    let nbManches = parseInt(r.nb_manches, 10);
+    if (!(nbManches >= 1 && nbManches <= 9)) nbManches = 1;
+    champManches.value = String(nbManches);
+  }
   const modeReorg = r.mode_reorg || "clic";
   document.querySelectorAll("input[name='mode-reorg']").forEach((el) => {
     el.checked = el.value === modeReorg;
@@ -250,6 +258,13 @@ function construireGrilleAvatars() {
   });
 }
 
+// Lit le champ « Nombre de manches » (1 à 9), avec repli sur 1 (issue #203).
+function lireNbManches() {
+  const el = document.getElementById("rgl-manches");
+  const n = el ? parseInt(el.value, 10) : 1;
+  return (n >= 1 && n <= 9) ? n : 1;
+}
+
 async function sauvegarderReglages() {
   const jokerEl = document.querySelector("input[name='joker-val']:checked");
   const reorgEl = document.querySelector("input[name='mode-reorg']:checked");
@@ -262,6 +277,7 @@ async function sauvegarderReglages() {
     ia_auto: document.getElementById("rgl-ia-auto").checked,
     mode_reorg: reorgEl ? reorgEl.value : "clic",
     dezoom_auto: document.getElementById("rgl-dezoom-auto").checked,
+    nb_manches: lireNbManches(),
   };
   try {
     etat.reglages = await window.pywebview.api.sauvegarder_reglages(data);
@@ -305,6 +321,7 @@ async function lancerPartie() {
     valeur_joker_penalite: jokerEl ? parseInt(jokerEl.value, 10) : 30,
     vitesse_ia: document.getElementById("rgl-vitesse").value,
     ia_auto: document.getElementById("rgl-ia-auto").checked,
+    nb_manches: lireNbManches(),
   };
 
   // Fire and forget : la navigation vers jeu.html se fait côté Python.

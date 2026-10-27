@@ -99,20 +99,33 @@ def extraire_partie(data: dict) -> dict:
 
     decisions = []
     vues_par_tour = {}
+    manches = set()
     for a in actions:
+        m = a.get("manche")
+        if m is not None:
+            manches.add(m)
         if a.get("action") not in _DECISIONS:
             continue
         tour = a.get("tour")
         # Dédoublonnage (#185) : une décision annulée puis rejouée réutilise
         # le même numéro de tour — on ne garde que la dernière occurrence.
-        vues_par_tour[tour] = {
+        # Clé (manche, tour) depuis #203 : le ``tour`` repart de 1 à chaque
+        # manche, deux manches d'un même match se seraient sinon écrasées
+        # (``manche`` vaut ``None`` sur les journaux antérieurs → une seule
+        # manche, comportement d'origine).
+        vues_par_tour[(a.get("manche"), tour)] = {
+            "manche": a.get("manche"),
             "tour": tour,
             "auteur_index": a.get("auteur_index"),
             "action": a.get("action"),
             "nb_tuiles_posees": a.get("nb_tuiles_posees") or 0,
         }
-    decisions = [vues_par_tour[t] for t in sorted(
-        vues_par_tour, key=lambda t: (t is None, t))]
+
+    def _cle_tri(k):
+        manche, tour = k
+        return (manche is None, manche or 0, tour is None, tour or 0)
+
+    decisions = [vues_par_tour[k] for k in sorted(vues_par_tour, key=_cle_tri)]
 
     return {
         "partie_id": data.get("partie_id"),
@@ -120,6 +133,11 @@ def extraire_partie(data: dict) -> dict:
         "joueurs": joueurs,
         "gagnant_index": gagnant_index,
         "nb_tours": nb_tours,
+        # Nombre de manches distinctes observées dans ce MATCH (issue #203) :
+        # 1 pour un journal antérieur (sans la clé ``manche``) ou un match
+        # d'une seule manche. Permet au bilan de distinguer les manches sans
+        # jamais compter un match de plusieurs manches comme plusieurs parties.
+        "nb_manches": len(manches) if manches else 1,
         "tuiles_restantes": tuiles_restantes,
         "decisions": decisions,
     }
@@ -168,6 +186,7 @@ def _stats_vierges() -> dict:
         "_marges_victoire": [],
         "_marges_defaite": [],
         "_nb_tours": [],
+        "_nb_manches": [],
         "_decisions_ia": [],  # [(action, moment)]
     }
 
@@ -215,6 +234,7 @@ def calculer_bilan(parties: list, nom_joueur: str = None,
                 stats = par_niveau.setdefault(niveau, _stats_vierges())
                 stats["parties"] += 1
                 stats["_nb_tours"].append(nb_tours)
+                stats["_nb_manches"].append(partie.get("nb_manches") or 1)
 
                 if gagnant_index == idx_h:
                     stats["victoires_humain"] += 1
@@ -261,6 +281,12 @@ def _finaliser(stats: dict) -> dict:
         "marge_moyenne_victoire": _moyenne(stats["_marges_victoire"]),
         "marge_moyenne_defaite": _moyenne(stats["_marges_defaite"]),
         "tours_moyens": _moyenne(stats["_nb_tours"]),
+        # Issue #203 : nombre moyen de manches par match (1.0 pour des matchs
+        # d'une seule manche ou des journaux antérieurs) et total de manches
+        # jouées — le bilan distingue ainsi les manches sans jamais compter un
+        # match de plusieurs manches comme plusieurs parties.
+        "manches_moyennes": _moyenne(stats["_nb_manches"]),
+        "manches_total": sum(stats["_nb_manches"]),
         "part_pioche_ou_passe": (nb_pioche_ou_passe / nb_decisions
                                  if nb_decisions else None),
         "repartition_moment_pioche_ou_passe": (

@@ -1,8 +1,8 @@
-"""Vérification du front-end de l'écran d'accueil (issue #192) avec
-Playwright, chargé directement sur `accueil.html` (jamais la vraie
-application pywebview, inaccessible en test, voir CONTEXTE.md §7) : on
-mocke `window.pywebview.api` et on pilote l'interface comme le ferait un
-joueur.
+"""Vérification du front-end de l'écran d'accueil pour le réglage « Nombre de
+manches » réintroduit (issue #203, suite de #192), avec Playwright, chargé
+directement sur `accueil.html` (jamais la vraie application pywebview,
+inaccessible en test, voir CONTEXTE.md §7) : on mocke `window.pywebview.api`
+et on pilote l'interface comme le ferait un joueur.
 
 Nécessite `pip install playwright` puis `playwright install chromium` (pas
 une dépendance de production : absente de requirements.txt, le test est
@@ -18,14 +18,13 @@ playwright_sync = pytest.importorskip("playwright.sync_api")
 
 WEB_DIR = Path(__file__).resolve().parents[1] / "src" / "rummikub" / "ui" / "web"
 
-# Simule des réglages sauvegardés par une version antérieure à #192, avec
-# un nombre de manches > 1 — la valeur que l'app ne doit plus jamais
-# relire ni réafficher.
-_REGLAGES_ANCIENS = {
+# Réglages sauvegardés avec un nombre de manches valide (3) : la valeur que
+# l'app doit réafficher et transmettre à la création de la partie.
+_REGLAGES = {
     "prenom": "Alain",
     "avatar_index": 0,
     "mise_initiale_min": 30,
-    "nb_manches": 5,
+    "nb_manches": 3,
     "valeur_joker_penalite": 30,
     "vitesse_ia": "Normale",
     "ia_auto": False,
@@ -35,6 +34,7 @@ _REGLAGES_ANCIENS = {
 
 _MOCK_API_JS = """
 window._reglagesSauvegardes = null;
+window._partieLancee = null;
 window.pywebview = {
     api: {
         charger_accueil: () => Promise.resolve({
@@ -48,11 +48,14 @@ window.pywebview = {
         },
         nom_ia_aleatoire: () => Promise.resolve({nom: "Robot"}),
         supprimer_partie: () => Promise.resolve({ok: true}),
-        lancer_nouvelle_partie: () => Promise.resolve({ok: true}),
+        lancer_nouvelle_partie: (config) => {
+            window._partieLancee = config;
+            return Promise.resolve({ok: true});
+        },
         reprendre_partie: () => Promise.resolve({ok: true}),
     },
 };
-""" % (json.dumps(_REGLAGES_ANCIENS), json.dumps(_REGLAGES_ANCIENS))
+""" % (json.dumps(_REGLAGES), json.dumps(_REGLAGES))
 
 
 @pytest.fixture(scope="module")
@@ -72,16 +75,8 @@ def page(browser):
     erreurs = []
     pg.on("console", lambda msg: erreurs.append(msg.text) if msg.type == "error" else None)
     pg.on("pageerror", lambda exc: erreurs.append(str(exc)))
-    # Mock injecté avant tout script de la page, pour que init() (déclenché
-    # par "pywebviewready" ou DOMContentLoaded si pywebview déjà présent)
-    # trouve l'API dès le chargement.
     pg.add_init_script(_MOCK_API_JS)
     pg.goto(WEB_DIR.joinpath("accueil.html").as_uri())
-    # window.pywebview est déjà présent au moment du DOMContentLoaded (fixé
-    # par le script d'init ci-dessus avant tout script de la page) : la
-    # branche de secours d'accueil.js appelle alors initUneFois() seule,
-    # mais au cas où l'ordre d'exécution diffère selon le moteur, on
-    # redéclenche explicitement l'événement attendu.
     pg.evaluate("window.dispatchEvent(new Event('pywebviewready'))")
     pg.wait_for_function("etat.reglages !== null")
     pg._erreurs_console = erreurs
@@ -89,40 +84,51 @@ def page(browser):
     pg.close()
 
 
-def test_champ_nombre_de_manches_absent_du_dom(page):
-    assert page.query_selector("#rgl-manches") is None
-    assert "Nombre de manches" not in page.inner_text("#overlay-reglages")
-
-
-def test_pas_de_trou_dans_le_panneau_regles(page):
-    # Le panneau "Règles du jeu" doit garder exactement ses deux réglages
-    # restants (mise initiale, valeur du joker), sans label vide à la place
-    # de celui retiré.
+def test_champ_nombre_de_manches_present(page):
+    # Le champ réintroduit par #203 existe dans le panneau « Règles du jeu ».
     page.click("#btn-reglages")
     page.click("button[data-onglet='regles']")
-    labels = page.locator("#panneau-regles > label, #panneau-regles > div").all_inner_texts()
-    assert len(labels) == 2
-    assert any("Mise initiale" in t for t in labels)
-    assert any("joker" in t.lower() for t in labels)
+    assert page.query_selector("#rgl-manches") is not None
+    assert "Nombre de manches" in page.inner_text("#overlay-reglages")
 
 
-def test_reglages_s_enregistrent_et_se_rechargent_sans_erreur(page):
-    # Ouvre puis ferme les réglages (fermerReglages -> sauvegarderReglages),
-    # avec un ancien nb_manches=5 en mémoire côté mock API.
+def test_valeur_rechargee_depuis_les_reglages(page):
+    # remplirChampsReglages() reflète la valeur enregistrée (3 ici).
     page.click("#btn-reglages")
-    assert page.get_attribute("#overlay-reglages", "class") == "overlay-visible"
+    page.click("button[data-onglet='regles']")
+    assert page.input_value("#rgl-manches") == "3"
+
+
+def test_reglages_enregistrent_le_nombre_de_manches(page):
+    page.click("#btn-reglages")
+    page.click("button[data-onglet='regles']")
+    page.select_option("#rgl-manches", "5")
     page.click("#btn-fermer-rgl")
     page.wait_for_function("window._reglagesSauvegardes !== null")
+    donnees = page.evaluate("window._reglagesSauvegardes")
+    assert donnees["nb_manches"] == 5
+    assert page._erreurs_console == []
 
-    donnees_envoyees = page.evaluate("window._reglagesSauvegardes")
-    assert "nb_manches" not in donnees_envoyees
 
-    # Rouvre : remplirChampsReglages() relit etat.reglages (désormais le
-    # retour fusionné du mock, qui contient toujours l'ancien nb_manches=5
-    # côté stockage) sans jamais tenter d'accéder à #rgl-manches.
+def test_lancer_partie_transmet_le_nombre_de_manches(page):
+    # Ajoute un adversaire puis règle 4 manches et lance : lancer_nouvelle_partie
+    # doit recevoir nb_manches dans les règles.
+    page.click("button.btn-ajout-niveau[data-niveau='Facile']")
     page.click("#btn-reglages")
-    assert page.get_attribute("#overlay-reglages", "class") == "overlay-visible"
-    assert page.query_selector("#rgl-manches") is None
+    page.click("button[data-onglet='regles']")
+    page.select_option("#rgl-manches", "4")
+    page.click("#btn-fermer-rgl")
+    page.click("#btn-lancer")
+    page.wait_for_function("window._partieLancee !== null")
+    config = page.evaluate("window._partieLancee")
+    assert config["regles"]["nb_manches"] == 4
+    assert page._erreurs_console == []
 
-    assert page.evaluate("etat.reglages.nb_manches") == 5  # ancienne valeur, inerte
+
+def test_valeur_hors_bornes_retombe_sur_1(page):
+    # Une valeur enregistrée hors de [1, 9] (ou absente) est réaffichée comme 1.
+    page.evaluate("etat.reglages.nb_manches = 99; remplirChampsReglages();")
+    assert page.input_value("#rgl-manches") == "1"
+    page.evaluate("delete etat.reglages.nb_manches; remplirChampsReglages();")
+    assert page.input_value("#rgl-manches") == "1"
     assert page._erreurs_console == []

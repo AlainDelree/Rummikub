@@ -315,3 +315,64 @@ def test_calculer_resume_par_niveau_et_moment():
 def test_top_coups_rates_tri_decroissant_exclut_non_rates():
     top = CR.top_coups_rates(_resultats_synthetiques(), n=5)
     assert [r["tour"] for r in top] == [1, 2]
+
+
+# --------------------------------------------------------------------------- #
+# Manches multiples : ne jamais confondre deux manches d'un même match
+# (issue #203).
+# --------------------------------------------------------------------------- #
+
+def _action_m(manche, tour, auteur_index, action, nb_tuiles_posees=0,
+              mains_joueurs=None, plateau=None):
+    a = _action(tour, auteur_index, action, nb_tuiles_posees=nb_tuiles_posees,
+                mains_joueurs=mains_joueurs, plateau=plateau)
+    a["manche"] = manche
+    return a
+
+
+def _journal_deux_manches():
+    """Match de 2 manches. Le bot (idx 1) pioche au tour 3 de CHAQUE manche
+    (mêmes numéros de tour, les manches repartent de 1). Chaque pioche est
+    précédée, DANS SA manche, d'une action qui enregistre l'état à
+    reconstituer. La première action de la manche 2 a pour état précédent une
+    action de la manche 1 : elle ne doit jamais être reconstituée."""
+    main_bot = [_tuile("rouge_1_a", 1, "rouge"),
+                _tuile("bleu_5_a", 5, "bleu"),
+                _tuile("jaune_9_a", 9, "jaune")]
+    mains = [{"nom": "Alain", "tuiles": []}, {"nom": "Bot", "tuiles": main_bot}]
+    actions = [
+        _action_m(1, 1, 0, "pose", nb_tuiles_posees=3, mains_joueurs=mains),
+        _action_m(1, 2, 1, "pose", nb_tuiles_posees=0, mains_joueurs=mains),
+        _action_m(1, 3, 1, "pioche", mains_joueurs=mains),
+        # Frontière : première action de la manche 2 (état précédent = manche 1).
+        _action_m(2, 1, 1, "pioche", mains_joueurs=mains),
+        _action_m(2, 2, 0, "pose", nb_tuiles_posees=3, mains_joueurs=mains),
+        _action_m(2, 3, 1, "pioche", mains_joueurs=mains),
+    ]
+    return {"partie_id": "m2", "debut": "2026-10-28T10:00:00",
+            "joueurs": [_joueur("Alain", False), _joueur("Bot", True, "Avancé")],
+            "actions": actions}
+
+
+def test_decisions_ia_ne_melangent_pas_deux_manches():
+    """`extraire_decisions_ia` saute la première décision d'une manche (son
+    état précédent appartient à la manche d'avant, plateau remis à zéro) et
+    conserve les décisions des tours identiques des deux manches sans les
+    confondre."""
+    decisions = CR.extraire_decisions_ia(_journal_deux_manches())
+    # 2 pioches reconstituables (tour 3 de chaque manche) ; la pioche de
+    # frontière (manche 2, tour 1) est exclue.
+    manches_tours = sorted((d.get("tour"),) for d in decisions)
+    assert len(decisions) == 2
+
+
+def test_toutes_decisions_cle_inclut_la_manche():
+    """`extraire_toutes_decisions` (via extraire_decisions_ia_toutes) garde les
+    décisions de même (tour, idx) dans deux manches distinctes — la clé de
+    dédoublonnage inclut la manche (sinon la manche 2 écraserait la manche 1)."""
+    decisions = CR.extraire_decisions_ia_toutes(_journal_deux_manches())
+    # Tour 3 pioche présent dans les DEUX manches (clé (manche, tour, idx)) ;
+    # pose tour 2 manche 2 ; la pioche de frontière (m2, t1) est exclue.
+    tours_pioche = [d["tour"] for d in decisions if d["action"] == "pioche"]
+    assert tours_pioche.count(3) == 2
+    assert all(d.get("manche") in (1, 2) for d in decisions)

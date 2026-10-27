@@ -7,6 +7,7 @@ DEFAUTS = {
     "avatar_index": 0,
     "mise_initiale_min": 30,
     "valeur_joker_penalite": 30,
+    "nb_manches": 1,       # nombre de manches du match (1 à 9, défaut 1 — issue #203)
     "vitesse_ia": "Lente",
     # Vitesse du rejeu à la demande du dernier coup IA (issue #160, échelle
     # décalée vers le bas par #164 : "Lente"/"Moyenne"/"Rapide" sont les mêmes

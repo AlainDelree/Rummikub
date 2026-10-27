@@ -58,13 +58,14 @@ class ApplicationRummikub:
         self._window.load_url(str(_WEB / "jeu.html"))
 
     def reprendre_jeu(self, etat):
-        from rummikub.moteur.partie import backup_debut_tour
+        from rummikub.moteur.partie import (backup_debut_tour,
+                                            normaliser_etat_reprise)
         from rummikub import reglages as Reglages
-        self.etat_jeu = etat
-        # Force 1 manche même sur une partie sauvegardée avant #192 avec une
-        # autre valeur enregistrée : plus aucune nouvelle/reprise de partie
-        # ne doit dépendre du compteur de manches, resté inactif (§3bis).
-        self.etat_jeu.setdefault("config", {})["nb_manches"] = 1
+        # Reprise d'une partie sauvegardée (issue #203) : une partie d'avant
+        # les manches multiples (sans compteur ``manche_numero``) est reprise
+        # en une seule manche ; une partie récente conserve son vrai nombre de
+        # manches, même reprise au milieu d'un match (voir docstring).
+        self.etat_jeu = normaliser_etat_reprise(etat)
         # Reflète toujours la préférence UI courante, même sur partie reprise.
         cfg = Reglages.charger()
         self.etat_jeu.setdefault("config", {})["mode_reorg"] = \

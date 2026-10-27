@@ -255,6 +255,7 @@ function afficherLegendeCouleurs() {
 // ------------------------------------------------------------ rafraîchissement
 function rafraichirTout() {
   if (!etat) return;
+  rafraichirIndicateurManche();
   rafraichirFichesJoueurs();
   rafraichirPlateau();
   rafraichirZoneTravail();
@@ -264,6 +265,23 @@ function rafraichirTout() {
   mettreAJourSac((etat.pioche || []).length);
   if (etat.manche_terminee) afficherFinDeManche();
   verifierAutoIA();
+}
+
+// Affiche « Manche N / M » dans la barre supérieure quand le match compte
+// plusieurs manches (issue #203) ; reste masqué pour une partie d'une seule
+// manche (comportement par défaut, barre inchangée).
+function rafraichirIndicateurManche() {
+  const el = document.getElementById("indicateur-manche");
+  if (!el) return;
+  const nbManches = (etat.config && etat.config.nb_manches) || 1;
+  const numero = etat.manche_numero || 1;
+  if (nbManches > 1) {
+    el.textContent = "Manche " + numero + " / " + nbManches;
+    el.hidden = false;
+  } else {
+    el.textContent = "";
+    el.hidden = true;
+  }
 }
 
 // Jeu automatique du tour de l'IA (issue #126, réglage "Jouer automatiquement
@@ -1988,17 +2006,28 @@ function afficherClassementFinal() {
     .map((j) => ({ nom: j.nom, score: j.score_cumul || 0 }))
     .sort((a, b) => b.score - a.score);
 
+  // Égalité en tête (issue #203) : plusieurs joueurs au plus haut score
+  // cumulé. On l'affiche explicitement plutôt que de désigner arbitrairement
+  // un vainqueur unique.
+  const meilleur = classement.length ? classement[0].score : 0;
+  const exAequo = classement.filter((j) => j.score === meilleur);
+  const egalite = exAequo.length >= 2;
   const gagnant = classement.length ? classement[0].nom : "—";
-  document.getElementById("titre-classement").textContent =
-    "🏁 " + gagnant + " remporte la partie !";
+  document.getElementById("titre-classement").textContent = egalite
+    ? "🏁 Égalité : " + exAequo.map((j) => j.nom).join(", ") + " !"
+    : "🏁 " + gagnant + " remporte la partie !";
 
   const table = document.getElementById("tableau-classement");
   let html = "<tr><th>Rang</th><th>Joueur</th><th>Score total</th></tr>";
   const MEDAILLES = ["🥇", "🥈", "🥉"];
   classement.forEach((j, rang) => {
-    const cls = (rang === 0) ? " class='gagnant'" : "";
-    const medaille = MEDAILLES[rang] ? MEDAILLES[rang] + " " : "";
-    html += "<tr" + cls + "><td>" + medaille + (rang + 1) + "</td><td>" +
+    // En cas d'égalité en tête, tous les ex æquo partagent le rang 1 et la
+    // médaille d'or ; le surlignage « gagnant » les couvre tous.
+    const exAequoTete = egalite && j.score === meilleur;
+    const cls = (rang === 0 || exAequoTete) ? " class='gagnant'" : "";
+    const medaille = exAequoTete ? "🥇 " : (MEDAILLES[rang] ? MEDAILLES[rang] + " " : "");
+    const rangAffiche = exAequoTete ? 1 : (rang + 1);
+    html += "<tr" + cls + "><td>" + medaille + rangAffiche + "</td><td>" +
       j.nom + "</td><td>" + j.score + "</td></tr>";
   });
   table.innerHTML = html;

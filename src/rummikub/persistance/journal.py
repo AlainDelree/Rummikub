@@ -37,9 +37,16 @@ existants (mains, plateau, pioche...) :
     ajouté par #201, absent des journaux antérieurs : à lire comme 0 dans ce
     cas, voir ``persistance/coups_rates.py`` qui ne s'appuie d'ailleurs
     jamais sur ce champ, seulement sur la variation réelle de la main).
-    ``termine`` : ``True`` si la partie est terminée après cette action.
-    ``gagnant_index`` : index du gagnant de la manche si ``termine``, sinon
-    ``None``.
+    ``manche`` : numéro de la manche en cours au moment de l'action (issue
+    #203, absent des journaux antérieurs → à lire comme une manche unique). Le
+    ``tour`` repartant de 1 à chaque manche, seul le couple (``manche``,
+    ``tour``) identifie un tour sans ambiguïté dans un match de plusieurs
+    manches (voir ``persistance/bilan.py`` et ``persistance/coups_rates.py``).
+    ``termine`` : ``True`` si le MATCH (toutes manches) est terminé après cette
+    action — jamais à la fin d'une manche intermédiaire (issue #203).
+    ``gagnant_index`` : à la fin du match (``termine``), index du vainqueur du
+    MATCH (plus haut score cumulé) ; à la fin d'une manche intermédiaire,
+    index du gagnant de cette manche ; sinon ``None``.
     ``mises_initiales`` : liste de booléens alignée sur ``joueurs`` (même ordre
     que ``etat["joueurs"]``) — pour chaque joueur, ``True`` s'il a déjà fait sa
     mise initiale au moment de cette action (issue #202, absent des journaux
@@ -180,12 +187,25 @@ def logger_action(etat: dict, action: str, *,
             "horodatage": datetime.now().isoformat(timespec="seconds"),
             "action": action,
             "tour": etat.get("tour_numero"),
+            # Numéro de la manche en cours (issue #203, absent des journaux
+            # antérieurs : à lire comme une manche unique dans ce cas). Le
+            # ``tour`` repart de 1 à chaque manche : seul le couple
+            # (manche, tour) identifie un tour de façon unique dans un match
+            # de plusieurs manches — utilisé par ``bilan.py`` et
+            # ``coups_rates.py`` pour ne pas confondre deux manches.
+            "manche": etat.get("manche_numero", 1),
             "joueur_actuel": etat.get("index_joueur_actuel"),
             "auteur_index": auteur_index,
             "nb_tuiles_posees": nb_tuiles_posees,
             "nb_tuiles_deplacees": nb_tuiles_deplacees,
             "termine": bool(etat.get("terminee")),
-            "gagnant_index": etat.get("gagnant_manche_index"),
+            # À la fin du match (``termine``), on enregistre le vainqueur du
+            # MATCH (plus haut score cumulé, issue #203) et non celui de la
+            # seule dernière manche — les deux coïncident en une seule manche.
+            "gagnant_index": (etat.get("gagnant_match_index")
+                              if etat.get("terminee")
+                              and etat.get("gagnant_match_index") is not None
+                              else etat.get("gagnant_manche_index")),
             "mises_initiales": _mises_initiales(etat),
             "main_humain": _main_humain(etat),
             "mains_joueurs": _mains_joueurs(etat),

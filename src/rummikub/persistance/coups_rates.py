@@ -171,6 +171,15 @@ def extraire_decisions_ia(data: dict, debut_present: bool = True) -> list:
         precedente = actions[i - 1]
         if actuelle.get("action") not in _DECISIONS_SANS_POSE:
             continue
+        # Frontière de manche (issue #203) : l'état reconstitué d'une décision
+        # est celui de l'action PRÉCÉDENTE ; si celle-ci appartient à une AUTRE
+        # manche (plateau/chevalets remis à zéro entre les deux), il ne décrit
+        # pas la situation affrontée — on ne mélange jamais deux manches, la
+        # décision est ignorée (comme la toute première action d'un journal).
+        # ``manche`` vaut ``None`` partout sur un journal antérieur → jamais de
+        # saut (comportement d'origine, une seule manche).
+        if precedente.get("manche") != actuelle.get("manche"):
+            continue
 
         idx = actuelle.get("auteur_index")
         if not isinstance(idx, int) or not (0 <= idx < len(joueurs)):
@@ -604,6 +613,12 @@ def extraire_toutes_decisions(data: dict, predicat_joueur,
         action = actuelle.get("action")
         if action not in ("pose", "pioche", "passe"):
             continue
+        # Frontière de manche (issue #203) : voir ``extraire_decisions_ia`` —
+        # on ne reconstitue jamais une décision à partir de l'état d'une autre
+        # manche (plateau/chevalets remis à zéro). ``manche`` absent (journal
+        # antérieur) → None == None → jamais de saut.
+        if precedente.get("manche") != actuelle.get("manche"):
+            continue
 
         idx = actuelle.get("auteur_index")
         if not isinstance(idx, int) or not (0 <= idx < len(joueurs)):
@@ -648,7 +663,14 @@ def extraire_toutes_decisions(data: dict, predicat_joueur,
                              "mise_initiale_faite": mise_initiale_faite}
 
         tour = actuelle.get("tour")
-        brutes[(tour, idx)] = {
+        # Clé (manche, tour, idx) depuis #203 : le ``tour`` repart de 1 à
+        # chaque manche, deux manches du même match s'écraseraient sinon sur
+        # le même (tour, idx). Une décision annulée puis rejouée réutilise le
+        # même numéro de tour DANS SA manche : seule la dernière occurrence est
+        # conservée, comportement #193 inchangé.
+        manche = actuelle.get("manche")
+        brutes[(manche, tour, idx)] = {
+            "manche": manche,
             "tour": tour,
             "niveau": joueurs[idx].get("niveau"),
             "nom": joueurs[idx].get("nom"),
@@ -676,7 +698,11 @@ def extraire_toutes_decisions(data: dict, predicat_joueur,
             },
         }
 
-    cles = sorted(brutes, key=lambda k: (k[0] is None, k[0], k[1]))
+    def _cle_tri(k):
+        manche, tour, idx = k
+        return (manche is None, manche or 0, tour is None, tour or 0, idx)
+
+    cles = sorted(brutes, key=_cle_tri)
     return [brutes[k] for k in cles]
 
 

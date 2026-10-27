@@ -94,15 +94,20 @@ tests/                      pytest : test_moteur.py + test_ia.py + test_descript
 - `passer_tour(etat)` → `{ok, etat}`.
 - `backup_debut_tour(etat)` : deep-copy plateau + chevalet + index + tour_numero.
 - `annuler_tour(etat)` : restaure depuis le backup.
-- `nouvelle_manche(etat)` : redistribue, reset plateau/chevalets/mise,
-  **conserve score_cumul**. Rappelle `backup_debut_tour`. **Inactif depuis
-  #192** (voir §3bis) : plus aucun appelant de l'application ne l'invoque,
-  conservé pour une éventuelle réintroduction future des manches
-  multiples.
-- `est_fin_partie(etat)` : True si `nb_manches==1` et manche terminée, sinon
-  `tour_numero > nb_manches` (simplifié). **Depuis #192, `nb_manches` vaut
-  toujours 1** (voir §3bis) : la branche `else` n'est donc plus jamais
-  empruntée en pratique dans l'application, mais reste en place.
+- `nouvelle_manche(etat)` : démarre la manche suivante (issue #203) —
+  incrémente `manche_numero`, redistribue, reset plateau/chevalets/mise/
+  score_manche, **conserve score_cumul**, rappelle `backup_debut_tour`.
+  **Rotation du donneur** : la manche N (1-based) commence par le joueur
+  `(N-1) % nb_joueurs`. Appelée par `api.jeu_nouvelle_manche` (bouton
+  « Manche suivante ») et par les scripts de simulation.
+- `est_fin_partie(etat)` : True quand la manche courante est terminée ET que
+  `manche_numero >= nb_manches` (issue #203, remplace l'ancienne comparaison
+  fondée sur `tour_numero`). Avec `nb_manches == 1` (défaut), équivaut à
+  `manche_terminee`.
+- `normaliser_etat_reprise(etat)` : à la reprise d'une sauvegarde (issue
+  #203) — une partie SANS `manche_numero` (état d'avant les manches
+  multiples) est reprise en une seule manche ; une partie récente conserve
+  son vrai nombre de manches, même reprise au milieu d'un match.
 - Helpers internes : `plateau_depuis_dict`, `_plateau_vers_dict`,
   `_points_tuiles_posees`, `_terminer_tour`, `_ajouter_historique`.
 
@@ -111,55 +116,87 @@ tests/                      pytest : test_moteur.py + test_ia.py + test_descript
   de leur chevalet ; gagnant (chevalet vide) = +somme des pénalités adverses.
   Met à jour `score_manche` et `score_cumul` en place.
 - `trouver_gagnant_manche(joueurs)` → index du meilleur `score_manche`.
+- `trouver_gagnant_match(joueurs)` → index du meilleur `score_cumul`
+  (vainqueur du MATCH, toutes manches confondues — issue #203).
+- `egalite_sommet_match(joueurs)` → True si au moins deux joueurs partagent
+  le plus haut `score_cumul` (égalité en tête du classement final).
 
-## 3bis. Manches multiples : réglage retiré, code moteur inactif (issue #192)
+## 3bis. Manches multiples : réglage réactivé, vrai compteur de manches (issue #203, suite de #192)
 
-Le jeu se joue désormais **toujours en une seule manche** — décision
-d'Alain, suite au constat que la règle de fin de partie pour plusieurs
-manches (`est_fin_partie`) comparait `tour_numero` au nombre de manches
-sans qu'aucun compteur de manches correct n'existe par ailleurs (aucun
-appel à `nouvelle_manche` nulle part dans l'application) : un joueur qui
-aurait choisi plus d'une manche depuis les réglages avait donc un
-comportement incorrect.
+> **Statut : ACTIF depuis #203.** #192 avait masqué le réglage et forcé une
+> seule manche partout (faute d'un compteur de manches correct :
+> `est_fin_partie` comparait alors `tour_numero` au nombre de manches, et
+> aucun appel à `nouvelle_manche` n'existait dans l'application). #203 ajoute
+> un vrai compteur (`manche_numero`), des scores cumulés par joueur, et relie
+> le tout au réglage — le comportement **par défaut reste une seule manche**.
 
-- **Réglage retiré de l'UI** : le champ « Nombre de manches » (1-99) a été
-  retiré de `accueil.html` (onglet « Règles du jeu ») et des handlers JS
-  associés dans `accueil.js` (`remplirChampsReglages`, `sauvegarderReglages`,
-  `lancerPartie`). La clé `nb_manches` a aussi été retirée de
-  `reglages.DEFAUTS` (`reglages.py`) : elle n'est plus écrite par
-  l'application, mais une ancienne valeur déjà présente dans un
-  `config.json` existant reste lue sans erreur (fusion `{**DEFAUTS,
-  **json.loads(...)}`), simplement ignorée.
-- **Point d'enforcement unique : `creer_partie`** (`moteur/partie.py`) force
-  désormais `"nb_manches": 1` sans jamais lire `config_regles.get(
-  "nb_manches", ...)` — toute nouvelle partie a donc exactement une manche,
-  quelle que soit la valeur transmise par l'appelant (réglages UI,
-  `config.json` ancien, script). **Reprise d'une partie sauvegardée** :
-  `ApplicationRummikub.reprendre_jeu` (`ui/application.py`) force aussi
-  `etat["config"]["nb_manches"] = 1` sur l'état rechargé depuis SQLite, pour
-  qu'une partie créée avant #192 avec une autre valeur ne retombe pas dans
-  la branche `else` incorrecte de `est_fin_partie` une fois reprise.
-- **Code moteur lié aux manches volontairement conservé, mais inactif** :
-  `nouvelle_manche` et la branche `tour_numero > nb_manches` d'
-  `est_fin_partie` (`moteur/partie.py`), ainsi que `score_cumul`
-  (`score.py`, `partie.py`) restent en place tels quels — aucun appelant de
-  l'application ne les atteint plus en pratique puisque `nb_manches` vaut
-  toujours 1. Un compteur de manches correct (actuellement absent) reste à
-  écrire le jour où des manches multiples seraient réintroduites. L'écran
-  de fin de partie n'a pas été modifié.
-- **Non concerné** : `scripts/simulation_ia.py` et
-  `scripts/comparer_niveaux_ia.py` (§9) appellent directement
-  `creer_partie`/`nouvelle_manche` en dehors de l'application pour simuler
-  plusieurs manches IA vs IA — ces scripts de test/mesure restent
-  inchangés, seule l'application (UI + moteur côté parties jouées par un
-  humain) est concernée par le forçage à 1.
-- Tests : `tests/test_moteur.py::
-  test_creer_partie_force_une_seule_manche_meme_si_regles_en_demandent_plus`
-  (nouvelle partie toujours à 1 manche même si `config_regles` en demande
-  plus) ; `tests/test_playwright_accueil_reglages.py` (Playwright sur
-  `accueil.html`, voir §7 : champ absent du DOM, pas de trou dans le
-  panneau « Règles du jeu », réglages enregistrés/rechargés sans erreur
-  console même avec un ancien `nb_manches` > 1 simulé côté mock API).
+**Règles des manches (issue #203) :**
+
+- Le joueur choisit le **nombre de manches** du match (1 à 9, défaut 1), via
+  le champ « Nombre de manches » réaffiché dans les réglages de l'accueil
+  (onglet « Règles du jeu », `accueil.html`/`accueil.js`) et persisté sous
+  la clé `nb_manches` de `config.json` (`reglages.DEFAUTS`). Un `config.json`
+  ancien ou sans la clé retombe sur 1 (fusion `{**DEFAUTS, ...}` + bornage
+  dans `creer_partie`).
+- **Fin d'une manche** : un joueur vide son chevalet, ou la partie est
+  bloquée (pioche épuisée — règle existante, approximation de « tous
+  bloqués »). `calculer_scores_manche` applique alors le barème (perdants :
+  −somme des pénalités de leur chevalet, joker à la valeur du réglage ;
+  gagnant : +total) et l'**ajoute aux `score_cumul`**.
+- **Avec une seule manche** (défaut), les points restants ne départagent que
+  les parties bloquées : le gagnant est celui qui vide son chevalet (plus
+  haut `score_cumul` = plus haut `score_manche`). **Avec au moins deux
+  manches**, les points restants du perdant s'accumulent et comptent pour la
+  suite.
+- **Manche intermédiaire** (pas la dernière) : `_terminer_tour` marque
+  `manche_terminee` mais **pas** `terminee`. L'UI montre l'écran de fin de
+  manche (scores de la manche + cumul, bouton « Manche suivante »), qui
+  appelle `api.jeu_nouvelle_manche` → `nouvelle_manche` : nouvelle donne,
+  mise initiale remise à zéro pour tous, `score_cumul` conservé, et
+  **rotation du donneur** (la manche N commence par le joueur
+  `(N-1) % nb_joueurs`).
+- **Dernière manche** : `est_fin_partie` est vrai (`manche_numero >=
+  nb_manches`), `terminee` passe à True, `gagnant_match_index` = joueur au
+  plus haut `score_cumul`, `egalite_match` si égalité au sommet. L'UI montre
+  le classement final (par `score_cumul` décroissant ; égalité affichée).
+  Avec une seule manche, cet écran de fin reste celui d'avant #203.
+- **Reprise d'une sauvegarde** : `normaliser_etat_reprise` (`moteur/
+  partie.py`, appelé par `reprendre_jeu`) reprend un match récent au milieu
+  d'un match en conservant son nombre de manches ; une partie sauvegardée
+  AVANT #203 (sans `manche_numero`), même avec `nb_manches > 1`, est reprise
+  en une seule manche (aucun point de départ fiable pour le décompte).
+- **IA inchangée** (issue #203, point 5) : les IA jouent chaque manche
+  comme avant, sans tenir compte du score cumulé ni du nombre de manches
+  (deux pistes à ce sujet en §13).
+
+**Journal / bilan / coups ratés (issue #203, point 4) :** chaque action du
+journal porte désormais son numéro de `manche` ; `termine` n'est vrai qu'à la
+fin du MATCH (jamais d'une manche intermédiaire), et `gagnant_index` y vaut
+alors le vainqueur du match (plus haut cumul). `bilan.py` compte un match de
+plusieurs manches **une seule fois** (dédoublonnage des décisions par
+`(manche, tour)`, nouveau champ `nb_manches`/`manches_moyennes`) ; une partie
+reprise après fermeture reste un seul match (regroupement par `partie_id`,
+§10bis). `coups_rates.py` ne reconstitue jamais une décision à partir de
+l'état d'une AUTRE manche (plateau remis à zéro : saut de frontière de
+manche) et clôt chaque décision par `(manche, tour, idx)`. Tous ces champs
+sont absents des journaux antérieurs → lus comme une manche unique, sans
+régression.
+
+**Simulations (issue #203, point 6) :** `scripts/simulation_ia.py`
+(`--manches N`, déjà présent, enrichi d'un résultat par manche + vainqueur du
+match) et `scripts/comparer_niveaux_ia.py` (`--manches N`, nouveau) jouent des
+matchs de N manches ; `comparer` donne les résultats par match (victoires au
+cumul, score cumulé moyen) et par manche, parties toujours jouées en miroir.
+
+**Tests :** `tests/test_moteur.py` (nb_manches borné, fin de manche
+intermédiaire vs match, scores cumulés, rotation du donneur, vainqueur au
+cumul ≠ gagnant de la dernière manche, égalité, reprise au milieu / reprise
+d'une ancienne sauvegarde) ; `tests/test_bilan.py` (un match de plusieurs
+manches compté une seule fois) ; `tests/test_coups_rates.py` (manches non
+confondues) ; `tests/test_playwright_accueil_reglages.py` (champ présent,
+valeur rechargée/enregistrée/transmise, bornage à 1) ;
+`tests/test_playwright_manches.py` (indicateur « Manche N / M », écran de fin
+de manche intermédiaire, classement final, affichage de l'égalité).
 
 ## 4. Conventions importantes
 
@@ -168,10 +205,12 @@ comportement incorrect.
   stockés dans l'état). Le moteur convertit Tuile ↔ dict aux frontières.
 - **plateau** = `list[list[dict_tuile]]` côté état/API ;
   `list[list[Tuile]]` seulement à l'intérieur des fonctions de validation/moteur.
-- Clés de l'état : `id, phase, tour_numero, index_joueur_actuel, joueurs[],
-  pioche[], plateau[], plateau_debut_tour, chevalet_debut_tour,
-  index_debut_tour, tour_debut_tour, historique[], manche_terminee,
-  gagnant_manche_index, config{}`. Un joueur :
+- Clés de l'état : `id, phase, tour_numero, manche_numero,
+  index_joueur_actuel, joueurs[], pioche[], plateau[], plateau_debut_tour,
+  chevalet_debut_tour, index_debut_tour, tour_debut_tour, historique[],
+  manche_terminee, gagnant_manche_index, config{}`. À la fin du MATCH
+  (dernière manche), s'ajoutent `terminee`, `gagnant_match_index` (plus haut
+  score cumulé) et `egalite_match` (issue #203). Un joueur :
   `nom, est_ia, niveau, chevalet[], mise_initiale_faite, score_manche, score_cumul`.
 - `etat["config"]` contient : `nb_manches, valeur_joker_penalite,
   mise_initiale_min` (+ `vitesse_ia` ajouté côté application.py, non utilisé
@@ -716,13 +755,19 @@ plus grand nombre possible de tuiles du chevalet, jokers compris.
 
 ## 9. Scripts de simulation IA vs IA (`scripts/`)
 
-- `scripts/simulation_ia.py` : fait jouer 2 à 4 IA sur une ou plusieurs
-  manches, journalise les anomalies (coup invalide, blocage). Utile pour un
-  test de fumée ponctuel.
-- `scripts/comparer_niveaux_ia.py` (#184) : compare deux niveaux d'IA sur un
-  grand nombre de parties à 2 joueurs, pour savoir si l'un est réellement
-  plus fort que l'autre. Chaque donne (même distribution de tuiles) est
-  jouée deux fois en miroir (places échangées), pour annuler l'effet du
+- `scripts/simulation_ia.py` : fait jouer 2 à 4 IA sur un match de `--manches`
+  N manches (défaut 1), journalise les anomalies (coup invalide, blocage) et
+  affiche, pour plusieurs manches, le résultat par manche et le vainqueur du
+  match (plus haut score cumulé — issue #203). Utile pour un test de fumée
+  ponctuel.
+- `scripts/comparer_niveaux_ia.py` (#184, `--manches` N depuis #203) : compare
+  deux niveaux d'IA sur un grand nombre de **matchs** de N manches à 2
+  joueurs, pour savoir si l'un est réellement plus fort que l'autre. Avec
+  plusieurs manches, le vainqueur d'un match est le joueur au plus haut score
+  cumulé ; le rapport donne les résultats par match (victoires, score cumulé
+  moyen) ET par manche (fins, durée, pénalités). Chaque donne (même
+  distribution de tuiles) est jouée deux fois en miroir (places échangées),
+  pour annuler l'effet du
   tirage ; avec la même graine, la campagne est reproductible à l'identique.
   Toujours via le moteur Python seul, jamais pywebview (§7). Usage :
 
@@ -785,9 +830,13 @@ plus grand nombre possible de tuiles du chevalet, jokers compris.
   cours (au plus `MAX_FICHIERS` fichiers conservés). En-tête : `joueurs`
   (liste de `{nom, est_ia, niveau}`). Chaque action porte désormais
   `auteur_index` (qui a décidé), `action` (`"pose"|"pioche"|"passe"|
-  "annulation"`), `nb_tuiles_posees`, `termine` et `gagnant_index` — une
-  partie dont la DERNIÈRE action n'a pas `termine: True` est abandonnée (ou
-  encore en cours) et ignorée du bilan. Les journaux écrits avant #185
+  "annulation"`), `nb_tuiles_posees`, `manche` (numéro de manche, issue #203),
+  `termine` et `gagnant_index` — une partie dont la DERNIÈRE action n'a pas
+  `termine: True` est abandonnée (ou encore en cours) et ignorée du bilan.
+  Depuis #203, `termine` n'est vrai qu'à la fin du MATCH (pas d'une manche
+  intermédiaire) et `gagnant_index` y désigne alors le vainqueur du match
+  (plus haut score cumulé) ; `manche` est absent des journaux antérieurs (lu
+  comme une manche unique). Les journaux écrits avant #185
   (joueurs = liste de noms, pas de `termine`) restent lisibles : ils sont
   juste exclus du bilan plutôt que de faire planter sa lecture.
 - **Lecture/calcul** (`persistance/bilan.py`, pur, sans pywebview) :
@@ -1583,21 +1632,42 @@ une au fur et à mesure que de futures issues les testent/implémentent.
   sont jouées (score cumulé) ; le reste du temps, il devrait laisser la
   place à l'évaluation de la main restante (piste 2). **Test** : comparaison
   par simulation, comme pour la piste 2.
-- [ ] **Constat (non corrigé ici) — fiabilité du réglage « Nombre de
-  manches »** : ce réglage a existé dans les réglages de l'écran d'accueil,
-  mais la règle de fin de partie pour plus d'une manche (`est_fin_partie`
-  dans `moteur/partie.py`) comparait le numéro de tour au nombre de manches,
-  ce qui ne compte pas de vraies manches (aucun compteur de manches
-  n'existe) — plusieurs manches ne fonctionnaient donc pas correctement.
-  **Décision d'Alain** (#192, §3bis) : le jeu se joue désormais en une seule
-  manche, et le réglage est masqué côté UI. La piste 5 ci-dessus ne vaut
-  donc, en pratique, que pour les parties bloquées. Entre joueurs humains,
-  Alain n'a jamais observé de partie bloquée : les fins de partie bloquées
-  vues en simulation (29 % au départ selon #184, environ 5 à 10 % avec le
-  solveur d'Expert selon #186/#187, §9) sont un signe de faiblesse de l'IA
-  plutôt qu'un phénomène normal du jeu, et leur proportion est un
-  **indicateur de qualité à suivre** : elle doit baisser quand l'IA
-  progresse.
+- [ ] **Piste 6 — Se débarrasser en priorité des 1 et des 13** (idée d'Alain,
+  #203) : les tuiles de valeur 1 et 13 entrent dans **moins de combinaisons**
+  que les valeurs intermédiaires (un 1 ne peut prolonger une suite que par le
+  haut, un 13 que par le bas ; comme toute valeur, chacune n'entre que dans un
+  seul groupe de sa valeur) — elles sont donc plus difficiles à placer et
+  plus coûteuses si elles restent en main à la fin d'une manche. **Hypothèse** :
+  à nombre de tuiles posées égal, préférer le coup qui fait partir un 1 ou un
+  13. Proche de la piste 2 (éliminer les doublons) : un critère d'évaluation
+  de la main restante au départage du solveur. **Test** : comparer deux
+  versions avec `scripts/comparer_niveaux_ia.py` (§9), en miroir.
+- [ ] **Piste 7 — Tenir compte des points restants, mais seulement en
+  plusieurs manches** (idée d'Alain, #203, précision de la piste 5) : depuis
+  #203, un match peut compter plusieurs manches et les points restants
+  s'accumulent au `score_cumul` — ils comptent alors réellement pour la
+  suite, pas seulement pour la marge affichée. L'IA pourrait en tenir compte
+  (se défausser des grosses tuiles, limiter la casse quand elle ne peut pas
+  gagner la manche) **uniquement quand `nb_manches > 1`**. **Prudence
+  explicite d'Alain** : ne pas accorder trop d'importance aux points au
+  risque de **perdre des manches** qu'on aurait gagnées en vidant son
+  chevalet — le premier objectif reste de finir la manche. En une seule
+  manche, ce critère ne vaut que pour les parties bloquées (voir piste 5).
+  **Test** : simulation en miroir avec `--manches N` (§9).
+- [ ] **Constat — fiabilité du réglage « Nombre de manches » (corrigé par
+  #203)** : ce réglage comparait jadis le numéro de tour au nombre de manches
+  sans vrai compteur, si bien que plusieurs manches ne fonctionnaient pas
+  (#192 l'avait alors masqué, §3bis). **#203 l'a corrigé** : vrai compteur
+  `manche_numero`, scores cumulés, classement final au cumul — le réglage est
+  de nouveau disponible (défaut 1 manche). La piste 5 ci-dessus reste donc
+  valable telle quelle pour les parties d'une seule manche (où les points ne
+  départagent que les parties bloquées) ; les pistes 6 et 7 en découlent.
+  Entre joueurs humains, Alain n'a jamais observé de partie bloquée : les
+  fins de partie bloquées vues en simulation (29 % au départ selon #184,
+  environ 5 à 10 % avec le solveur d'Expert selon #186/#187, §9) sont un
+  signe de faiblesse de l'IA plutôt qu'un phénomène normal du jeu, et leur
+  proportion est un **indicateur de qualité à suivre** : elle doit baisser
+  quand l'IA progresse.
 - [x] **Traitée (#199) — simplicité du coup à nombre de tuiles posées
   égal** : observation d'Alain qui a motivé cette issue (voir §8bis pour le
   détail technique) — complexifier le plateau (défaire/recréer des

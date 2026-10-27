@@ -341,3 +341,54 @@ def test_integration_logger_action_vers_bilan(tmp_path, monkeypatch):
 
     bilan = calculer_bilan(parties)
     assert bilan["Expert"]["parties"] == 1
+
+
+# --------------------------------------------------------------------------- #
+# Manches multiples : un match de plusieurs manches = UN SEUL match au bilan
+# (issue #203).
+# --------------------------------------------------------------------------- #
+
+def _action_manche(manche, tour, auteur_index, action, nb_tuiles_posees=0,
+                   termine=False, gagnant_index=None, mains=None):
+    a = _action(tour, auteur_index, action, nb_tuiles_posees=nb_tuiles_posees,
+                termine=termine, gagnant_index=gagnant_index, mains=mains)
+    a["manche"] = manche
+    return a
+
+
+def test_bilan_compte_un_match_de_plusieurs_manches_une_seule_fois():
+    """Issue #203 : un journal décrivant un match de 2 manches (``termine``
+    seulement sur la toute dernière action, ``manche`` sur chaque action) est
+    compté comme UNE SEULE partie — jamais deux — et distingue les manches
+    (``nb_manches`` == 2). Le ``tour`` repartant de 1 à chaque manche, les
+    décisions des deux manches ne s'écrasent pas."""
+    mains_fin = [{"nom": "Alain", "tuiles": []},
+                 {"nom": "Bot", "tuiles": [{"id": "rouge_1_a"}]}]
+    actions = [
+        # Manche 1 (tours 1..3), non terminée (manche intermédiaire).
+        _action_manche(1, 1, 0, "pose", nb_tuiles_posees=3),
+        _action_manche(1, 2, 1, "pioche"),
+        _action_manche(1, 3, 0, "pose", nb_tuiles_posees=2),
+        # Manche 2 (tours repartis à 1..3) — même numéros de tour que manche 1.
+        _action_manche(2, 1, 0, "pose", nb_tuiles_posees=4),
+        _action_manche(2, 2, 1, "passe"),
+        _action_manche(2, 3, 0, "pose", nb_tuiles_posees=1, termine=True,
+                       gagnant_index=0, mains=mains_fin),
+    ]
+    data = {"partie_id": "match2", "debut": "2026-10-28T10:00:00",
+            "joueurs": [_joueur("Alain", False), _joueur("Bot", True, "Expert")],
+            "actions": actions}
+
+    partie = extraire_partie(data)
+    assert partie is not None
+    assert partie["gagnant_index"] == 0
+    assert partie["nb_manches"] == 2
+    # 6 décisions distinctes : les tours identiques des deux manches ne se
+    # sont pas écrasés (clé (manche, tour)).
+    assert len(partie["decisions"]) == 6
+
+    bilan = calculer_bilan([partie])
+    # UN SEUL match compté pour le niveau Expert, pas un par manche.
+    assert bilan["Expert"]["parties"] == 1
+    assert bilan["Expert"]["manches_moyennes"] == 2.0
+    assert bilan["Expert"]["victoires_humain"] == 1

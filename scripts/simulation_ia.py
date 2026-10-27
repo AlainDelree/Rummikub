@@ -139,16 +139,21 @@ def simuler(nb_joueurs: int, niveaux: list[str] | None, nb_manches: int,
         random.seed(seed)
 
     config_joueurs = construire_joueurs(nb_joueurs, niveaux)
-    etat = creer_partie(config_joueurs, {"nb_manches": 1})
+    # Un seul MATCH de ``nb_manches`` manches (issue #203) : ``creer_partie``
+    # porte le vrai nombre de manches, la boucle ci-dessous enchaîne les
+    # manches via ``nouvelle_manche`` (score cumulé conservé d'une manche à
+    # l'autre, nouvelle donne et mise initiale remise à zéro à chaque manche).
+    etat = creer_partie(config_joueurs, {"nb_manches": nb_manches})
     backup_debut_tour(etat)
 
     noms = [j["nom"] for j in etat["joueurs"]]
-    logger.info("Partie créée : %s", ", ".join(noms))
+    logger.info("Match créé (%d manche(s)) : %s", nb_manches, ", ".join(noms))
 
     debut = time.monotonic()
     anomalies_total: list[str] = []
     nb_tours_total = 0
     manches_jouees = 0
+    manches: list[dict] = []
     bloquee = False
 
     for numero_manche in range(1, nb_manches + 1):
@@ -181,7 +186,14 @@ def simuler(nb_joueurs: int, niveaux: list[str] | None, nb_manches: int,
             break
 
         manches_jouees += 1
+        gi = etat["gagnant_manche_index"]
         scores = {j["nom"]: j["score_manche"] for j in etat["joueurs"]}
+        manches.append({
+            "numero": numero_manche,
+            "tours": tours_manche,
+            "gagnant": etat["joueurs"][gi]["nom"] if gi is not None else None,
+            "scores_manche": scores,
+        })
         logger.info(
             "Manche %d terminée en %d tour(s). Scores de la manche : %s",
             numero_manche, tours_manche, scores)
@@ -192,6 +204,12 @@ def simuler(nb_joueurs: int, niveaux: list[str] | None, nb_manches: int,
 
     duree = time.monotonic() - debut
     scores_finaux = {j["nom"]: j["score_cumul"] for j in etat["joueurs"]}
+    # Vainqueur du MATCH : plus haut score cumulé (issue #203). ``None`` si le
+    # match a été interrompu (blocage) avant la moindre manche jouée.
+    gagnant_match = None
+    if manches_jouees:
+        gagnant_match = max(etat["joueurs"],
+                            key=lambda j: j["score_cumul"])["nom"]
 
     return {
         "manches_jouees": manches_jouees,
@@ -200,6 +218,8 @@ def simuler(nb_joueurs: int, niveaux: list[str] | None, nb_manches: int,
         "anomalies": anomalies_total,
         "duree_s": duree,
         "scores_finaux": scores_finaux,
+        "gagnant_match": gagnant_match,
+        "manches": manches,
         "bloquee": bloquee,
     }
 
@@ -261,10 +281,19 @@ def main(argv: list[str]) -> int:
                      args.seed)
 
     print("-" * 60)
-    print(f"RÉSUMÉ : {resume['manches_jouees']}/{resume['manches_demandees']} "
-          f"manche(s) jouée(s), {resume['tours_total']} tour(s) au total, "
+    print(f"RÉSUMÉ : 1 match de {resume['manches_jouees']}/"
+          f"{resume['manches_demandees']} manche(s) jouée(s), "
+          f"{resume['tours_total']} tour(s) au total, "
           f"{resume['duree_s']:.2f}s.")
+    if resume["manches_demandees"] > 1:
+        print("Résultat par manche :")
+        for m in resume["manches"]:
+            print(f"  - Manche {m['numero']} ({m['tours']} tour(s)) : "
+                  f"gagnée par {m['gagnant']} — {m['scores_manche']}")
     print(f"Scores cumulés finaux : {resume['scores_finaux']}")
+    if resume["gagnant_match"] is not None:
+        print(f"Vainqueur du match (score cumulé le plus élevé) : "
+              f"{resume['gagnant_match']}")
     if resume["anomalies"]:
         print(f"ANOMALIES ({len(resume['anomalies'])}) :")
         for a in resume["anomalies"]:

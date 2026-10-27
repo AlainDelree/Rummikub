@@ -8,7 +8,10 @@ from rummikub.moteur.tuiles import (
     Tuile, creer_sac, distribuer, tuile_depuis_dict,
 )
 from rummikub.moteur.validation import valider_plateau, valider_combinaison
-from rummikub.moteur.score import calculer_scores_manche, trouver_gagnant_manche
+from rummikub.moteur.score import (
+    calculer_scores_manche, trouver_gagnant_manche, trouver_gagnant_match,
+    egalite_sommet_match,
+)
 
 
 # --------------------------------------------------------------------------- #
@@ -40,6 +43,15 @@ def creer_partie(config_joueurs: list[dict], config_regles: dict) -> dict:
     nb_joueurs = len(config_joueurs)
     distribution = distribuer(creer_sac(), nb_joueurs)
 
+    # Nombre de manches du match (issue #203) : lu depuis les réglages, borné
+    # à [1, 9], défaut 1 (une seule manche, comportement par défaut). Un
+    # config.json ancien ou sans la clé retombe donc sur 1 sans erreur.
+    try:
+        nb_manches = int(config_regles.get("nb_manches", 1))
+    except (TypeError, ValueError):
+        nb_manches = 1
+    nb_manches = max(1, min(9, nb_manches))
+
     joueurs = []
     for i, cj in enumerate(config_joueurs):
         joueurs.append({
@@ -57,6 +69,7 @@ def creer_partie(config_joueurs: list[dict], config_regles: dict) -> dict:
         "id": uuid.uuid4().hex[:12],
         "phase": "jeu",
         "tour_numero": 1,
+        "manche_numero": 1,
         "index_joueur_actuel": 0,
         "joueurs": joueurs,
         "pioche": [t.as_dict() for t in distribution["pioche"]],
@@ -70,11 +83,10 @@ def creer_partie(config_joueurs: list[dict], config_regles: dict) -> dict:
         "manche_terminee": False,
         "gagnant_manche_index": None,
         "config": {
-            # Toujours 1, quelle que soit la valeur transmise (issue #192) :
-            # le réglage « nombre de manches » est retiré de l'UI, et la
-            # règle de fin de partie pour plusieurs manches n'a jamais eu de
-            # compteur de manches correct (voir CONTEXTE.md §3bis).
-            "nb_manches": 1,
+            # Nombre de manches du match (issue #203, suite de #192) : un vrai
+            # compteur de manches (``manche_numero``) pilote désormais la fin
+            # de partie — voir ``nouvelle_manche`` / ``est_fin_partie``.
+            "nb_manches": nb_manches,
             "valeur_joker_penalite": config_regles.get(
                 "valeur_joker_penalite", 30),
             "mise_initiale_min": config_regles.get(
@@ -261,8 +273,13 @@ def _terminer_tour(etat: dict) -> None:
         etat["manche_terminee"] = True
         etat["gagnant_manche_index"] = trouver_gagnant_manche(etat["joueurs"])
         if est_fin_partie(etat):
+            # Dernière manche : le match est terminé. Le vainqueur du MATCH est
+            # le joueur au plus haut score cumulé (issue #203) — il coïncide
+            # avec le vainqueur de la manche quand il n'y a qu'une seule manche.
             etat["phase"] = "fin"
             etat["terminee"] = True
+            etat["gagnant_match_index"] = trouver_gagnant_match(etat["joueurs"])
+            etat["egalite_match"] = egalite_sommet_match(etat["joueurs"])
         return
 
     nb = len(etat["joueurs"])
@@ -282,8 +299,14 @@ def _ajouter_historique(etat: dict, joueur_index: int,
 
 def nouvelle_manche(etat: dict) -> dict:
     """
-    Réinitialise pour une nouvelle manche en conservant score_cumul.
-    Redistribue 106 tuiles, reset plateau, chevalets, mise_initiale_faite.
+    Démarre la manche suivante en conservant score_cumul (issue #203).
+    Incrémente ``manche_numero``, redistribue 106 tuiles, remet à zéro le
+    plateau, les chevalets, la mise initiale et le score de manche de chacun.
+
+    Qui commence la manche : rotation documentée — la manche N (1-based)
+    commence par le joueur d'index ``(N - 1) % nb_joueurs`` (manche 1 : joueur
+    0, manche 2 : joueur 1, etc.). Chacun ouvre ainsi à tour de rôle au fil
+    des manches du match.
     """
     nb_joueurs = len(etat["joueurs"])
     distribution = distribuer(creer_sac(), nb_joueurs)
@@ -303,7 +326,8 @@ def nouvelle_manche(etat: dict) -> dict:
     etat["dernier_coup_ia"] = None
     etat["manche_terminee"] = False
     etat["gagnant_manche_index"] = None
-    etat["index_joueur_actuel"] = 0
+    etat["manche_numero"] = etat.get("manche_numero", 1) + 1
+    etat["index_joueur_actuel"] = (etat["manche_numero"] - 1) % nb_joueurs
     etat["tour_numero"] = 1
     etat["phase"] = "jeu"
     etat["terminee"] = False
@@ -312,11 +336,28 @@ def nouvelle_manche(etat: dict) -> dict:
     return etat
 
 
+def normaliser_etat_reprise(etat: dict) -> dict:
+    """Normalise un état rechargé depuis la sauvegarde avant de le reprendre
+    (issue #203). Une partie enregistrée AVANT que les manches multiples ne
+    fonctionnent n'a pas de compteur de manches (``manche_numero`` absent de
+    l'état) : une telle partie, même sauvegardée avec ``nb_manches > 1``, est
+    reprise comme une partie d'UNE SEULE manche (aucun point de départ fiable
+    pour un décompte). Une partie créée depuis #203 porte toujours
+    ``manche_numero`` et conserve donc son vrai nombre de manches à la reprise
+    (y compris au milieu d'un match)."""
+    etat.setdefault("config", {})
+    if "manche_numero" not in etat:
+        etat["config"]["nb_manches"] = 1
+        etat["manche_numero"] = 1
+    return etat
+
+
 def est_fin_partie(etat: dict) -> bool:
-    """
-    Si config.nb_manches == 1 : True si manche_terminee.
-    Sinon : True si tour_numero > nb_manches (simplifié).
-    """
-    if etat["config"]["nb_manches"] == 1:
-        return etat["manche_terminee"]
-    return etat["tour_numero"] > etat["config"]["nb_manches"]
+    """Vrai quand la manche courante est terminée ET que c'est la dernière
+    manche du match (issue #203) : un vrai compteur de manches
+    (``manche_numero``) remplace l'ancienne comparaison fondée sur le numéro
+    de tour (§3bis). Avec ``nb_manches == 1`` (défaut), équivaut à
+    ``manche_terminee`` — comportement d'une partie d'une seule manche."""
+    if not etat.get("manche_terminee"):
+        return False
+    return etat.get("manche_numero", 1) >= etat["config"]["nb_manches"]

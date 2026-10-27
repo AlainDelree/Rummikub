@@ -6,18 +6,24 @@ CONTEXTE.md §7).
 Chaque donne (distribution initiale des tuiles) est rejouée deux fois en
 miroir, en échangeant les places des deux niveaux, pour annuler l'effet du
 tirage et de l'ordre de passage : ``--donnes 50`` (défaut) joue donc 100
-parties. Avec la même ``--seed``, exactement les mêmes donnes sont rejouées.
+matchs. Avec la même ``--seed``, exactement les mêmes donnes sont rejouées.
+
+Avec ``--manches N`` (défaut 1), chaque match se joue en N manches : le
+vainqueur du match est le joueur au plus haut score cumulé (issue #203). Les
+résultats sont donnés à la fois par match (victoires, score cumulé moyen) et
+par manche (fins, durée, pénalités du perdant).
 
 Usage :
 
     python scripts/comparer_niveaux_ia.py --niveau-a Avancé --niveau-b Expert
     python scripts/comparer_niveaux_ia.py --niveau-a Avancé --niveau-b Expert \
-        --donnes 200 --seed 7
+        --donnes 200 --seed 7 --manches 3
 
 Options :
     --niveau-a NIVEAU   Premier niveau à comparer (obligatoire).
     --niveau-b NIVEAU   Second niveau à comparer (obligatoire).
-    --donnes N          Nombre de donnes distinctes (défaut 50 ; 2N parties).
+    --donnes N          Nombre de donnes distinctes (défaut 50 ; 2N matchs).
+    --manches N         Nombre de manches par match (défaut 1).
     --seed N            Graine aléatoire, pour une campagne reproductible
                         (défaut 0).
     --max-tours N       Garde-fou anti-blocage : nombre maximum de tours
@@ -52,6 +58,7 @@ from rummikub.moteur.partie import (  # noqa: E402
     backup_debut_tour,
     creer_partie,
     jouer_tour,
+    nouvelle_manche,
     passer_tour,
     piocher,
 )
@@ -180,18 +187,15 @@ def jouer_un_tour(etat: dict, idx: int, temps_par_niveau: dict,
 
 
 # --------------------------------------------------------------------------- #
-# Une partie à 2 joueurs
+# Un match à 2 joueurs (1 à N manches)
 # --------------------------------------------------------------------------- #
 
-def jouer_partie(config_joueurs: list[dict], max_tours: int,
-                 temps_par_niveau: dict, replis_expert: list,
-                 preferer_simple: bool, perturbations_expert: list) -> dict:
-    """Joue une manche complète à 2 joueurs jusqu'à sa fin naturelle
-    (chevalet vidé ou pioche épuisée) ou jusqu'au garde-fou ``max_tours``.
-    """
-    etat = creer_partie(config_joueurs, {"nb_manches": 1})
-    backup_debut_tour(etat)
-
+def _jouer_une_manche(etat: dict, max_tours: int, temps_par_niveau: dict,
+                      replis_expert: list, preferer_simple: bool,
+                      perturbations_expert: list) -> dict:
+    """Joue la manche courante de ``etat`` jusqu'à sa fin naturelle (chevalet
+    vidé ou pioche épuisée) ou jusqu'au garde-fou ``max_tours``. Retourne les
+    statistiques de CETTE manche ; ``etat`` est muté en place."""
     tours = 0
     coups_invalides = 0
     coups_tuiles_disparues = 0
@@ -222,10 +226,54 @@ def jouer_partie(config_joueurs: list[dict], max_tours: int,
                   and all(len(j["chevalet"]) > 0 for j in etat["joueurs"]))
 
     return {
-        "etat": etat,
         "tours": tours,
         "arretee_garde_fou": arretee_garde_fou,
         "pioche_vide": pioche_vide,
+        "gagnant_manche_index": etat["gagnant_manche_index"],
+        "scores_manche": [j["score_manche"] for j in etat["joueurs"]],
+        "tuiles_restantes": [len(j["chevalet"]) for j in etat["joueurs"]],
+        "coups_invalides": coups_invalides,
+        "coups_tuiles_disparues": coups_tuiles_disparues,
+        "anomalies_conservation": anomalies_conservation,
+    }
+
+
+def jouer_match(config_joueurs: list[dict], nb_manches: int, max_tours: int,
+                temps_par_niveau: dict, replis_expert: list,
+                preferer_simple: bool, perturbations_expert: list) -> dict:
+    """Joue un MATCH complet à 2 joueurs de ``nb_manches`` manches (issue
+    #203). Les manches s'enchaînent via ``nouvelle_manche`` (score cumulé
+    conservé, nouvelle donne et mise initiale remise à zéro à chaque manche).
+    Si une manche est arrêtée par le garde-fou ``max_tours``, le match entier
+    est marqué comme arrêté (``arretee_garde_fou``) et abandonné.
+    """
+    etat = creer_partie(config_joueurs, {"nb_manches": nb_manches})
+    backup_debut_tour(etat)
+
+    manches = []
+    coups_invalides = coups_tuiles_disparues = anomalies_conservation = 0
+    arretee_garde_fou = False
+
+    for numero in range(1, nb_manches + 1):
+        res = _jouer_une_manche(etat, max_tours, temps_par_niveau,
+                                replis_expert, preferer_simple,
+                                perturbations_expert)
+        coups_invalides += res["coups_invalides"]
+        coups_tuiles_disparues += res["coups_tuiles_disparues"]
+        anomalies_conservation += res["anomalies_conservation"]
+        if res["arretee_garde_fou"]:
+            arretee_garde_fou = True
+            break
+        res["numero"] = numero
+        manches.append(res)
+        if numero < nb_manches:
+            etat = nouvelle_manche(etat)
+            backup_debut_tour(etat)
+
+    return {
+        "etat": etat,
+        "manches": manches,
+        "arretee_garde_fou": arretee_garde_fou,
         "coups_invalides": coups_invalides,
         "coups_tuiles_disparues": coups_tuiles_disparues,
         "anomalies_conservation": anomalies_conservation,
@@ -237,15 +285,27 @@ def jouer_partie(config_joueurs: list[dict], max_tours: int,
 # --------------------------------------------------------------------------- #
 
 def comparer(niveau_a: str, niveau_b: str, nb_donnes: int, seed: int,
-            max_tours: int, preferer_simple: bool = True) -> dict:
-    """``preferer_simple`` (#199) : réglage transmis à chaque appel
-    d'Expert — comparer deux campagnes identiques (même graine), l'une avec
-    et l'autre sans, permet de mesurer l'effet du critère de simplicité sur
-    la force d'Expert (voir CONTEXTE.md §9 et §13)."""
+            max_tours: int, nb_manches: int = 1,
+            preferer_simple: bool = True) -> dict:
+    """``nb_manches`` (#203) : nombre de manches par match — chaque donne est
+    jouée en miroir (places échangées) sur un match complet, le vainqueur du
+    match étant le joueur au plus haut score cumulé. Les résultats sont donnés
+    à la fois par match (victoires, score cumulé moyen) et par manche.
+
+    ``preferer_simple`` (#199) : réglage transmis à chaque appel d'Expert —
+    comparer deux campagnes identiques (même graine), l'une avec et l'autre
+    sans, permet de mesurer l'effet du critère de simplicité sur la force
+    d'Expert (voir CONTEXTE.md §9 et §13)."""
     rng_graines = random.Random(seed)
     graines = [rng_graines.randrange(2**32) for _ in range(nb_donnes)]
 
+    # Niveau MATCH (issue #203) : victoire par score cumulé, nuls comptés à
+    # part ; score cumulé moyen de chaque camp.
     victoires = {"A": 0, "B": 0}
+    matchs_nuls = 0
+    cumul_par_camp: dict[str, list[int]] = {"A": [], "B": []}
+    matchs_decides = 0
+    # Niveau MANCHE : statistiques agrégées sur toutes les manches jouées.
     penalites_perdant: list[int] = []
     tuiles_perdant: list[int] = []
     tours_decidees: list[int] = []
@@ -274,9 +334,9 @@ def comparer(niveau_a: str, niveau_b: str, nb_donnes: int, seed: int,
                  "niveau": niveau_camp[camp]}
                 for camp in camps
             ]
-            resultat = jouer_partie(config_joueurs, max_tours, temps_par_niveau,
-                                    replis_expert, preferer_simple,
-                                    perturbations_expert)
+            resultat = jouer_match(config_joueurs, nb_manches, max_tours,
+                                   temps_par_niveau, replis_expert,
+                                   preferer_simple, perturbations_expert)
             coups_invalides_total += resultat["coups_invalides"]
             coups_tuiles_disparues_total += resultat["coups_tuiles_disparues"]
             anomalies_conservation_total += resultat["anomalies_conservation"]
@@ -284,32 +344,51 @@ def comparer(niveau_a: str, niveau_b: str, nb_donnes: int, seed: int,
             if resultat["arretee_garde_fou"]:
                 fins["garde_fou"] += 1
                 logger.warning(
-                    "Donne %d (ordre %s) arrêtée par le garde-fou après %d tours",
-                    i + 1, camps, resultat["tours"])
+                    "Donne %d (ordre %s) : match arrêté par le garde-fou",
+                    i + 1, camps)
                 continue
 
             etat = resultat["etat"]
-            gagnant_idx = etat["gagnant_manche_index"]
-            perdant_idx = 1 - gagnant_idx
-            camp_gagnant = camps[gagnant_idx]
-            victoires[camp_gagnant] += 1
-            tours_decidees.append(resultat["tours"])
-            fins["pioche_vide" if resultat["pioche_vide"] else "chevalet_vide"] += 1
 
-            perdant = etat["joueurs"][perdant_idx]
-            penalites_perdant.append(-perdant["score_manche"])
-            tuiles_perdant.append(len(perdant["chevalet"]))
+            # Statistiques par MANCHE (toutes les manches du match).
+            for m in resultat["manches"]:
+                gi = m["gagnant_manche_index"]
+                perdant_idx = 1 - gi
+                tours_decidees.append(m["tours"])
+                fins["pioche_vide" if m["pioche_vide"] else "chevalet_vide"] += 1
+                penalites_perdant.append(-m["scores_manche"][perdant_idx])
+                tuiles_perdant.append(m["tuiles_restantes"][perdant_idx])
+
+            # Résultat du MATCH : vainqueur par score cumulé (issue #203).
+            cumul_a = etat["joueurs"][camps.index("A")]["score_cumul"]
+            cumul_b = etat["joueurs"][camps.index("B")]["score_cumul"]
+            cumul_par_camp["A"].append(cumul_a)
+            cumul_par_camp["B"].append(cumul_b)
+            matchs_decides += 1
+            if cumul_a == cumul_b:
+                matchs_nuls += 1
+                camp_gagnant = None
+            else:
+                camp_gagnant = "A" if cumul_a > cumul_b else "B"
+                victoires[camp_gagnant] += 1
 
             if logger.isEnabledFor(logging.INFO):
                 logger.info(
-                    "Donne %d (ordre %s) : victoire %s (%s) en %d tours",
-                    i + 1, camps, camp_gagnant, niveau_camp[camp_gagnant],
-                    resultat["tours"])
+                    "Donne %d (ordre %s) : match %s (%d manche(s)) — "
+                    "cumul A=%d B=%d",
+                    i + 1, camps,
+                    "nul" if camp_gagnant is None
+                    else f"gagné par {camp_gagnant} ({niveau_camp[camp_gagnant]})",
+                    len(resultat["manches"]), cumul_a, cumul_b)
 
     return {
         "niveau_a": niveau_a,
         "niveau_b": niveau_b,
+        "nb_manches": nb_manches,
         "victoires": victoires,
+        "matchs_nuls": matchs_nuls,
+        "matchs_decides": matchs_decides,
+        "cumul_par_camp": cumul_par_camp,
         "fins": fins,
         "penalites_perdant": penalites_perdant,
         "tuiles_perdant": tuiles_perdant,
@@ -353,35 +432,43 @@ def afficher_rapport(resume: dict) -> None:
     niveau_a, niveau_b = resume["niveau_a"], resume["niveau_b"]
     victoires = resume["victoires"]
     fins = resume["fins"]
-    n_decidees = len(resume["tours_decidees"])
+    nb_manches = resume["nb_manches"]
+    n_matchs = resume["matchs_decides"]
+    n_manches = len(resume["tours_decidees"])
 
     print("=" * 70)
     print(f"COMPARAISON : {niveau_a} (camp A) vs {niveau_b} (camp B)")
-    print(f"{resume['nb_donnes']} donne(s) x 2 (miroir) = "
-         f"{resume['nb_parties']} partie(s) demandée(s), "
-         f"{n_decidees} partie(s) décidée(s)")
+    print(f"Matchs de {nb_manches} manche(s) — "
+         f"{resume['nb_donnes']} donne(s) x 2 (miroir) = "
+         f"{resume['nb_parties']} match(s) demandé(s), "
+         f"{n_matchs} match(s) décidé(s)")
     print("-" * 70)
+    print("  RÉSULTATS PAR MATCH (vainqueur = plus haut score cumulé) :")
 
     for camp, niveau in (("A", niveau_a), ("B", niveau_b)):
-        p, marge = intervalle_confiance_95(victoires[camp], n_decidees)
-        print(f"  {niveau} (camp {camp}) : {victoires[camp]}/{n_decidees} "
+        p, marge = intervalle_confiance_95(victoires[camp], n_matchs)
+        print(f"  {niveau} (camp {camp}) : {victoires[camp]}/{n_matchs} "
              f"victoires — taux {p * 100:.1f} % ± {marge * 100:.1f} pt "
-             f"(IC 95 %)")
+             f"(IC 95 %) ; score cumulé moyen "
+             f"{moyenne(resume['cumul_par_camp'][camp]):.1f}")
+    if resume["matchs_nuls"]:
+        print(f"  Matchs nuls (score cumulé identique) : {resume['matchs_nuls']}")
 
-    if n_decidees:
-        p_a, marge_a = intervalle_confiance_95(victoires["A"], n_decidees)
+    if n_matchs:
+        p_a, marge_a = intervalle_confiance_95(victoires["A"], n_matchs)
         ecart_significatif = abs(p_a - 0.5) > marge_a
         print(f"  Écart par rapport à 50/50 "
              f"{'significatif' if ecart_significatif else 'NON significatif'} "
              f"au seuil de confiance 95 %.")
 
     print("-" * 70)
-    print(f"  Fins de partie : {fins['chevalet_vide']} par chevalet vidé, "
+    print(f"  RÉSULTATS PAR MANCHE ({n_manches} manche(s) jouée(s)) :")
+    print(f"  Fins de manche : {fins['chevalet_vide']} par chevalet vidé, "
          f"{fins['pioche_vide']} par pioche épuisée (bloqué), "
-         f"{fins['garde_fou']} arrêtée(s) par le garde-fou (max tours).")
-    print(f"  Durée moyenne d'une partie décidée : "
+         f"{fins['garde_fou']} match(s) arrêté(s) par le garde-fou (max tours).")
+    print(f"  Durée moyenne d'une manche décidée : "
          f"{moyenne(resume['tours_decidees']):.1f} tour(s).")
-    print(f"  Perdant (parties décidées) : en moyenne "
+    print(f"  Perdant de manche : en moyenne "
          f"{moyenne(resume['tuiles_perdant']):.1f} tuile(s) restante(s), "
          f"{moyenne(resume['penalites_perdant']):.1f} point(s) de pénalité.")
     if resume["coups_invalides_total"]:
@@ -444,8 +531,11 @@ def main(argv: list[str]) -> int:
                              "chacune jouée 2 fois en miroir).")
     parser.add_argument("--seed", type=int, default=0,
                         help="Graine aléatoire (défaut 0, reproductible).")
+    parser.add_argument("--manches", type=int, default=1,
+                        help="Nombre de manches par match (défaut 1 ; "
+                             "vainqueur du match = plus haut score cumulé).")
     parser.add_argument("--max-tours", type=int, default=300,
-                        help="Garde-fou anti-blocage par partie (défaut 300).")
+                        help="Garde-fou anti-blocage par manche (défaut 300).")
     parser.add_argument("--sans-preferer-simple", action="store_true",
                         help="Désactive le critère de simplicité du "
                              "solveur Expert (#199, activé par défaut) — "
@@ -464,9 +554,12 @@ def main(argv: list[str]) -> int:
     if args.verbose:
         logger.setLevel(logging.INFO)
 
+    if args.manches < 1:
+        parser.error("--manches doit être au moins 1")
+
     debut = time.monotonic()
     resume = comparer(args.niveau_a, args.niveau_b, args.donnes, args.seed,
-                      args.max_tours,
+                      args.max_tours, nb_manches=args.manches,
                       preferer_simple=not args.sans_preferer_simple)
     duree = time.monotonic() - debut
 
