@@ -284,3 +284,159 @@ def test_complexite_ignore_un_echange_de_tuiles_identiques():
     assert description["complexite"]["nb_combinaisons_touchees"] == 0
     assert description["complexite"]["nb_etapes"] == 0
     assert description["complexite"]["categorie"] == "simple"
+
+
+# --------------------------------------------------------------------------- #
+# Classification par taille (petit/moyen/grand) + indicateur joker, en plus
+# de l'ancien simple/complexe conservé (point 1 de l'issue #198) : quatre
+# coups fabriqués — un petit, un moyen, un grand, et un petit avec joker
+# (un échange direct, visible à l'œil même si "complexe" au sens #196).
+# --------------------------------------------------------------------------- #
+
+def test_taille_petit_une_seule_combinaison_sans_joker():
+    """Simple extension de suite : 1 combinaison touchée -> "petit"."""
+    avant = [[_tuile("rouge_7_a", 7, "rouge"), _tuile("rouge_8_a", 8, "rouge"),
+             _tuile("rouge_9_a", 9, "rouge")]]
+    apres = [[_tuile("rouge_7_a", 7, "rouge"), _tuile("rouge_8_a", 8, "rouge"),
+             _tuile("rouge_9_a", 9, "rouge"), _tuile("rouge_10_a", 10, "rouge")]]
+
+    c = CR.decrire_coup(avant, apres)["complexite"]
+    assert c["taille"] == "petit"
+    assert c["a_joker"] is False
+    assert c["categorie"] == "simple"  # mesure #196, conservée
+
+
+def test_taille_petit_avec_joker_echange_direct():
+    """Échange direct d'un joker contre une tuile réelle de la main, le
+    joker libéré rejoignant un nouveau groupe : 2 combinaisons touchées
+    (-> "petit"), mais avec joker — un humain voit ce coup facilement même
+    si l'ancienne mesure #196 le classait "complexe" (tout coup avec joker)."""
+    avant = [[_tuile("rouge_5_a", 5, "rouge"), _tuile("rouge_6_a", 6, "rouge"),
+             {"id": "joker_1", "valeur": None, "couleur": "rouge", "est_joker": True}]]
+    apres = [
+        [_tuile("rouge_5_a", 5, "rouge"), _tuile("rouge_6_a", 6, "rouge"),
+         _tuile("rouge_7_a", 7, "rouge")],
+        [_tuile("noir_8_a", 8, "noir"), _tuile("jaune_8_a", 8, "jaune"),
+         {"id": "joker_1", "valeur": None, "couleur": "rouge", "est_joker": True}],
+    ]
+
+    c = CR.decrire_coup(avant, apres)["complexite"]
+    assert c["taille"] == "petit"
+    assert c["a_joker"] is True
+    assert c["categorie"] == "complexe"  # mesure #196, conservée
+
+
+def test_taille_moyen_demantelement_sans_joker():
+    """Un groupe de 5 démantelé en 3 nouvelles suites (une par couleur) :
+    1 défaite + 3 créées = 4 combinaisons touchées -> "moyen", sans joker."""
+    avant = [[_tuile("rouge_5_a", 5, "rouge"), _tuile("bleu_5_a", 5, "bleu"),
+             _tuile("jaune_5_a", 5, "jaune")]]
+    apres = [
+        [_tuile("rouge_5_a", 5, "rouge"), _tuile("rouge_6_a", 6, "rouge"),
+         _tuile("rouge_7_a", 7, "rouge")],
+        [_tuile("bleu_5_a", 5, "bleu"), _tuile("bleu_6_a", 6, "bleu"),
+         _tuile("bleu_7_a", 7, "bleu")],
+        [_tuile("jaune_5_a", 5, "jaune"), _tuile("jaune_6_a", 6, "jaune"),
+         _tuile("jaune_7_a", 7, "jaune")],
+    ]
+
+    c = CR.decrire_coup(avant, apres)["complexite"]
+    assert c["nb_combinaisons_touchees"] == 4
+    assert c["taille"] == "moyen"
+    assert c["a_joker"] is False
+
+
+def test_taille_grand_chaine_bruno_expert_avec_joker():
+    """Reprend le coup en chaîne Bruno/Expert (5 combinaisons d'avant,
+    doubles jokers) de ``test_description_coup.py`` : 8 combinaisons
+    touchées -> "grand", avec joker — exactement le genre de coup qu'un
+    découpage simple/complexe binaire ne permettait pas de distinguer d'un
+    simple échange direct (voir issue #198, point 1)."""
+    def t(v, c, serie="a"):
+        return _tuile(f"{c}_{v}_{serie}", v, c)
+
+    def j(n=1, c="rouge"):
+        return {"id": f"joker_{n}", "valeur": None, "couleur": c, "est_joker": True}
+
+    groupe11 = [t(11, "bleu"), t(11, "noir"), j(1)]
+    groupe12 = [t(12, "rouge"), t(12, "bleu"), t(12, "noir")]
+    suite_jaune = [t(11, "jaune"), t(12, "jaune"), t(13, "jaune")]
+    suite_noire = [t(6, "noir"), t(7, "noir"), t(8, "noir"), t(9, "noir"),
+                    t(10, "noir"), t(11, "noir", "b")]
+    groupe7 = [t(7, "noir", "b"), t(7, "jaune"), t(7, "rouge")]
+    avant = [groupe11, groupe12, suite_jaune, suite_noire, groupe7]
+    apres = [
+        [t(13, "bleu"), t(13, "jaune"), j(1)],
+        [t(7, "rouge"), t(7, "bleu"), t(7, "jaune"), t(7, "noir", "b")],
+        [t(12, "rouge"), t(12, "bleu"), t(12, "jaune")],
+        [t(11, "bleu"), t(11, "jaune"), t(11, "noir")],
+        [t(6, "noir"), t(7, "noir"), t(8, "noir")],
+        [t(9, "noir"), t(10, "noir"), t(11, "noir", "b"), t(12, "noir")],
+    ]
+
+    c = CR.decrire_coup(avant, apres, nom="Bruno")["complexite"]
+    assert c["nb_combinaisons_touchees"] >= 6
+    assert c["taille"] == "grand"
+    assert c["a_joker"] is True
+
+
+def test_resume_complet_repartit_les_coups_par_taille_et_joker(monkeypatch):
+    """Bout en bout (point 1 de l'issue #198) : ``calculer_resume_complet``
+    classe chaque coup raté/pose sous-optimale par taille et par présence de
+    joker, en plus de simple/complexe conservé — à partir de 4 décisions
+    (une par scénario ci-dessus, résolues par un faux solveur)."""
+    avant_petit = [[_tuile("rouge_7_a", 7, "rouge"), _tuile("rouge_8_a", 8, "rouge"),
+                   _tuile("rouge_9_a", 9, "rouge")]]
+    apres_petit = [[_tuile("rouge_7_a", 7, "rouge"), _tuile("rouge_8_a", 8, "rouge"),
+                   _tuile("rouge_9_a", 9, "rouge"), _tuile("rouge_10_a", 10, "rouge")]]
+
+    avant_moyen = [[_tuile("rouge_5_a", 5, "rouge"), _tuile("bleu_5_a", 5, "bleu"),
+                   _tuile("jaune_5_a", 5, "jaune")]]
+    apres_moyen = [
+        [_tuile("rouge_5_a", 5, "rouge"), _tuile("rouge_6_a", 6, "rouge"),
+         _tuile("rouge_7_a", 7, "rouge")],
+        [_tuile("bleu_5_a", 5, "bleu"), _tuile("bleu_6_a", 6, "bleu"),
+         _tuile("bleu_7_a", 7, "bleu")],
+        [_tuile("jaune_5_a", 5, "jaune"), _tuile("jaune_6_a", 6, "jaune"),
+         _tuile("jaune_7_a", 7, "jaune")],
+    ]
+
+    reponses = {1: apres_petit, 2: apres_moyen}
+
+    def faux_resoudre(etat, idx, budget_temps):
+        apres = reponses[idx]
+        ids = sorted({t["id"] for combo in apres for t in combo}
+                     - {t["id"] for combo in etat["plateau"] for t in combo})
+        return {"action": "jouer", "ids_tuiles": ids, "nouveau_plateau": apres}
+    monkeypatch.setattr(CR, "resoudre_coup", faux_resoudre)
+
+    decision_petit = {
+        "tour": 1, "niveau": "Expert", "nom": "Bot", "action": "pioche",
+        "moment": "apres_mise", "idx": 1,
+        "etat": {"joueurs": [{}, {"chevalet": [], "mise_initiale_faite": True}],
+                 "plateau": avant_petit, "config": {"mise_initiale_min": 30}},
+    }
+    decision_moyen = {
+        "tour": 2, "niveau": "Expert", "nom": "Bot", "action": "pioche",
+        "moment": "apres_mise", "idx": 2,
+        "etat": {"joueurs": [{}, {}, {"chevalet": [], "mise_initiale_faite": True}],
+                 "plateau": avant_moyen, "config": {"mise_initiale_min": 30}},
+    }
+
+    r_petit = CR.analyser_decision_complete(decision_petit, budget_genereux=10.0,
+                                            budget_production=1.5)
+    r_moyen = CR.analyser_decision_complete(decision_moyen, budget_genereux=10.0,
+                                            budget_production=1.5)
+    assert r_petit["coup_rate"] is True
+    assert r_moyen["coup_rate"] is True
+
+    resume = CR.calculer_resume_complet([r_petit, r_moyen])
+    bucket = resume["Expert"]["apres_mise"]
+    assert bucket["coups_petits"] == 1
+    assert bucket["coups_moyens"] == 1
+    assert bucket["coups_grands"] == 0
+    assert bucket["coups_sans_joker"] == 2
+    assert bucket["coups_avec_joker"] == 0
+    # Mesure #196 conservée en parallèle.
+    assert bucket["coups_simples"] == 1
+    assert bucket["coups_complexes"] == 1

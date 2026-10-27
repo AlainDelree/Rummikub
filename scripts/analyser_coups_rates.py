@@ -44,6 +44,7 @@ Usage :
     python scripts/analyser_coups_rates.py --tous --retenter-inconclusifs
     python scripts/analyser_coups_rates.py --tous --enregistrer-cas-reference
     python scripts/analyser_coups_rates.py --tous --joueur "Alain"
+    python scripts/analyser_coups_rates.py --tous --depuis 20261001
 
 Cette analyse ne modifie jamais l'IA ni le moteur : elle se limite à relire
 des journaux déjà écrits et à interroger le solveur en lecture pure.
@@ -67,8 +68,9 @@ from rummikub.persistance.coups_rates import (  # noqa: E402
     BUDGETS_SERIE_DEFAUT,
     analyser_decision_complete, budget_necessaire, calculer_resume_complet,
     detecter_reserves_joueur, extraire_decisions_ia_toutes,
-    extraire_decisions_joueur, repartition_budget_necessaire,
-    resume_joueur_humain, top_coups_rates_complet,
+    extraire_decisions_joueur, filtrer_journaux_depuis,
+    repartition_budget_necessaire, resume_joueur_humain,
+    top_coups_rates_complet,
 )
 
 LIBELLE_MOMENT = {"avant_mise": "avant la mise initiale",
@@ -139,8 +141,8 @@ def afficher_description_coup(description, titre: str, flux=sys.stdout, indent="
     c = description["complexite"]
     joker = "avec échange de joker" if c["a_joker"] else "sans joker"
     print(f"{indent}  Complexité : {c['nb_combinaisons_touchees']} combinaison(s) "
-          f"touchée(s), {joker}, {c['nb_etapes']} étape(s) -> {c['categorie']} "
-          f"(simple = 1-2 combinaisons sans joker ; complexe = 3+ combinaisons ou joker)",
+          f"touchée(s), {joker}, {c['nb_etapes']} étape(s) -> taille {c['taille']} "
+          f"(petit 1-2, moyen 3-5, grand 6+) ; {c['categorie']}  [mesure #196, conservée]",
           file=flux)
     if description["etapes"]:
         print(f"{indent}  Étapes :", file=flux)
@@ -212,8 +214,45 @@ def afficher_resume_complet(resume: dict, flux=sys.stdout) -> None:
             if nb_classes:
                 print(f"    ... dont coups simples (<= 2 combinaisons, sans joker) : "
                       f"{s['coups_simples']}, complexes (3+ combinaisons ou joker) : "
-                      f"{s['coups_complexes']}", file=flux)
+                      f"{s['coups_complexes']}  [mesure #196, conservée]", file=flux)
+                print(f"    ... dont par taille (#198) : petits (1-2) {s['coups_petits']}, "
+                      f"moyens (3-5) {s['coups_moyens']}, grands (6+) {s['coups_grands']} ; "
+                      f"avec joker {s['coups_avec_joker']}, sans joker {s['coups_sans_joker']}",
+                      file=flux)
         print(file=flux)
+
+
+def afficher_tableau_tailles(resume: dict, flux=sys.stdout) -> None:
+    """Tableau récapitulatif, toutes phases (avant/après mise) confondues :
+    répartition par taille et par présence de joker, pour chaque niveau
+    d'IA (point 1 de l'issue #198) — pour juger d'un coup d'œil si les
+    coups ratés/poses sous-optimales sont à la portée d'un humain."""
+    ordre = _ordre_niveaux()
+    niveaux = sorted(resume, key=lambda n: (ordre.index(n) if n in ordre
+                                            else len(ordre), n or ""))
+    lignes = []
+    for niveau in niveaux:
+        total = {"coups_petits": 0, "coups_moyens": 0, "coups_grands": 0,
+                 "coups_avec_joker": 0, "coups_sans_joker": 0}
+        for moment in ("avant_mise", "apres_mise"):
+            s = resume[niveau].get(moment)
+            if not s:
+                continue
+            for cle in total:
+                total[cle] += s[cle]
+        if sum(total.values()):
+            lignes.append((niveau, total))
+    if not lignes:
+        return
+    print("=== Répartition des coups ratés/poses sous-optimales par taille (point 1, "
+          "issue #198) ===", file=flux)
+    print(f"{'Niveau':<14} {'Petit':>6} {'Moyen':>6} {'Grand':>6} {'Joker':>6} "
+          f"{'Sans joker':>11}", file=flux)
+    for niveau, t in lignes:
+        print(f"{(niveau or '?'):<14} {t['coups_petits']:>6} {t['coups_moyens']:>6} "
+              f"{t['coups_grands']:>6} {t['coups_avec_joker']:>6} "
+              f"{t['coups_sans_joker']:>11}", file=flux)
+    print(file=flux)
 
 
 def afficher_top_complet(resultats: list, n: int, flux=sys.stdout) -> None:
@@ -368,7 +407,9 @@ def _analyser_joueur(chemins, nom_joueur, budget_genereux, budget_production,
               "poses": 0, "poses_max": 0, "total_reel": 0, "total_solveur": 0,
               "pioches": 0, "pioches_coup_possible": 0,
               "jokers_joues": 0, "jokers_attente_total": 0,
-              "complexite_simples": 0, "complexite_complexes": 0}
+              "complexite_simples": 0, "complexite_complexes": 0,
+              "complexite_petits": 0, "complexite_moyens": 0, "complexite_grands": 0,
+              "complexite_avec_joker": 0, "complexite_sans_joker": 0}
 
     for chemin in chemins:
         data = charger_journal(chemin)
@@ -394,6 +435,11 @@ def _analyser_joueur(chemins, nom_joueur, budget_genereux, budget_production,
         agrege["nb_tours_analyses"] += resume["nb_tours_analyses"]
         agrege["complexite_simples"] += resume["complexite"]["simples"]
         agrege["complexite_complexes"] += resume["complexite"]["complexes"]
+        agrege["complexite_petits"] += resume["complexite"]["petits"]
+        agrege["complexite_moyens"] += resume["complexite"]["moyens"]
+        agrege["complexite_grands"] += resume["complexite"]["grands"]
+        agrege["complexite_avec_joker"] += resume["complexite"]["avec_joker"]
+        agrege["complexite_sans_joker"] += resume["complexite"]["sans_joker"]
         style = resume["style"]
         if style["nb_poses"]:
             agrege["poses"] += style["nb_poses"]
@@ -456,8 +502,14 @@ def afficher_resume_joueur(nom_joueur: str, agrege: dict, flux=sys.stdout) -> No
     if simples + complexes:
         print(f"  Complexité des coups (a) ci-dessus : {simples} simple(s) "
               f"(<= 2 combinaisons, sans joker), {complexes} complexe(s) "
-              f"(3+ combinaisons ou joker) — dit si ces coups sont à la portée "
-              f"d'un humain", file=flux)
+              f"(3+ combinaisons ou joker)  [mesure #196, conservée]", file=flux)
+        print(f"  Répartition par taille (point 1, issue #198) — dit si ces coups "
+              f"sont à la portée d'un humain :", file=flux)
+        print(f"    {'Petit':>6} {'Moyen':>6} {'Grand':>6} {'Joker':>6} {'Sans joker':>11}",
+              file=flux)
+        print(f"    {agrege['complexite_petits']:>6} {agrege['complexite_moyens']:>6} "
+              f"{agrege['complexite_grands']:>6} {agrege['complexite_avec_joker']:>6} "
+              f"{agrege['complexite_sans_joker']:>11}", file=flux)
         print(file=flux)
 
     print(f"  Technique de la « réserve » (jamais comptée ci-dessus) :", file=flux)
@@ -498,6 +550,12 @@ def main(argv=None) -> int:
                              "seul plus récent.")
     parser.add_argument("--dossier", default=None,
                         help="Dossier des journaux (défaut : RACINE_DATA/logs_parties).")
+    parser.add_argument("--depuis", default=None,
+                        help="Ne garder que les journaux dont le nom "
+                             "(partie_AAAAMMJJ_HHMMSS.json) indique une date égale ou "
+                             "postérieure à AAAAMMJJ (ex. --depuis 20261001) — utile pour "
+                             "isoler les parties jouées avec la dernière version de l'IA "
+                             "(issue #198). Affiche le nombre de journaux retenus.")
     parser.add_argument("--budget", type=float, default=10.0,
                         help="Budget de temps GÉNÉREUX du solveur, en secondes "
                              "(défaut 10 — recommandé, voir avertissement). Un budget "
@@ -556,11 +614,12 @@ def main(argv=None) -> int:
 
     if args.fichier:
         chemins = [Path(args.fichier)]
-    elif args.tous:
-        chemins = lister_journaux(dossier)
     else:
-        tous = lister_journaux(dossier)
-        chemins = [tous[-1]] if tous else []
+        tous = filtrer_journaux_depuis(lister_journaux(dossier), args.depuis)
+        if args.depuis:
+            print(f"{len(tous)} journal(aux) retenu(s) après filtre --depuis {args.depuis}.",
+                  file=sys.stderr)
+        chemins = tous if args.tous else ([tous[-1]] if tous else [])
 
     if not chemins:
         print(f"Aucun journal trouvé dans {dossier}.", file=sys.stderr)
@@ -609,6 +668,7 @@ def main(argv=None) -> int:
 
     resume = calculer_resume_complet(resultats)
     afficher_resume_complet(resume)
+    afficher_tableau_tailles(resume)
     afficher_top_complet(resultats, n=args.top)
 
     if args.tour is not None:

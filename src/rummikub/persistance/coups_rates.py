@@ -36,6 +36,7 @@ une partie a été jouée avec des réglages personnalisés.
 """
 
 import copy
+import re
 
 from rummikub import config
 from rummikub.moteur import description_coup
@@ -47,6 +48,35 @@ from rummikub.persistance.bilan import _joueurs_normalises
 # Actions qui représentent une décision de piocher ou de passer (on exclut
 # "pose" et "annulation", sans intérêt pour cette analyse).
 _DECISIONS_SANS_POSE = {"pioche", "passe"}
+
+
+# --------------------------------------------------------------------------- #
+# Filtre par date sur le nom de fichier (issue #198, point 2).
+# --------------------------------------------------------------------------- #
+
+_RE_DATE_JOURNAL = re.compile(r"^partie_(\d{8})_\d{6}\.json$")
+
+
+def filtrer_journaux_depuis(chemins: list, depuis: str = None) -> list:
+    """Ne garde, parmi ``chemins`` (``Path`` vers des journaux nommés
+    ``partie_AAAAMMJJ_HHMMSS.json``, voir ``persistance/journal.py``), que
+    ceux dont la date dans le nom est égale ou postérieure à ``depuis``
+    (``"AAAAMMJJ"``) — permet de limiter l'analyse aux parties jouées avec
+    la dernière version d'une IA plutôt qu'un mélange de versions
+    successives (point 2 de l'issue #198).
+
+    Retourne ``chemins`` inchangé si ``depuis`` est vide/``None``. Un nom de
+    fichier qui ne suit pas le format attendu est exclu (prudence : sans
+    date fiable à comparer, impossible de garantir qu'il s'agit bien d'une
+    partie récente)."""
+    if not depuis:
+        return list(chemins)
+    retenus = []
+    for chemin in chemins:
+        m = _RE_DATE_JOURNAL.match(chemin.name)
+        if m is not None and m.group(1) >= depuis:
+            retenus.append(chemin)
+    return retenus
 
 
 # --------------------------------------------------------------------------- #
@@ -344,24 +374,50 @@ def _relabeler_tuiles_indiscernables(plateau_avant: list, plateau_apres: list) -
     return plateau_apres
 
 
+_PLURIEL_TAILLE = {"petit": "petits", "moyen": "moyens", "grand": "grands"}
+
+
+def _taille_coup(nb_touchees: int) -> str:
+    """Taille d'un coup d'après le nombre de combinaisons du plateau
+    touchées (point 1 de l'issue #198) : ``"petit"`` (1 ou 2), ``"moyen"``
+    (3 à 5), ``"grand"`` (6 ou plus) — un découpage plus fin que l'ancien
+    simple/complexe (voir ``categorie`` ci-dessous, conservé pour la
+    continuité des mesures), qui regroupait à tort un échange simple avec
+    joker et un coup à une douzaine de combinaisons dans la même catégorie
+    « complexe »."""
+    if nb_touchees <= 2:
+        return "petit"
+    if nb_touchees <= 5:
+        return "moyen"
+    return "grand"
+
+
 def _complexite_coup(resume: dict, etapes: list) -> dict:
-    """Mesure simple de la complexité d'un coup décrit par
-    ``moteur/description_coup.py`` (point 3 de l'issue #196) : nombre de
-    combinaisons du plateau touchées (défaites + créées + modifiées),
-    présence d'au moins un échange de joker, nombre d'étapes RÉELLES du
-    rejeu pas à pas (celles à titre vide — les écrans d'information
-    « Départ »/« Les jokers » ne comptent pas, par cohérence avec
-    ``nbChangementsPasAPas`` côté front-end). Un coup est classé
-    ``"complexe"`` s'il touche 3 combinaisons ou plus, ou s'il déplace au
-    moins un joker ; sinon ``"simple"`` (une ou deux combinaisons, sans
-    chaîne de jokers)."""
+    """Mesure de la complexité d'un coup décrit par
+    ``moteur/description_coup.py`` : nombre de combinaisons du plateau
+    touchées (défaites + créées + modifiées), présence d'au moins un
+    échange de joker, nombre d'étapes RÉELLES du rejeu pas à pas (celles à
+    titre vide — les écrans d'information « Départ »/« Les jokers » ne
+    comptent pas, par cohérence avec ``nbChangementsPasAPas`` côté
+    front-end).
+
+    ``taille`` (issue #198, point 1) : ``"petit"``/``"moyen"``/``"grand"``,
+    voir :func:`_taille_coup` — avec ``a_joker``, permet de juger si un coup
+    raté est à la portée d'un humain, ce que l'ancien ``categorie`` seul ne
+    permettait pas (un coup avec joker simple et un coup à 12 combinaisons
+    étaient tous deux « complexe »).
+
+    ``categorie`` (issue #196, CONSERVÉ pour la continuité des mesures) :
+    ``"complexe"`` si le coup touche 3 combinaisons ou plus, ou s'il déplace
+    au moins un joker ; sinon ``"simple"``."""
     nb_touchees = (resume["nb_combinaisons_defaites"] + resume["nb_combinaisons_creees"]
                    + resume["nb_combinaisons_modifiees"])
     a_joker = bool(resume["jokers_deplaces"])
     nb_etapes = len([e for e in etapes if not e["titre"]])
     categorie = "complexe" if (nb_touchees >= 3 or a_joker) else "simple"
     return {"nb_combinaisons_touchees": nb_touchees, "a_joker": a_joker,
-            "nb_etapes": nb_etapes, "categorie": categorie}
+            "nb_etapes": nb_etapes, "categorie": categorie,
+            "taille": _taille_coup(nb_touchees)}
 
 
 def decrire_coup(plateau_avant: list, plateau_apres: list, nom: str = None) -> dict:
@@ -646,6 +702,11 @@ def _bucket_complet_vierge() -> dict:
         "inconclusifs": 0,
         "coups_simples": 0,
         "coups_complexes": 0,
+        "coups_petits": 0,
+        "coups_moyens": 0,
+        "coups_grands": 0,
+        "coups_avec_joker": 0,
+        "coups_sans_joker": 0,
     }
 
 
@@ -662,8 +723,16 @@ def calculer_resume_complet(resultats: list) -> dict:
     Issue #196 (point 3) : ``coups_simples``/``coups_complexes`` répartissent
     l'ensemble des coups ratés/poses sous-optimales (les deux catégories
     ci-dessus confondues) selon la complexité du coup proposé par le solveur
-    (voir :func:`decrire_coup`/:func:`_complexite_coup`) — c'est cette
-    répartition qui dit si les coups ratés sont à la portée d'un humain."""
+    (voir :func:`decrire_coup`/:func:`_complexite_coup`) — CONSERVÉS pour la
+    continuité des mesures.
+
+    Issue #198 (point 1, remplace la granularité trop grossière de #196) :
+    ``coups_petits``/``coups_moyens``/``coups_grands`` répartissent le même
+    ensemble selon ``complexite["taille"]`` ; ``coups_avec_joker``/
+    ``coups_sans_joker`` selon ``complexite["a_joker"]`` — c'est cette
+    répartition (taille x joker) qui dit si les coups ratés sont à la
+    portée d'un humain, ce qu'un simple/complexe binaire ne permettait pas
+    de distinguer."""
     out: dict = {}
     for r in resultats:
         bucket = out.setdefault(r["niveau"], {}).setdefault(
@@ -688,6 +757,11 @@ def calculer_resume_complet(resultats: list) -> dict:
                     bucket["coups_simples"] += 1
                 else:
                     bucket["coups_complexes"] += 1
+                bucket[f"coups_{_PLURIEL_TAILLE[complexite['taille']]}"] += 1
+                if complexite["a_joker"]:
+                    bucket["coups_avec_joker"] += 1
+                else:
+                    bucket["coups_sans_joker"] += 1
     return out
 
 
@@ -851,8 +925,10 @@ def resume_joueur_humain(decisions: list, resultats: list, reserves: dict) -> di
     complexité du coup proposé par le solveur — voir :func:`decrire_coup`) ;
     ``solveur_bat`` porte aussi ``description_reel`` (le coup réellement
     joué, pour comparaison). ``complexite`` répartit ``coups_peut_etre_rates``
-    en coups simples/complexes (même seuil que pour l'IA, voir
-    :func:`calculer_resume_complet`)."""
+    en coups simples/complexes (même seuil que pour l'IA, CONSERVÉ pour la
+    continuité des mesures, voir :func:`calculer_resume_complet`), et
+    (issue #198, point 1) par taille (``petits``/``moyens``/``grands``) et
+    présence de joker (``avec_joker``/``sans_joker``)."""
     exclure = reserves["indices_a_exclure"]
     coups_peut_etre_rates, solveur_bat = [], []
     nb_poses = nb_poses_max = 0
@@ -901,17 +977,32 @@ def resume_joueur_humain(decisions: list, resultats: list, reserves: dict) -> di
                 description_solveur=r.get("description_solveur"),
                 description_reel=r.get("description_reel")))
 
-    # Répartition simple/complexe des coups peut-être ratés (issue #196,
-    # point 3) — comme pour l'IA (voir calculer_resume_complet), seulement
-    # sur les cas où le solveur a effectivement proposé un coup décrit.
+    # Répartition simple/complexe (issue #196, CONSERVÉE pour la continuité
+    # des mesures) et par taille/joker (issue #198, point 1 — remplace la
+    # granularité trop grossière de #196) des coups peut-être ratés — comme
+    # pour l'IA (voir calculer_resume_complet), seulement sur les cas où le
+    # solveur a effectivement proposé un coup décrit.
     nb_simples = nb_complexes = 0
+    nb_petits = nb_moyens = nb_grands = 0
+    nb_avec_joker = nb_sans_joker = 0
     for e in coups_peut_etre_rates:
         complexite = (e.get("description_solveur") or {}).get("complexite")
-        if complexite:
-            if complexite["categorie"] == "simple":
-                nb_simples += 1
-            else:
-                nb_complexes += 1
+        if not complexite:
+            continue
+        if complexite["categorie"] == "simple":
+            nb_simples += 1
+        else:
+            nb_complexes += 1
+        if complexite["taille"] == "petit":
+            nb_petits += 1
+        elif complexite["taille"] == "moyen":
+            nb_moyens += 1
+        else:
+            nb_grands += 1
+        if complexite["a_joker"]:
+            nb_avec_joker += 1
+        else:
+            nb_sans_joker += 1
 
     return {
         "nb_tours_analyses": len([r for r in resultats if not r["inconclusif"]]),
@@ -919,7 +1010,11 @@ def resume_joueur_humain(decisions: list, resultats: list, reserves: dict) -> di
         "solveur_bat": solveur_bat,
         "reserves_reussies": reserves["reserves_reussies"],
         "reserves_perdues": reserves["reserves_perdues"],
-        "complexite": {"simples": nb_simples, "complexes": nb_complexes},
+        "complexite": {
+            "simples": nb_simples, "complexes": nb_complexes,
+            "petits": nb_petits, "moyens": nb_moyens, "grands": nb_grands,
+            "avec_joker": nb_avec_joker, "sans_joker": nb_sans_joker,
+        },
         "style": {
             "nb_poses": nb_poses,
             "part_poses_au_max": (nb_poses_max / nb_poses) if nb_poses else None,

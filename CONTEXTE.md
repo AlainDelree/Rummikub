@@ -889,6 +889,66 @@ moteur).
   en bout sur le vrai cas de référence Bruno (`cas_expert_bruno_tour57.json`)
   qui plantait avant la correction.
 
+### 11quater. Classement par taille et filtre par date (issue #198, suite de #196)
+
+Le simple/complexe binaire de #196 ci-dessus regroupait à tort, dans
+« complexe », un échange de joker trivial (visible à l'œil par un humain,
+ex. un échange direct) ET un coup à une douzaine de combinaisons — rendant
+impossible de dire si les coups ratés d'Expert sont à la portée d'un
+humain. #198 affine cette mesure et ajoute un filtre par date, toujours
+dans `persistance/coups_rates.py` (aucun changement au solveur, à l'IA ni
+au moteur) :
+
+- **Classement par taille** (`_taille_coup`, nouveau champ `complexite["taille"]`
+  de `_complexite_coup`) : d'après `nb_combinaisons_touchees` (défaites +
+  créées + modifiées, après ignoré des échanges de tuiles identiques —
+  inchangé depuis #197) — `"petit"` (1 ou 2), `"moyen"` (3 à 5), `"grand"`
+  (6 ou plus). L'indicateur `a_joker` (déplacement d'au moins un joker) et
+  `nb_etapes` restent des champs séparés, orthogonaux à la taille (un coup
+  peut être « petit avec joker », ex. un échange direct). L'ancien
+  `categorie` (`"simple"`/`"complexe"`, #196) est **conservé tel quel** pour
+  la continuité des mesures déjà produites — les deux coexistent dans
+  `complexite`.
+- **Agrégation par taille/joker** (`calculer_resume_complet`,
+  `resume_joueur_humain`) : en plus de `coups_simples`/`coups_complexes`
+  (conservés), chaque bucket par niveau/phase (IA) ou le résumé d'un joueur
+  humain porte désormais `coups_petits`/`coups_moyens`/`coups_grands` et
+  `coups_avec_joker`/`coups_sans_joker` (clés `petits`/`moyens`/`grands`/
+  `avec_joker`/`sans_joker` dans `resume_joueur_humain["complexite"]`).
+- **Script CLI** : `afficher_tableau_tailles` (mode IA) affiche, après le
+  résumé habituel, un tableau toutes phases confondues — une ligne par
+  niveau d'IA, colonnes petit/moyen/grand/joker/sans joker ; le mode
+  `--joueur` affiche le même tableau (une seule ligne) dans
+  `afficher_resume_joueur`. `afficher_description_coup` affiche désormais la
+  taille de chaque coup détaillé (top N, `--tour`, listes (a)/(b)) en plus
+  de l'ancienne catégorie, explicitement marquée « conservée ».
+- **Filtre par date** (`filtrer_journaux_depuis(chemins, depuis)`, nouvelle
+  option `--depuis AAAAMMJJ` du script) : ne garde, parmi les journaux
+  `partie_AAAAMMJJ_HHMMSS.json` (voir `persistance/journal.py`), que ceux
+  dont la date dans le NOM DE FICHIER (jamais le contenu — fonction pure,
+  aucune lecture de fichier) est égale ou postérieure à `depuis` — permet
+  de limiter l'analyse aux parties jouées avec la dernière version d'une
+  IA plutôt qu'un mélange de versions successives. Un nom hors du format
+  attendu est exclu par prudence (pas de date fiable à comparer). Le script
+  affiche sur stderr le nombre de journaux retenus après filtrage ; le
+  filtre s'applique avant le choix du « plus récent » par défaut (donc le
+  plus récent PARMI les journaux retenus), mais jamais à un fichier unique
+  passé explicitement en argument.
+- **Accords en français et suppression des pronoms genrés** : voir §12,
+  nouvelle sous-section 12ter — modifications dans
+  `moteur/description_coup.py`, pas dans ce module.
+- Tests : `tests/test_coups_rates_description.py` (ajoutés à la suite de
+  ceux de #196) — un coup petit sans joker, un petit AVEC joker (échange
+  direct), un moyen sans joker (démantèlement en 3), un grand avec joker
+  (reprise du cas Bruno/Expert en chaîne de §12) ; bout en bout,
+  `calculer_resume_complet` répartit deux décisions résolues par un faux
+  solveur dans les bons compteurs petit/moyen + simple/complexe conservés.
+  `tests/test_coups_rates_filtre_date.py` (nouveau fichier) — sans
+  `depuis` renvoie tout inchangé ; `depuis` garde la date exacte et les
+  plus récentes, exclut tout ce qui est plus ancien, garde tout si `depuis`
+  précède la plus ancienne ; un nom hors format est exclu dès qu'un filtre
+  est demandé.
+
 ## 12. Rendre lisible un coup complexe de l'IA (issue #189, puis #191)
 
 Depuis le solveur de réarrangement global (#186), un coup de l'IA peut
@@ -930,7 +990,9 @@ position d'après.
   : renvoie `{"texte", "tuiles_posees", "nb_combinaisons_defaites",
   "nb_combinaisons_creees", "nb_combinaisons_modifiees", "jokers_deplaces"}`.
   `nom` (le nom du joueur IA, passé par `api.py`) permet de commencer par
-  « <Nom> a posé... » plutôt que par un « Il » impersonnel. Un coup simple
+  « <Nom> a posé... » plutôt que par « A posé... » (sujet omis). Depuis
+  #198 (voir §12ter), AUCUNE phrase du résumé n'utilise de pronom
+  « il »/« elle » pour désigner le joueur. Un coup simple
   (une seule combinaison touchée, aucun joker déplacé) reste **une seule
   phrase** ; au-delà, plusieurs phrases courtes en français naturel, avec
   contractions (« du groupe de 3 », « au groupe de 11 » — jamais « de le »/
@@ -1075,6 +1137,53 @@ consommée ailleurs).
   "simple" (0 combinaison touchée, 0 étape). Les cas déjà couverts avant
   #197 (chaîne Bruno/Expert, échange de joker, démantèlement de groupe)
   gardent EXACTEMENT le même nombre d'étapes qu'avant (pas de régression).
+
+### 12ter. Accords en français et suppression des pronoms genrés (issue #198)
+
+Deux défauts grammaticaux relevés sur de vraies descriptions produites par
+#189/#191/#197 ci-dessus, corrigés dans `moteur/description_coup.py` SANS
+toucher au moteur tuile-à-tuile (`_construire_operations`) ni à la logique
+de complexité (§11quater) :
+
+- **Accord de la couleur avec « suite »** (`_couleur_suite`, table
+  `_COULEURS_FEMININES = {"noir": "noire", "bleu": "bleue"}`) : « suite »
+  est féminin, donc « suite noire », « suite bleue » (« rouge »/« jaune »
+  sont déjà identiques au féminin, inchangés). Appliqué partout où une
+  couleur qualifie « suite » : `_decrire_combo` (résumé, étapes, écran
+  « Les jokers ») et `_label_combo` (désambiguïsation par couleurs,
+  §12 point `_desc_fabrique`). **Jamais appliqué à « groupe »** (masculin,
+  ou simple liste de couleurs par tuile, ex. « groupe de 11 bleu, jaune et
+  noir ») : accord uniquement sur le mot « suite » lui-même, jamais sur la
+  liste de couleurs d'un groupe.
+- **Suppression des pronoms « il »/« elle »** : plus aucune phrase du
+  résumé (`decrire_coup_ia`) ne présuppose le genre du joueur. La branche
+  « coup complexe » (plusieurs phrases) utilisait `"Il a créé..."`,
+  `"Il a complété..."`, `"Il a retiré..."` quel que soit `nom` — corrigé en
+  tournures impersonnelles : une création devient nominale (`"Création
+  d'un groupe de 11."`, avec élision « de » → « d' » devant voyelle, voir
+  extension de `_contracter` ci-dessous), les autres changements d'une
+  combinaison reprennent les TUILES comme sujet de la phrase (`"Le 3 bleu
+  remplace le joker dans le groupe de 3."`), exactement comme le fait déjà
+  le pas-à-pas (`etapes_coup_ia`) depuis #191. Les deux fonctions
+  partagent désormais le même texte pour un changement « update »
+  (nouveau helper privé `_texte_update(op, desc)`, extrait de la logique
+  dupliquée) — pur regroupement de code, aucun changement de comportement
+  côté pas-à-pas. `_contracter` gère en plus l'élision de « de » devant un
+  article indéfini à initiale vocalique (« un »/« une » → « d'un »/« d'une »,
+  jamais pour « à », qui ne s'élide pas en français).
+- **Non concerné** : l'écran « Les jokers » et les phrases sur les
+  combinaisons défaites (`_phrase_sujet`) n'utilisaient déjà aucun pronom
+  (sujet = les tuiles ou « le joker ») — aucun changement nécessaire
+  au-delà de l'accord de couleur ci-dessus.
+- Tests (`tests/test_description_coup.py`) : accord de « suite » avec
+  chacune des quatre couleurs (texte ET étiquette courte `_label_combo`) ;
+  « groupe » reste invariable avec les quatre couleurs (jamais de « e »
+  final ajouté). Mise à jour nécessaire de deux tests existants devenus
+  obsolètes par construction (texte comparé mot pour mot) : la contraction
+  de référence attendait `"suite noir"` (désormais `"suite noire"`), et le
+  cas Bruno (#191) attendait `"Il a créé..."`/`"Il a complété..."`
+  (désormais `"Création d'un groupe de 11."`/`"Le 3 bleu remplace le
+  joker dans le groupe de 3."`) — même contenu, formulation différente.
 
 ## 13. Pistes d'amélioration de l'IA à tester (issue #195)
 

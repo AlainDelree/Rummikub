@@ -1,6 +1,6 @@
 from rummikub.moteur.tuiles import Tuile
 from rummikub.moteur.description_coup import (
-    decrire_coup_ia, etapes_coup_ia, _contracter, _decrire_combo)
+    decrire_coup_ia, etapes_coup_ia, _contracter, _decrire_combo, _label_combo)
 
 
 def t(v, c, serie="a"):
@@ -82,8 +82,34 @@ def test_decrire_combo_groupe_et_suite_avec_contraction_en_contexte():
     suite = [t(5, "noir"), t(6, "noir"), t(7, "noir")]
     assert _contracter("de", _decrire_combo(groupe)) == "du groupe de 7"
     assert _contracter("à", _decrire_combo(groupe)) == "au groupe de 7"
-    assert _contracter("de", _decrire_combo(suite)) == "de la suite noir (5 à 7)"
-    assert _contracter("à", _decrire_combo(suite)) == "à la suite noir (5 à 7)"
+    assert _contracter("de", _decrire_combo(suite)) == "de la suite noire (5 à 7)"
+    assert _contracter("à", _decrire_combo(suite)) == "à la suite noire (5 à 7)"
+
+
+# -------------------------------------------- accords en français (issue #198)
+
+def test_accord_suite_avec_les_quatre_couleurs():
+    """« suite » est féminin : la couleur s'accorde (« noire », « bleue ») ou
+    reste invariable (« rouge », « jaune » sont déjà identiques au féminin) —
+    point 3 de l'issue #198."""
+    attendu = {"rouge": "suite rouge", "bleu": "suite bleue",
+               "jaune": "suite jaune", "noir": "suite noire"}
+    for couleur, suffixe in attendu.items():
+        suite = [t(5, couleur), t(6, couleur), t(7, couleur)]
+        assert _decrire_combo(suite) == f"la {suffixe} (5 à 7)"
+        assert _decrire_combo(suite, indef=True) == f"une {suffixe} (5 à 7)"
+        assert _label_combo(suite) == suffixe
+
+
+def test_accord_groupe_reste_invariable_avec_les_quatre_couleurs():
+    """« groupe » est masculin et ne s'accorde jamais avec une couleur, qui
+    reste toujours sous sa forme de base (« noir », jamais « noire »)."""
+    for couleur in ("rouge", "bleu", "jaune", "noir"):
+        groupe = [t(7, "rouge" if couleur != "rouge" else "bleu"),
+                  t(7, couleur), t(7, "jaune" if couleur != "jaune" else "noir")]
+        assert _decrire_combo(groupe) == "le groupe de 7"
+        assert couleur in _decrire_combo(groupe, indef=True, couleurs=True)
+        assert f"{couleur}e" not in _decrire_combo(groupe, indef=True, couleurs=True)
 
 
 # --------------------------------------------------------------- coups simples
@@ -242,8 +268,8 @@ def test_bruno_cas_simple_texte_et_etapes():
     r = decrire_coup_ia(avant, apres, nom="Bruno")
     assert r["texte"] == (
         "Bruno a posé 3 tuiles de sa main : 3 bleu, 11 bleu et 11 noir. "
-        "Il a créé un groupe de 11. "
-        "Il a complété le groupe de 3 en remplaçant le joker par le 3 bleu. "
+        "Création d'un groupe de 11. "
+        "Le 3 bleu remplace le joker dans le groupe de 3. "
         "Le joker est passé du groupe de 3 au groupe de 11.")
 
     etapes = etapes_coup_ia(avant, apres)

@@ -64,12 +64,17 @@ def _maj(phrase: str) -> str:
 def _contracter(prep: str, groupe_nominal: str) -> str:
     """Fusionne une préposition (« de » ou « à ») avec un groupe nominal
     commençant par un article défini : de+le=du, à+le=au, de+les=des,
-    à+les=aux. « la »/« l' » ne se contractent pas (de la, à la)."""
+    à+les=aux. « la »/« l' » ne se contractent pas (de la, à la). « de »
+    s'élide en « d' » devant un article indéfini à initiale vocalique
+    (« un »/« une », ex. « Création d'un groupe » — issue #198) ; « à » ne
+    s'élide jamais en français (« à un », « à une »)."""
     fusions = {"le ": {"de": "du ", "à": "au "},
                "les ": {"de": "des ", "à": "aux "}}
     for article, table in fusions.items():
         if groupe_nominal.startswith(article):
             return table[prep] + groupe_nominal[len(article):]
+    if prep == "de" and groupe_nominal[:1] in "aeiouAEIOU":
+        return "d'" + groupe_nominal
     return f"{prep} {groupe_nominal}"
 
 
@@ -210,6 +215,18 @@ def _est_feminin(tuiles_dicts: list) -> bool:
     return _type_combo(tuiles_dicts) == "suite"
 
 
+# Accord au féminin de la couleur quand elle qualifie « suite » (féminin) —
+# « rouge »/« jaune » sont déjà invariables. Jamais appliqué à « groupe »
+# (masculin, ou liste de couleurs par tuile — point 3 de l'issue #198).
+_COULEURS_FEMININES = {"noir": "noire", "bleu": "bleue"}
+
+
+def _couleur_suite(couleur) -> str:
+    if couleur is None:
+        return couleur
+    return _COULEURS_FEMININES.get(couleur, couleur)
+
+
 def _label_combo(tuiles_dicts: list) -> str:
     """Étiquette courte sans bornes ni couleur détaillée, utilisée pour
     détecter deux combinaisons distinctes qui porteraient le même nom
@@ -221,7 +238,7 @@ def _label_combo(tuiles_dicts: list) -> str:
         return f"groupe de {valeur}"
     if type_ == "suite":
         couleur = next((t.couleur for t in objs if not t.est_joker), None)
-        return f"suite {couleur}"
+        return f"suite {_couleur_suite(couleur)}"
     return "combinaison"
 
 
@@ -249,7 +266,7 @@ def _decrire_combo(tuiles_dicts: list, indef: bool = False,
             base_val = t0.valeur - i0
             v_min, v_max = base_val, base_val + len(objs) - 1
             bornes = f"({v_min})" if v_min == v_max else f"({v_min} à {v_max})"
-            return ("une " if indef else "la ") + f"suite {couleur} {bornes}"
+            return ("une " if indef else "la ") + f"suite {_couleur_suite(couleur)} {bornes}"
         return "une suite" if indef else "la suite"
     return "une combinaison" if indef else "la combinaison"
 
@@ -550,6 +567,24 @@ def _jokers_deplaces(ops: list, id_vers_tuile: dict) -> list:
     return deplacements
 
 
+def _texte_update(op: dict, desc) -> str:
+    """Texte d'un changement « update » (combinaison qui garde son identité
+    mais change de composition), partagé par le résumé écrit et le pas-à-pas
+    (issue #198) : toujours les TUILES qui sont sujet de la phrase, jamais un
+    pronom (« il »/« elle ») qui présupposerait le genre du joueur."""
+    cible = desc(op["tuiles_apres"])
+    if op["retirees_vues"] and op["ajoutees_vues"]:
+        verbe = "remplace" if len(op["ajoutees_vues"]) == 1 else "remplacent"
+        return (f"{_maj(_lister_tuiles_def(op['ajoutees_vues']))} {verbe} "
+                f"{_lister_tuiles_def(op['retirees_vues'])} dans {cible}.")
+    if op["ajoutees_vues"]:
+        verbe = "complète" if len(op["ajoutees_vues"]) == 1 else "complètent"
+        return f"{_maj(_lister_tuiles_def(op['ajoutees_vues']))} {verbe} {cible}."
+    verbe = "sort" if len(op["retirees_vues"]) == 1 else "sortent"
+    return (f"{_maj(_lister_tuiles_def(op['retirees_vues']))} {verbe} "
+            f"{_contracter('de', desc(op['tuiles_avant']))}.")
+
+
 # ------------------------------------------------------- résumé écrit (gauche)
 
 def _tuiles_posees_brut(plateau_avant: list, plateau_apres: list) -> list:
@@ -565,7 +600,12 @@ def decrire_coup_ia(plateau_avant: list, plateau_apres: list,
                      nom: str = None) -> dict:
     """Résume en français naturel un coup de pose de l'IA, à partir du
     plateau juste avant et juste après ce coup. ``nom`` (optionnel) permet de
-    commencer par « <Nom> a posé... » plutôt que par un « Il » impersonnel.
+    commencer par « <Nom> a posé... » plutôt que par « A posé... » (sujet
+    omis). Aucune phrase, avec ou sans ``nom``, n'utilise jamais de pronom
+    « il »/« elle » pour désigner le joueur — cela présupposerait son genre
+    (issue #198) : les phrases suivantes restent soit nominales (« Création
+    de... »), soit portées par les tuiles elles-mêmes comme sujet (« Le 3
+    bleu remplace... »).
 
     Retourne {"texte": str, "tuiles_posees": [dict,...],
               "nb_combinaisons_defaites": int, "nb_combinaisons_creees": int,
@@ -638,26 +678,17 @@ def _decrire_coup_ia(plateau_avant: list, plateau_apres: list,
             texte = "N'a rien changé sur le plateau."
     else:
         phrases = []
-        sujet = nom if nom else "Il"
+        sujet_initial = f"{nom} a posé" if nom else "A posé"
         if liste_posees:
             mot = "tuile" if nb_posees == 1 else "tuiles"
-            phrases.append(f"{sujet} a posé {nb_posees} {mot} de sa main : "
+            phrases.append(f"{sujet_initial} {nb_posees} {mot} de sa main : "
                             f"{liste_posees}.")
         for op in creates:
-            phrases.append(f"Il a créé {desc(op['tuiles_apres'], indef=True)}.")
+            # Jamais de pronom sujet ("il"/"elle") : présupposerait le genre
+            # du joueur (issue #198) — tournure nominale impersonnelle.
+            phrases.append(f"Création {_contracter('de', desc(op['tuiles_apres'], indef=True))}.")
         for op in updates:
-            if op["retirees_vues"] and op["ajoutees_vues"]:
-                phrases.append(
-                    f"Il a complété {desc(op['tuiles_apres'])} en remplaçant "
-                    f"{_lister_tuiles_def(op['retirees_vues'])} par "
-                    f"{_lister_tuiles_def(op['ajoutees_vues'])}.")
-            elif op["ajoutees_vues"]:
-                phrases.append(f"Il a complété {desc(op['tuiles_apres'])} "
-                                f"avec {_lister_tuiles_def(op['ajoutees_vues'])}.")
-            elif op["retirees_vues"]:
-                phrases.append(
-                    f"Il a retiré {_lister_tuiles_def(op['retirees_vues'])} "
-                    f"{_contracter('de', desc(op['tuiles_avant']))}.")
+            phrases.append(_texte_update(op, desc))
         for i in r["dissolvantes"]:
             phrases.append(_phrase_sujet(plateau_avant[i], "défait", desc))
         for n, depl in enumerate(jokers):
@@ -869,19 +900,7 @@ def _etapes_coup_ia(plateau_avant: list, plateau_apres: list) -> list:
                 invisible = True
             else:
                 ids_touchees = [d["id"] for d in op["retirees_vues"] + op["ajoutees_vues"]]
-                cible = desc(op["tuiles_apres"])
-                if op["retirees_vues"] and op["ajoutees_vues"]:
-                    verbe = "remplace" if len(op["ajoutees_vues"]) == 1 else "remplacent"
-                    texte = (f"{_maj(_lister_tuiles_def(op['ajoutees_vues']))} {verbe} "
-                              f"{_lister_tuiles_def(op['retirees_vues'])} dans {cible}.")
-                elif op["ajoutees_vues"]:
-                    verbe = "complète" if len(op["ajoutees_vues"]) == 1 else "complètent"
-                    texte = (f"{_maj(_lister_tuiles_def(op['ajoutees_vues']))} {verbe} "
-                              f"{cible}.")
-                else:
-                    verbe = "sort" if len(op["retirees_vues"]) == 1 else "sortent"
-                    texte = (f"{_maj(_lister_tuiles_def(op['retirees_vues']))} {verbe} "
-                              f"{_contracter('de', desc(op['tuiles_avant']))}.")
+                texte = _texte_update(op, desc)
 
         else:  # create
             slot = f"c{op['apres_idx']}"
