@@ -1273,3 +1273,118 @@ def test_preferer_simple_atteint_le_meme_plafond_sur_le_cas_le_plus_dur():
         return len(coup["ids_tuiles"]) if coup else 0
 
     assert _nb_tuiles(True) >= _nb_tuiles(False)
+
+
+# --------------------------------------------------------------------------- #
+# Issue #200 (suite de #194) : coups de grande envergure.
+#
+# Diagnostic (voir le rapport de clôture #200) : les trois cas
+# ``cas_expert_humain_*.json`` enregistraient à l'origine un
+# ``attendu_min_tuiles`` SUPÉRIEUR à la taille du chevalet capturé (ex. 18
+# tuiles attendues pour un chevalet de 7) — une cible physiquement
+# impossible pour n'importe quel solveur, le chevalet bornant strictement le
+# nombre de tuiles posables. Cause réelle : ``analyser_decision_complete``
+# (``persistance/coups_rates.py``) comparait le solveur à
+# ``nb_tuiles_posees`` du journal, un compteur côté IHM (longueur brute de la
+# liste d'ids envoyée par le client JS pour une pose humaine) qui peut
+# dépasser la taille réelle du chevalet d'avant-coup, plutôt qu'à
+# ``ids_tuiles_reelles`` (déjà calculé juste à côté, par différence de
+# chevalet avant/après — fiable par construction). Corrigé à la source ; les
+# trois ``attendu_min_tuiles`` ci-dessous ont été recalculés en conséquence
+# (désormais égaux à la taille du chevalet, le solveur posant la main
+# entière). Aucune incomplétude du solveur sur ces trois cas précis — voir
+# le rapport de clôture pour le détail.
+#
+# Les trois cas ``cas_expert_ia_*.json`` restent, eux, des cas authentiques
+# (chevalet et ``attendu_min_tuiles`` cohérents dès l'origine). Une
+# optimisation de ``_candidats_suite`` (construction incrémentale des suites
+# candidates le long de la fenêtre, au lieu de tout reconstruire pour chaque
+# largeur d'intervalle — voir sa docstring) réduit sensiblement le temps
+# nécessaire sans changer le moindre résultat (vérifié par comparaison
+# exhaustive sur 20000 états aléatoires, et par la suite de tests complète) :
+# ``tour59`` passe de ~3 s à ~2 s pour sa dernière tuile, ``tour61`` de ~10 s
+# à ~5 s. ``tour37`` était déjà trouvé dans le budget de production.
+# ``tour59`` reste juste AU-DESSUS du budget de production strict (1,5 s) :
+# parfois atteint de justesse, parfois non (mesuré 6 ou 7 tuiles selon la
+# charge de la machine) — fiable à partir de ~2 s. ``tour61`` (cascade de
+# jokers à travers 13 combinaisons du plateau, déjà documentée #194 comme
+# structurellement difficile) reste nettement hors de portée du budget de
+# production même après cette optimisation (~5 s nécessaires) : non corrigé
+# ici plutôt que de risquer une régression sur les autres cas pour un gain
+# qui resterait de toute façon loin du budget de production (voir le
+# rapport de clôture pour la discussion de l'augmenter en dernier recours).
+# --------------------------------------------------------------------------- #
+
+def _charger_cas(nom_fichier):
+    with open(_DONNEES / nom_fichier, encoding="utf-8") as f:
+        data = json.load(f)
+    return data["etat"], data["idx"], data["attendu_min_tuiles"]
+
+
+@pytest.mark.parametrize("nom_fichier,gros_budget", [
+    ("cas_expert_humain_261026172338_tour66.json", 10.0),
+    ("cas_expert_humain_261026174101_tour81.json", 10.0),
+    ("cas_expert_humain_261026213723_tour65.json", 10.0),
+    ("cas_expert_ia_261026172338_tour37.json", 10.0),
+    ("cas_expert_ia_261026172338_tour59.json", 10.0),
+])
+def test_solveur_cas_reference_200_atteint_attendu_avec_gros_budget(
+        nom_fichier, gros_budget):
+    """Avec un budget confortable, le solveur retrouve bien
+    ``attendu_min_tuiles`` sur chacun de ces cas de référence, sans jamais
+    perdre de tuile du plateau."""
+    etat, idx, attendu = _charger_cas(nom_fichier)
+    coup = resoudre_coup(etat, idx, budget_temps=gros_budget)
+    assert coup is not None
+    assert coup["action"] == "jouer"
+    assert len(coup["ids_tuiles"]) >= attendu
+    _verifier_coup_valide_sans_perte(etat, idx, coup)
+
+
+@pytest.mark.parametrize("nom_fichier", [
+    "cas_expert_humain_261026172338_tour66.json",
+    "cas_expert_humain_261026174101_tour81.json",
+    "cas_expert_humain_261026213723_tour65.json",
+    "cas_expert_ia_261026172338_tour37.json",
+    "cas_expert_ia_261026172338_tour59.json",
+])
+def test_solveur_cas_reference_200_atteint_attendu_avec_budget_de_production(
+        nom_fichier):
+    """Au budget de production, tolérance large (×6, comme pour les cas
+    #190/#194 ci-dessus) pour ne pas échouer par hasard sur une machine de CI
+    lente — PAS un relâchement de l'objectif de vitesse : mesuré en
+    développement, ``tour66``/``tour81``/``tour65``/``tour37`` sont trouvés
+    en moins de 0,5 s, et ``tour59`` en ~2 s (voir le commentaire au-dessus
+    de ``_charger_cas`` : ``tour59`` reste juste au-dessus du budget de
+    production strict de 1,5 s, pas de quoi justifier de l'augmenter)."""
+    etat, idx, attendu = _charger_cas(nom_fichier)
+    budget_test = BUDGET_TEMPS_EXPERT * 6
+    coup = resoudre_coup(etat, idx, budget_temps=budget_test)
+    assert coup is not None, (
+        f"aucun coup trouvé même avec {budget_test} s (× 6 le budget de "
+        f"production de {BUDGET_TEMPS_EXPERT} s)")
+    assert coup["action"] == "jouer"
+    assert len(coup["ids_tuiles"]) >= attendu
+    _verifier_coup_valide_sans_perte(etat, idx, coup)
+
+
+def test_solveur_cascade_joker_61_trouve_attendu_avec_gros_budget():
+    """``cas_expert_ia_261026172338_tour61.json`` : cascade de jokers à
+    travers 13 combinaisons du plateau, déjà documentée #194 comme
+    structurellement difficile (voir
+    ``test_preferer_simple_atteint_le_meme_plafond_sur_le_cas_le_plus_dur``
+    ci-dessus, qui compare ``preferer_simple`` à budget large sur ce même
+    cas). Avec l'optimisation #200 de ``_candidats_suite``, ce cas est
+    désormais atteint en ~5 s (contre ~10 s avant) — toujours nettement
+    au-dessus du budget de production (1,5 s), voir le commentaire au-dessus
+    de ``_charger_cas`` pour la discussion. Budget de 12 s ici (comme pour
+    le test cité ci-dessus) : volontairement PAS de test au budget de
+    production pour ce cas, qui serait soit flaky (juste en dessous du
+    nécessaire) soit trompeur (avec une tolérance ×6 ou plus, qui masquerait
+    le fait que ce cas reste loin du budget réel)."""
+    etat, idx, attendu = _charger_cas("cas_expert_ia_261026172338_tour61.json")
+    coup = resoudre_coup(etat, idx, budget_temps=12.0)
+    assert coup is not None
+    assert coup["action"] == "jouer"
+    assert len(coup["ids_tuiles"]) >= attendu
+    _verifier_coup_valide_sans_perte(etat, idx, coup)

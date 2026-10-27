@@ -618,6 +618,102 @@ plus grand nombre possible de tuiles du chevalet, jokers compris.
     légèrement MOINDRES avec le critère (0.6 % contre 1.5 % des tours
     d'Expert) — aucune dégradation observée.
 
+### 8bis-bis. Coups de grande envergure et bug de mesure côté humain (issue #200, suite de #194)
+
+- **Contexte** : `scripts/analyser_coups_rates.py --joueur "Alain" --budget 10`
+  (#193) signalait 10 tours où le joueur humain aurait posé plus de tuiles
+  que le solveur n'en trouve même à budget généreux, dont deux écarts
+  énormes (+11, +15 tuiles) enregistrés comme cas de référence
+  (`tests/donnees/cas_expert_humain_*.json`, clé `attendu_min_tuiles`).
+  L'hypothèse de départ était une incomplétude du solveur sur les grandes
+  mains (plusieurs dizaines de tuiles posées d'un coup, chevalet presque
+  plein).
+- **Diagnostic (voir le rapport de clôture #200 pour le détail des mesures
+  par budget 1.5/10/30/60/120s)** : sur les 3 cas enregistrés, le chevalet
+  réellement capturé ne contenait que 7, 3 et 3 tuiles — `attendu_min_tuiles`
+  (18, 7, 18) dépassait donc la taille du chevalet lui-même, une cible
+  **physiquement impossible** pour n'importe quel solveur (on ne peut jamais
+  poser plus de tuiles que n'en contient la main). Le solveur trouvait déjà,
+  en quelques centaines de ms à ~2s, le maximum réel (= la main entière) sur
+  les 3 cas : aucune incomplétude démontrée, la limite était dans la MESURE,
+  pas dans l'algorithme.
+- **Cause réelle** : `analyser_decision_complete`
+  (`persistance/coups_rates.py`) comparait le solveur au champ
+  `nb_tuiles_posees` du journal (`"nb_tuiles_jouees"` une fois extrait), lui-
+  même `len(data["ids_tuiles"])` côté `ui/api.py::jeu_jouer_coup` — la
+  longueur BRUTE de la liste d'ids envoyée par le client JS pour une pose
+  humaine (`tuilesCeTour`, `ui/web/jeu.js`), qui peut dépasser la taille
+  réelle du chevalet d'avant-coup (mécanisme exact non élucidé côté JS —
+  pas nécessaire pour la correction : il suffit de ne plus se fier à ce
+  compteur). `jouer_tour` lui-même n'est jamais en cause : il ne retire du
+  chevalet que les ids qui y figurent réellement (`set()`), donc aucune
+  tuile n'a jamais été dupliquée ou perdue en jeu réel. Le module calculait
+  pourtant déjà, juste à côté, une mesure fiable et bornée par construction
+  (`ids_tuiles_reelles`, différence entre le chevalet d'avant et celui
+  d'après la pose — déjà utilisée par `detecter_reserves_joueur`) sans
+  jamais s'en servir pour `nb_tuiles_reel`. **Corrigé** : `nb_tuiles_reel`
+  utilise désormais `len(ids_tuiles_reelles)` pour une pose, plus jamais le
+  champ brut — corrige à la source le calcul de `joueur_bat_solveur`/
+  `pose_sous_optimale` et tout ce qui en dépend (résumé, enregistrement des
+  cas de référence). Les 3 `attendu_min_tuiles` corrigés (7, 3, 3,
+  désormais égaux à la taille du chevalet) ; les 3 fichiers restent des
+  tests de non-régression légers (plus des cas « grande envergure »).
+- **Les 3 cas `cas_expert_ia_*.json` (IA Expert d'avant #194, jugée par le
+  solveur actuel), eux, étaient authentiques dès l'origine** (chevalet et
+  `attendu_min_tuiles` cohérents) : `tour37` déjà trouvé au budget de
+  production (1.5s) ; `tour59` manquait sa dernière tuile (6/7) ; `tour61`
+  (cascade de jokers à travers 13 combinaisons, déjà documentée #194 comme
+  à la limite du budget) ne trouvait souvent RIEN en 1.5s, jusqu'à 10s
+  nécessaires pour les 4 tuiles attendues.
+- **Optimisation appliquée (profilage `cProfile` sur ces deux cas)** :
+  `_candidats_suite` dominait le temps (jusqu'à 40% du temps total) en
+  reconstruisant l'intégralité des tokens de l'intervalle `[v1, v2]` depuis
+  zéro pour CHAQUE largeur testée (coût quadratique dans la largeur de la
+  fenêtre `_FENETRE_SUITE`, pour chaque ancre). Réécrit pour construire les
+  tokens une seule fois par `v1`, en étendant `v2` d'une position à la fois
+  (le nombre de jokers ne pouvant que croître avec la fenêtre, un
+  dépassement du nombre de jokers disponibles ou deux jokers consécutifs le
+  reste pour toute extension ultérieure — on arrête alors d'étendre ce `v1`
+  au lieu de continuer à générer des candidats rejetés). Équivalence avec
+  l'ancienne version vérifiée par comparaison exhaustive sur 20000 états
+  aléatoires et par la suite de tests complète (187 tests, aucune
+  régression) — ce n'est qu'une accélération, jamais un changement de
+  résultat, donc valable à tous les niveaux et toutes tailles de main (les
+  petites mains, déjà rapides, ne sont pas pénalisées).
+- **Résultat mesuré** : `tour59` passe de ~3s à ~2s pour sa dernière tuile
+  (reste juste AU-DESSUS du budget de production strict de 1.5s : parfois
+  atteint de justesse, parfois non selon la charge machine — fiable à
+  partir de ~2s) ; `tour61` passe de ~10s à ~5s (reste nettement hors de
+  portée du budget de production). Le budget de production n'a PAS été
+  augmenté (dernier recours, non justifié pour un gain qui resterait de
+  toute façon loin de la cible pour `tour61`, et marginal pour `tour59`) —
+  ces deux cas restent documentés comme hors de portée du budget de
+  production de 1.5s, pas corrigés plus avant dans cette issue.
+- **Pas de piste « grande main » retenue parmi celles envisagées** : sur
+  les cas réels disponibles, geler moins de combinaisons pour une main
+  large n'aurait rien changé (une main qui touche déjà les 4 couleurs gèle
+  déjà 0 combinaison, voir `_separer_combos_figees` — c'est automatique, pas
+  un réglage à ajuster) ; faire monter les paliers plus vite (bonds de 2+
+  plutôt que +1) a été écarté : si le palier visé n'est pas atteignable, la
+  recherche dégénère vers l'ancien comportement pré-#194 (preuve exhaustive,
+  justement ce que #194 avait corrigé) ; chercher d'abord en partant du
+  haut (toute la main, puis main-1...) a été écarté pour la même raison (le
+  plafond optimiste est une borne, pas une garantie d'atteignabilité).
+  Aucun cas réel de « grande main » authentiquement bloquée par le solveur
+  n'a été trouvé pour justifier ces pistes plus risquées — voir le rapport
+  de clôture #200 si un nouveau cas apparaît.
+- **Tests** (`tests/test_ia.py`) : un test à gros budget (10s) et un test
+  au budget de production (tolérance ×6, comme #190/#194) par cas de
+  référence pour les 5 cas désormais atteints
+  (`cas_expert_humain_261026172338_tour66.json`,
+  `cas_expert_humain_261026174101_tour81.json`,
+  `cas_expert_humain_261026213723_tour65.json`,
+  `cas_expert_ia_261026172338_tour37.json`,
+  `cas_expert_ia_261026172338_tour59.json`) ; un test à gros budget (12s)
+  seul pour `cas_expert_ia_261026172338_tour61.json` (volontairement pas de
+  test au budget de production pour ce cas, qui serait soit flaky soit
+  trompeur avec une tolérance large).
+
 ## 9. Scripts de simulation IA vs IA (`scripts/`)
 
 - `scripts/simulation_ia.py` : fait jouer 2 à 4 IA sur une ou plusieurs

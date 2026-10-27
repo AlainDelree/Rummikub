@@ -434,28 +434,56 @@ def _candidats_suite(comptes, jokers_total, couleur, valeur_ancre):
     """Suites contenant obligatoirement une tuile réelle en
     ``(couleur, valeur_ancre)``. Les autres positions de l'intervalle
     utilisent la tuile réelle disponible, sinon un joker (voir docstring du
-    module)."""
+    module).
+
+    Issue #200 : pour un ``v1`` fixé, les tokens de ``[v1, v2]`` sont
+    construits une seule fois, en étendant ``v2`` d'une position à la fois
+    (au lieu de reconstruire tout l'intervalle ``[v1, v2]`` depuis zéro pour
+    CHAQUE ``v2``, comme le faisait la version d'origine — un coût
+    quadratique en la largeur de ``_FENETRE_SUITE`` par ``v1``, mesuré comme
+    le principal poste de temps de la recherche, voir le rapport de clôture
+    #200). Le nombre de jokers ne pouvant que croître avec la fenêtre, un
+    dépassement de ``jokers_total`` ou deux jokers consécutifs à une position
+    donnée le reste pour toute extension ultérieure de ``v2`` — on arrête
+    alors d'étendre ce ``v1`` plutôt que de continuer à générer des
+    candidats qui seraient de toute façon rejetés. Équivalence avec
+    l'ancienne version vérifiée par comparaison exhaustive (20000 états
+    aléatoires, voir rapport de clôture)."""
     resultats = []
-    for v1 in range(max(VALEUR_MIN, valeur_ancre - _FENETRE_SUITE), valeur_ancre + 1):
-        for v2 in range(valeur_ancre,
-                         min(VALEUR_MAX, valeur_ancre + _FENETRE_SUITE) + 1):
-            if v2 - v1 + 1 < 3:
-                continue
-            tokens, nb_jokers, ok, precedent_joker = [], 0, True, False
-            for v in range(v1, v2 + 1):
-                if v == valeur_ancre or comptes.get((couleur, v), (0, 0))[0] > 0:
-                    tokens.append(("T", couleur, v))
-                    precedent_joker = False
+    v1_min = max(VALEUR_MIN, valeur_ancre - _FENETRE_SUITE)
+    v2_max = min(VALEUR_MAX, valeur_ancre + _FENETRE_SUITE)
+    for v1 in range(v1_min, valeur_ancre + 1):
+        tokens, nb_jokers, ok, precedent_joker = [], 0, True, False
+        for v in range(v1, valeur_ancre):
+            if comptes.get((couleur, v), (0, 0))[0] > 0:
+                tokens.append(("T", couleur, v))
+                precedent_joker = False
+            else:
+                if precedent_joker:
+                    ok = False
+                    break
+                tokens.append(("J",))
+                nb_jokers += 1
+                precedent_joker = True
+        if not ok:
+            continue
+        for v2 in range(valeur_ancre, v2_max + 1):
+            if v2 == valeur_ancre or comptes.get((couleur, v2), (0, 0))[0] > 0:
+                tokens.append(("T", couleur, v2))
+                precedent_joker = False
+            else:
+                if precedent_joker:
+                    ok = False
                 else:
-                    if precedent_joker:
-                        ok = False
-                        break
                     tokens.append(("J",))
                     nb_jokers += 1
                     precedent_joker = True
-            if ok and nb_jokers <= jokers_total:
-                resultats.append({"tokens": tokens,
-                                  "signature": ("suite", couleur, v2 - v1 + 1)})
+            if not ok or nb_jokers > jokers_total:
+                break
+            taille = v2 - v1 + 1
+            if taille >= 3:
+                resultats.append({"tokens": list(tokens),
+                                  "signature": ("suite", couleur, taille)})
     return resultats
 
 
