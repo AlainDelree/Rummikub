@@ -10,3 +10,5 @@ data/parties.db
 installeur/output/
 data/logs_parties/
 config.json
+
+data/erreurs_description/
