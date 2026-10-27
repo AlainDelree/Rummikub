@@ -216,13 +216,33 @@ class Api:
             # Résumé écrit + étapes du rejeu pas-à-pas (issue #189, suite de
             # #144/#149) : calculés une seule fois ici, à partir du plateau
             # avant/après déjà disponible, puis simplement affichés côté JS.
-            from rummikub.moteur.description_coup import (
-                decrire_coup_ia, etapes_coup_ia)
-            resume = decrire_coup_ia(plateau_avant, plateau_apres,
-                                      nom=etat["joueurs"][idx]["nom"])
-            etat["dernier_coup_ia"]["resume"] = resume["texte"]
-            etat["dernier_coup_ia"]["etapes"] = etapes_coup_ia(
-                plateau_avant, plateau_apres)
+            try:
+                from rummikub.moteur.description_coup import (
+                    decrire_coup_ia, etapes_coup_ia)
+                resume = decrire_coup_ia(plateau_avant, plateau_apres,
+                                          nom=etat["joueurs"][idx]["nom"])
+                etat["dernier_coup_ia"]["resume"] = resume["texte"]
+                etat["dernier_coup_ia"]["etapes"] = etapes_coup_ia(
+                    plateau_avant, plateau_apres)
+            except Exception as exc:
+                # La description du coup est un simple confort d'affichage :
+                # une erreur ici ne doit JAMAIS bloquer le tour de l'IA.
+                # On garde les deux plateaux pour pouvoir reproduire le cas.
+                import json, time
+                from rummikub import config
+                try:
+                    dossier = config.RACINE_DATA / "erreurs_description"
+                    dossier.mkdir(parents=True, exist_ok=True)
+                    nom_fichier = time.strftime("%Y%m%d_%H%M%S") + ".json"
+                    with open(dossier / nom_fichier, "w", encoding="utf-8") as f:
+                        json.dump({"erreur": repr(exc),
+                                   "plateau_avant": plateau_avant,
+                                   "plateau_apres": plateau_apres},
+                                  f, ensure_ascii=False)
+                except Exception:
+                    pass
+                etat["dernier_coup_ia"]["resume"] = ""
+                etat["dernier_coup_ia"]["etapes"] = []
         self._app.etat_jeu = res["etat"]
         backup_debut_tour(self._app.etat_jeu)
         sauvegarder_partie(self._app.etat_jeu)
