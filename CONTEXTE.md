@@ -814,6 +814,81 @@ ajoutées, celles de #188 ci-dessus restent inchangées à l'identique) :
   `tests/test_verif_solveur.py` (recherche exhaustive sur cas unitaires +
   campagne aléatoire à graine fixe contre le solveur de production).
 
+### 11ter. Décrire et mesurer la complexité du coup proposé (issue #196, suite de #193)
+
+#188/#193 ci-dessus disaient COMBIEN de tuiles un coup raté/une pose
+sous-optimale ratait, jamais QUEL coup le solveur proposait à la place —
+impossible donc de juger à l'œil si le coup raté était à la portée d'un
+humain. #196 réutilise `moteur/description_coup.py` (#189/#191, voir §12)
+pour décrire ce coup en français et en mesurer la complexité, toujours dans
+`persistance/coups_rates.py` (aucun changement au solveur, à l'IA ni au
+moteur).
+
+- **Description** (`decrire_coup(plateau_avant, plateau_apres, nom=None)`) :
+  appelle `description_coup.decrire_coup_ia` (texte) et
+  `description_coup.etapes_coup_ia` (étapes du rejeu pas à pas) à partir du
+  plateau avant la décision (`decision["etat"]["plateau"]`) et du plateau
+  proposé par le solveur (`coup["nouveau_plateau"]`). Retourne
+  `{"texte", "etapes", "complexite"}`.
+- **Complexité** (`_complexite_coup`) : nombre de combinaisons du plateau
+  touchées (défaites + créées + modifiées), présence d'au moins un échange
+  de joker, nombre d'étapes RÉELLES du rejeu (celles à titre vide, comme
+  `nbChangementsPasAPas` côté front-end). Un coup est `"complexe"` s'il
+  touche 3 combinaisons ou plus, ou déplace un joker ; sinon `"simple"`
+  (point 3 de l'issue).
+- **Artefact du solveur corrigé en amont, jamais dans le moteur**
+  (`_relabeler_tuiles_indiscernables`) : `moteur/solveur.py` ne raisonne que
+  sur des « emplacements » (couleur, valeur), jamais sur l'identifiant
+  physique exact d'une tuile (voir sa docstring) — il peut donc proposer un
+  plateau où deux tuiles déjà posées, strictement indiscernables (même
+  valeur/couleur, non joker), ont échangé leurs identifiants entre deux
+  combinaisons SANS aucun changement réel. `description_coup.py`, qui suit
+  chaque tuile par son identifiant, y lisait un cycle de dépendance (sa
+  propre docstring : « dépendance cyclique improbable ») qui cassait son tri
+  causal et plantait (`KeyError` dans `etapes_coup_ia`) — jamais rencontré
+  avec un coup réellement joué (déterministe), mais systématique avec
+  certains coups PROPOSÉS par le solveur (cas réel : `cas_expert_
+  bruno_tour57.json`, voir #193). `decrire_coup` relabellise une COPIE du
+  plateau proposé avant d'appeler le moteur : toute combinaison d'après dont
+  le contenu (multiset valeur/couleur/joker, en ignorant l'identifiant) est
+  IDENTIQUE à une combinaison d'avant encore non appariée reprend
+  exactement les identifiants de cette dernière — elle devient un pur no-op
+  pour le moteur, ce qui élimine l'artefact sans jamais perdre
+  d'information (deux tuiles indiscernables échangées sans effet visible
+  restent, par définition, indiscernables pour le joueur). Ne touche JAMAIS
+  une combinaison contenant une tuile posée depuis la main (changement
+  réel, jamais un artefact).
+- **Intégration dans `analyser_decision_complete`** : `description_solveur`
+  (texte + étapes + complexité du coup proposé) est calculé pour toute
+  décision signalée (`coup_rate`, `pose_sous_optimale` ou
+  `joueur_bat_solveur`) où le solveur a effectivement proposé un plateau ;
+  `None` sinon (y compris si le solveur ne trouve absolument aucun coup).
+  Pour `joueur_bat_solveur` uniquement, `description_reel` décrit en plus,
+  de la même façon, le coup RÉELLEMENT joué par le joueur à partir de
+  `plateau_apres_reel` (nouveau champ de `extraire_toutes_decisions`, le
+  plateau tel qu'enregistré par l'action de pose elle-même) — pour
+  comparaison. `calculer_resume_complet` et `resume_joueur_humain` ajoutent
+  une répartition `coups_simples`/`coups_complexes` par niveau d'IA et pour
+  un joueur humain (point 3 de l'issue) : c'est cette répartition qui dit si
+  les coups ratés sont à la portée d'un humain.
+- **Script CLI** : chaque coup raté/pose sous-optimale affiché (top N,
+  listes (a)/(b) de `--joueur`) affiche désormais le texte français, les
+  étapes et la complexité du coup proposé (et, pour `--joueur`, du coup
+  réellement joué en cas (b)) via `afficher_description_coup`. Nouvelle
+  option `--tour N` (point 2 de l'issue) : détaille un tour précis (nom du
+  joueur, tuiles posées en réalité vs proposées par le solveur, description
+  complète) — EN PLUS de l'affichage habituel, jamais à la place
+  (`_detailer_tour`/`afficher_detail_tour`).
+- Tests : `tests/test_coups_rates_description.py` — coup raté simple
+  (journal fabriqué + vrai solveur, classé `"simple"`) ; pose sous-optimale
+  complexe avec échange de joker (solveur simulé, classée `"complexe"`) ;
+  joueur bat le solveur (description du coup proposé ET du coup réellement
+  joué, comparées) ; régression ciblée sur l'artefact de tuiles
+  indiscernables (`_relabeler_tuiles_indiscernables`, y compris le cas où il
+  ne doit JAMAIS toucher une tuile posée depuis la main) ; régression bout
+  en bout sur le vrai cas de référence Bruno (`cas_expert_bruno_tour57.json`)
+  qui plantait avant la correction.
+
 ## 12. Rendre lisible un coup complexe de l'IA (issue #189, puis #191)
 
 Depuis le solveur de réarrangement global (#186), un coup de l'IA peut

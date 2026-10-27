@@ -123,6 +123,33 @@ def _fmt(valeur, suffixe="") -> str:
 
 
 # --------------------------------------------------------------------------- #
+# Description en français + complexité du coup proposé (issue #196).
+# --------------------------------------------------------------------------- #
+
+def afficher_description_coup(description, titre: str, flux=sys.stdout, indent="      ") -> None:
+    """Affiche le texte français, les étapes et la complexité d'une
+    description produite par ``persistance/coups_rates.decrire_coup``
+    (``None`` si le solveur n'a proposé aucun plateau — affiché tel quel,
+    jamais confondu avec « aucun coup raté », voir avertissement)."""
+    if description is None:
+        print(f"{indent}{titre} : aucun coup proposé par le solveur.", file=flux)
+        return
+    print(f"{indent}{titre} :", file=flux)
+    print(f"{indent}  {description['texte']}", file=flux)
+    c = description["complexite"]
+    joker = "avec échange de joker" if c["a_joker"] else "sans joker"
+    print(f"{indent}  Complexité : {c['nb_combinaisons_touchees']} combinaison(s) "
+          f"touchée(s), {joker}, {c['nb_etapes']} étape(s) -> {c['categorie']} "
+          f"(simple = 1-2 combinaisons sans joker ; complexe = 3+ combinaisons ou joker)",
+          file=flux)
+    if description["etapes"]:
+        print(f"{indent}  Étapes :", file=flux)
+        for n, etape in enumerate(description["etapes"], start=1):
+            prefixe = f"[{etape['titre']}] " if etape["titre"] else ""
+            print(f"{indent}    {n}. {prefixe}{etape['texte']}", file=flux)
+
+
+# --------------------------------------------------------------------------- #
 # Mode IA (défaut) : poses + pioches/passes, par niveau et par phase.
 # --------------------------------------------------------------------------- #
 
@@ -181,6 +208,11 @@ def afficher_resume_complet(resume: dict, flux=sys.stdout) -> None:
             if s["inconclusifs"]:
                 print(f"    Décisions inconclusives (budget généreux épuisé)  : "
                       f"{s['inconclusifs']}", file=flux)
+            nb_classes = s["coups_simples"] + s["coups_complexes"]
+            if nb_classes:
+                print(f"    ... dont coups simples (<= 2 combinaisons, sans joker) : "
+                      f"{s['coups_simples']}, complexes (3+ combinaisons ou joker) : "
+                      f"{s['coups_complexes']}", file=flux)
         print(file=flux)
 
 
@@ -197,6 +229,8 @@ def afficher_top_complet(resultats: list, n: int, flux=sys.stdout) -> None:
         if r["moment"] == "avant_mise" and r["points_ouverture"] is not None:
             detail += f", ouverture à {r['points_ouverture']} points"
         print(f"  - {detail}", file=flux)
+        afficher_description_coup(r.get("description_solveur"),
+                                  "Coup proposé par le solveur", flux=flux)
     print(file=flux)
 
 
@@ -240,6 +274,62 @@ def _retenter_inconclusifs(resultats, decisions_par_cle, budget_inconclusifs,
 
 
 # --------------------------------------------------------------------------- #
+# Option de consultation d'un tour précis (point 2 de l'issue #196).
+# --------------------------------------------------------------------------- #
+
+def _detailer_tour(chemins, tour: int, budget_genereux: float, budget_production: float,
+                   nom_joueur=None):
+    """Cherche, dans ``chemins``, les décisions (IA, ou du joueur
+    ``nom_joueur`` si fourni) au tour ``tour`` et les analyse une par une,
+    indépendamment du reste du script — ``--fichier F --tour N`` (point 2 de
+    l'issue #196). Retourne une liste de ``(nom_fichier, decision, resultat)``
+    (généralement 0 ou 1 décision par fichier, un tour donné appartenant à un
+    seul joueur)."""
+    trouvees = []
+    for chemin in chemins:
+        data = charger_journal(chemin)
+        if data is None:
+            continue
+        if nom_joueur:
+            decisions = extraire_decisions_joueur(data, nom_joueur)
+        else:
+            decisions = extraire_decisions_ia_toutes(data)
+        for d in decisions:
+            if d["tour"] != tour:
+                continue
+            resultat = analyser_decision_complete(
+                d, budget_genereux=budget_genereux, budget_production=budget_production)
+            trouvees.append((chemin.name, d, resultat))
+    return trouvees
+
+
+def afficher_detail_tour(trouvees: list, tour: int, flux=sys.stdout) -> None:
+    print(f"=== Détail du tour {tour} ===", file=flux)
+    if not trouvees:
+        print("  Aucune décision trouvée à ce tour.", file=flux)
+        print(file=flux)
+        return
+    for fichier, d, r in trouvees:
+        print(f"  {fichier} — {r['nom']}" + (f" ({r['niveau']})" if r["niveau"] else "") +
+              f", action : {r['action']}", file=flux)
+        print(f"    Tuiles posées en réalité : {r['nb_tuiles_reel']}  —  "
+              f"tuiles proposées par le solveur : {r['nb_tuiles_solveur']}", file=flux)
+        if r["inconclusif"]:
+            print("    Inconclusif : le budget généreux s'est épuisé sans qu'aucune "
+                  "branche n'ait abouti (voir --budget).", file=flux)
+        else:
+            print(f"    coup_rate={r['coup_rate']}  pose_sous_optimale="
+                  f"{r['pose_sous_optimale']}  joueur_bat_solveur={r['joueur_bat_solveur']}",
+                  file=flux)
+        afficher_description_coup(r.get("description_solveur"),
+                                  "Coup proposé par le solveur", flux=flux)
+        if r.get("description_reel"):
+            afficher_description_coup(r.get("description_reel"),
+                                      "Coup réellement joué", flux=flux)
+        print(file=flux)
+
+
+# --------------------------------------------------------------------------- #
 # Enregistrement de nouveaux cas de référence (point 6 bis / 6 ter).
 # --------------------------------------------------------------------------- #
 
@@ -277,7 +367,8 @@ def _analyser_joueur(chemins, nom_joueur, budget_genereux, budget_production,
               "solveur_bat": [], "reserves_reussies": [], "reserves_perdues": [],
               "poses": 0, "poses_max": 0, "total_reel": 0, "total_solveur": 0,
               "pioches": 0, "pioches_coup_possible": 0,
-              "jokers_joues": 0, "jokers_attente_total": 0}
+              "jokers_joues": 0, "jokers_attente_total": 0,
+              "complexite_simples": 0, "complexite_complexes": 0}
 
     for chemin in chemins:
         data = charger_journal(chemin)
@@ -301,6 +392,8 @@ def _analyser_joueur(chemins, nom_joueur, budget_genereux, budget_production,
             for entree in resume[liste_cle]:
                 agrege[liste_cle].append(dict(entree, fichier=chemin.name))
         agrege["nb_tours_analyses"] += resume["nb_tours_analyses"]
+        agrege["complexite_simples"] += resume["complexite"]["simples"]
+        agrege["complexite_complexes"] += resume["complexite"]["complexes"]
         style = resume["style"]
         if style["nb_poses"]:
             agrege["poses"] += style["nb_poses"]
@@ -339,8 +432,11 @@ def afficher_resume_joueur(nom_joueur: str, agrege: dict, flux=sys.stdout) -> No
           file=flux)
     for e in agrege["coups_peut_etre_rates"][:10]:
         print(f"    - {e['fichier']}, tour {e['tour']} ({e['action']}) : "
-              f"{e['nb_tuiles_manquantes']} tuile(s) manquante(s) — à vérifier à la main",
+              f"{e['nb_tuiles_manquantes']} tuile(s) manquante(s) (posé "
+              f"{e['nb_tuiles_reel']}, solveur {e['nb_tuiles_solveur']}) — à vérifier à la main",
               file=flux)
+        afficher_description_coup(e.get("description_solveur"),
+                                  "Coup proposé par le solveur", flux=flux)
     print(file=flux)
 
     print(f"  (b) Le solveur est BATTU (le joueur pose plus que le solveur, "
@@ -348,8 +444,21 @@ def afficher_resume_joueur(nom_joueur: str, agrege: dict, flux=sys.stdout) -> No
           f"plus précieux pour améliorer le solveur", file=flux)
     for e in agrege["solveur_bat"][:10]:
         print(f"    - {e['fichier']}, tour {e['tour']} : +{e['nb_tuiles_excedentaires']} "
-              f"tuile(s) de plus que le solveur", file=flux)
+              f"tuile(s) de plus que le solveur (posé {e['nb_tuiles_reel']}, "
+              f"solveur {e['nb_tuiles_solveur']})", file=flux)
+        afficher_description_coup(e.get("description_solveur"),
+                                  "Coup proposé par le solveur", flux=flux)
+        afficher_description_coup(e.get("description_reel"),
+                                  "Coup réellement joué", flux=flux)
     print(file=flux)
+
+    simples, complexes = agrege["complexite_simples"], agrege["complexite_complexes"]
+    if simples + complexes:
+        print(f"  Complexité des coups (a) ci-dessus : {simples} simple(s) "
+              f"(<= 2 combinaisons, sans joker), {complexes} complexe(s) "
+              f"(3+ combinaisons ou joker) — dit si ces coups sont à la portée "
+              f"d'un humain", file=flux)
+        print(file=flux)
 
     print(f"  Technique de la « réserve » (jamais comptée ci-dessus) :", file=flux)
     print(f"    Réussies : {len(agrege['reserves_reussies'])}  —  "
@@ -400,6 +509,12 @@ def main(argv=None) -> int:
     parser.add_argument("--top", type=int, default=5,
                         help="Nombre de coups ratés/poses sous-optimales détaillés à "
                              "afficher (défaut 5).")
+    parser.add_argument("--tour", type=int, default=None,
+                        help="Détaille un tour précis (ex. --fichier F --tour N, issue "
+                             "#196) : nom du joueur, tuiles posées en réalité vs "
+                             "proposées par le solveur, texte français et étapes du coup "
+                             "proposé (et du coup réel si --joueur). Vient EN PLUS de "
+                             "l'affichage habituel, jamais à la place.")
     parser.add_argument("--budget-mesure", action="store_true",
                         help="Pour chaque coup raté/pose sous-optimale, mesure le plus "
                              "petit budget (série 1,5/3/6/10/20/30 s) qui le retrouve, "
@@ -457,6 +572,10 @@ def main(argv=None) -> int:
         agrege = _analyser_joueur(chemins, args.joueur, args.budget,
                                   budget_production or 1.5, args.verifier_reserve_evite_pioche)
         afficher_resume_joueur(args.joueur, agrege)
+        if args.tour is not None:
+            trouvees = _detailer_tour(chemins, args.tour, args.budget,
+                                      budget_production or 1.5, nom_joueur=args.joueur)
+            afficher_detail_tour(trouvees, args.tour)
         if args.enregistrer_cas_reference:
             candidats = sorted(agrege.get("_decisions_solveur_bat", []),
                                key=lambda dr: dr[1]["nb_tuiles_excedentaires"], reverse=True)
@@ -491,6 +610,11 @@ def main(argv=None) -> int:
     resume = calculer_resume_complet(resultats)
     afficher_resume_complet(resume)
     afficher_top_complet(resultats, n=args.top)
+
+    if args.tour is not None:
+        trouvees = _detailer_tour(chemins, args.tour, args.budget,
+                                  budget_production or BUDGET_TEMPS_EXPERT)
+        afficher_detail_tour(trouvees, args.tour)
 
     if args.budget_mesure:
         a_mesurer = [r for r in resultats if r["coup_rate"] or r["pose_sous_optimale"]]
