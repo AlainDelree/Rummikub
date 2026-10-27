@@ -73,6 +73,51 @@ def _contracter(prep: str, groupe_nominal: str) -> str:
     return f"{prep} {groupe_nominal}"
 
 
+def _aspect(d: dict):
+    """Apparence visible d'une tuile, indépendante de son identifiant : deux
+    tuiles de même aspect sont interchangeables à l'écran (issue #197). Les
+    jokers partagent tous le même aspect (leur couleur n'est que cosmétique,
+    cf. ``tuiles.py``) ; un échange entre deux jokers ne change donc rien."""
+    if d.get("est_joker"):
+        return "joker"
+    return (d["valeur"], d["couleur"])
+
+
+def _annuler_par_aspect(avant_dicts: list, apres_dicts: list) -> tuple:
+    """Retire deux à deux, d'une liste de tuiles d'avant et d'une liste de
+    tuiles d'après (même combinaison), les tuiles qui s'annulent sans
+    déplacement réel : d'abord celles de même identifiant (inchangées), puis
+    — à défaut — une tuile d'avant restante avec une tuile d'après restante
+    de même aspect (échange de tuiles identiques, issue #197 points 1 et 3).
+
+    Retourne ``(retirees, ajoutees)`` : les tuiles qui restent de chaque côté
+    une fois ces annulations faites, dans leur ordre d'origine. Si les deux
+    listes reviennent vides, la combinaison est inchangée à l'écran, même si
+    les identifiants littéraux ont changé de place."""
+    ids_apres_restants = {d["id"] for d in apres_dicts}
+    avant_restants = []
+    for d in avant_dicts:
+        if d["id"] in ids_apres_restants:
+            ids_apres_restants.discard(d["id"])
+        else:
+            avant_restants.append(d)
+
+    ordre_apres = {d["id"]: i for i, d in enumerate(apres_dicts)}
+    apres_par_id = {d["id"]: d for d in apres_dicts}
+    ajoutees = sorted((apres_par_id[tid] for tid in ids_apres_restants),
+                       key=lambda d: ordre_apres[d["id"]])
+
+    retirees = []
+    for d in avant_restants:
+        aspect = _aspect(d)
+        match = next((a for a in ajoutees if _aspect(a) == aspect), None)
+        if match is not None:
+            ajoutees.remove(match)
+        else:
+            retirees.append(d)
+    return retirees, ajoutees
+
+
 def _type_combo(tuiles_dicts: list) -> str:
     objs = [tuile_depuis_dict(d) for d in tuiles_dicts]
     return valider_combinaison(objs)["type"]
@@ -219,14 +264,18 @@ def _construire_operations(plateau_avant: list, plateau_apres: list) -> dict:
             for d in tuiles:
                 id_vers_op_producteur[d["id"]] = idx
 
-    # 2) "update" : continuations dont la composition change réellement.
+    # 2) "update" : continuations dont la composition change réellement, une
+    #    fois annulés les échanges de tuiles identiques (même aspect, issue
+    #    #197) qui ne changent rien à l'écran.
+    realignements = []
     for i, j in continuation.items():
-        avant_ids = {d["id"] for d in plateau_avant[i]}
-        apres_ids = {d["id"] for d in plateau_apres[j]}
-        if avant_ids == apres_ids:
-            continue  # combinaison totalement inchangée : rien à montrer
-        retirees = [d for d in plateau_avant[i] if d["id"] not in apres_ids]
-        ajoutees = [d for d in plateau_apres[j] if d["id"] not in avant_ids]
+        retirees, ajoutees = _annuler_par_aspect(plateau_avant[i], plateau_apres[j])
+        if not retirees and not ajoutees:
+            # Combinaison inchangée à l'aspect près : aucune étape à
+            # montrer, mais le plateau doit malgré tout, en coulisses,
+            # finir par refléter exactement la composition d'après.
+            realignements.append((i, j))
+            continue
         op = {"kind": "update", "avant_idx": i, "apres_idx": j,
               "tuiles_avant": plateau_avant[i], "tuiles_apres": plateau_apres[j],
               "retirees": retirees, "ajoutees": ajoutees,
@@ -300,6 +349,7 @@ def _construire_operations(plateau_avant: list, plateau_apres: list) -> dict:
         "id_vers_op_producteur": id_vers_op_producteur,
         "dissolvantes": dissolvantes,
         "continuation": continuation,
+        "realignements": realignements,
     }
 
 
@@ -379,6 +429,15 @@ def _jokers_deplaces(ops: list, id_vers_tuile: dict) -> list:
 
 # ------------------------------------------------------- résumé écrit (gauche)
 
+def _tuiles_posees_brut(plateau_avant: list, plateau_apres: list) -> list:
+    """Calcul minimal (sans validation ni suivi causal) des tuiles posées
+    depuis la main : toute tuile d'après dont l'identifiant n'apparaît dans
+    aucune combinaison d'avant. Utilisé par les replis simplifiés (issue
+    #197 point 0) : ne peut pas lever d'exception sur une entrée valide."""
+    ids_avant = {d["id"] for combo in plateau_avant for d in combo}
+    return [d for combo in plateau_apres for d in combo if d["id"] not in ids_avant]
+
+
 def decrire_coup_ia(plateau_avant: list, plateau_apres: list,
                      nom: str = None) -> dict:
     """Résume en français naturel un coup de pose de l'IA, à partir du
@@ -390,7 +449,33 @@ def decrire_coup_ia(plateau_avant: list, plateau_apres: list,
               "nb_combinaisons_modifiees": int, "jokers_deplaces": [...]}.
     Un coup simple (une seule combinaison touchée, aucun joker déplacé) est
     résumé en une courte phrase ; un coup plus complexe en plusieurs.
-    """
+
+    Ne lève jamais d'exception sur un coup valide (issue #197 point 0) : si
+    le calcul détaillé échoue de façon inattendue, se replie sur un résumé
+    minimal construit à partir des seules tuiles posées."""
+    plateau_avant = plateau_avant or []
+    plateau_apres = plateau_apres or []
+    try:
+        return _decrire_coup_ia(plateau_avant, plateau_apres, nom)
+    except Exception:
+        posees = _tuiles_posees_brut(plateau_avant, plateau_apres)
+        liste_posees = _lister_tuiles(posees)
+        sujet_initial = f"{nom} a posé" if nom else "A posé"
+        texte = (f"{sujet_initial} {liste_posees} depuis sa main."
+                  if liste_posees else
+                  f"{(nom + ' a joué') if nom else 'A joué'} un coup.")
+        return {
+            "texte": texte,
+            "tuiles_posees": posees,
+            "nb_combinaisons_defaites": 0,
+            "nb_combinaisons_creees": 0,
+            "nb_combinaisons_modifiees": 0,
+            "jokers_deplaces": [],
+        }
+
+
+def _decrire_coup_ia(plateau_avant: list, plateau_apres: list,
+                      nom: str = None) -> dict:
     plateau_avant = plateau_avant or []
     plateau_apres = plateau_apres or []
     r = _construire_operations(plateau_avant, plateau_apres)
@@ -500,9 +585,43 @@ def etapes_coup_ia(plateau_avant: list, plateau_apres: list) -> list:
     Chaque étape est un dict {"titre": str, "texte": str, "plateau": [...],
     "cadre": [{"tuile": dict, "origine": "main"|"plateau"}, ...],
     "provisoires": [index dans "plateau"...], "surbrillance": [id, ...]}.
-    """
+
+    Ne lève jamais d'exception sur un coup valide (issue #197 point 0) : si
+    le calcul détaillé échoue de façon inattendue, se replie sur une version
+    simplifiée à deux étapes (départ puis arrivée)."""
     plateau_avant = plateau_avant or []
     plateau_apres = plateau_apres or []
+    try:
+        return _etapes_coup_ia(plateau_avant, plateau_apres)
+    except Exception:
+        return _etapes_coup_ia_repli(plateau_avant, plateau_apres)
+
+
+def _memes_ids_par_combinaison(a: list, b: list) -> bool:
+    cle = lambda plateau: sorted(sorted(d["id"] for d in c) for c in plateau if c)
+    return cle(a) == cle(b)
+
+
+def _etapes_coup_ia_repli(plateau_avant: list, plateau_apres: list) -> list:
+    if _memes_ids_par_combinaison(plateau_avant, plateau_apres):
+        return []  # rien à rejouer
+    posees = _tuiles_posees_brut(plateau_avant, plateau_apres)
+    ids_posees = [d["id"] for d in posees]
+    depart = {
+        "titre": "Départ", "texte": "Avant le coup.",
+        "plateau": [list(c) for c in plateau_avant if c],
+        "cadre": [{"tuile": d, "origine": "main"} for d in posees],
+        "provisoires": [], "surbrillance": ids_posees,
+    }
+    arrivee = {
+        "titre": "", "texte": "Après le coup.",
+        "plateau": [list(c) for c in plateau_apres if c],
+        "cadre": [], "provisoires": [], "surbrillance": ids_posees,
+    }
+    return [depart, arrivee]
+
+
+def _etapes_coup_ia(plateau_avant: list, plateau_apres: list) -> list:
     r = _construire_operations(plateau_avant, plateau_apres)
     ops = r["ops"]
     if not ops and not r["tuiles_posees"]:
@@ -537,6 +656,13 @@ def etapes_coup_ia(plateau_avant: list, plateau_apres: list) -> list:
         texte_depart = "Avant le coup."
     etapes.append(etat_courant("Départ", texte_depart,
                                 [d["id"] for d in r["tuiles_posees"]]))
+
+    # Réalignement silencieux (sans étape visible) des combinaisons dont
+    # seuls des échanges de tuiles identiques distinguent avant et après
+    # (issue #197) : le plateau doit malgré tout finir par montrer
+    # exactement la composition d'après.
+    for i, j in r["realignements"]:
+        working[f"a{i}"] = list(plateau_apres[j])
 
     # Écran « Les jokers » : vue d'ensemble si des jokers changent de main.
     jokers = _jokers_deplaces(ops, r["id_vers_tuile"])
@@ -612,4 +738,29 @@ def etapes_coup_ia(plateau_avant: list, plateau_apres: list) -> list:
 
         etapes.append(etat_courant("", texte, ids_touchees))
 
-    return etapes
+    return _sans_etapes_sans_effet(etapes)
+
+
+def _empreinte_affichage(etape: dict) -> tuple:
+    """Signature du contenu visible (plateau + cadre) d'une étape, insensible
+    à l'ordre des combinaisons/tuiles : deux étapes de même empreinte sont
+    indiscernables à l'écran."""
+    combos = tuple(sorted(tuple(sorted(d["id"] for d in combo))
+                            for combo in etape["plateau"]))
+    cadre_ids = tuple(sorted(c["tuile"]["id"] for c in etape["cadre"]))
+    return (combos, cadre_ids)
+
+
+def _sans_etapes_sans_effet(etapes: list) -> list:
+    """Filet de sécurité (issue #197 point 4) : supprime toute étape de
+    changement (titre vide) dont le contenu affiché est identique à celui de
+    la dernière étape conservée — un garde-fou en plus des annulations déjà
+    faites en amont, au cas où un cas non prévu laisserait passer une étape
+    sans effet visible."""
+    nettoyees = []
+    for etape in etapes:
+        if (etape["titre"] == "" and nettoyees
+                and _empreinte_affichage(etape) == _empreinte_affichage(nettoyees[-1])):
+            continue
+        nettoyees.append(etape)
+    return nettoyees
