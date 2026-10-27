@@ -237,6 +237,68 @@ def test_charger_toutes_parties_dossier_mixte(tmp_path):
 
 
 # --------------------------------------------------------------------------- #
+# Partie reprise répartie sur plusieurs fichiers (issue #202).
+# --------------------------------------------------------------------------- #
+
+def _journal_reprise_partie1():
+    """Premier fichier d'une partie reprise : NON terminé (le jeu a été fermé
+    avant la fin). Analysé seul, il serait pris pour une partie abandonnée."""
+    return {
+        "partie_id": "reprise1", "debut": "2026-10-26T10:00:00",
+        "joueurs": [_joueur("Alain", False), _joueur("Bot", True, "Expert")],
+        "actions": [
+            _action(1, 0, "pose", nb_tuiles_posees=3),
+            _action(2, 1, "pioche"),
+            _action(3, 0, "pose", nb_tuiles_posees=2),
+        ],
+    }
+
+
+def _journal_reprise_partie2():
+    """Second fichier de la MÊME partie (même ``partie_id``), repris plus tard
+    et terminé au tour 6."""
+    mains_fin = [{"nom": "Alain", "tuiles": []},
+                 {"nom": "Bot", "tuiles": [{"id": "rouge_1_a"}, {"id": "bleu_2_a"}]}]
+    return {
+        "partie_id": "reprise1", "debut": "2026-10-26T11:30:00",
+        "joueurs": [_joueur("Alain", False), _joueur("Bot", True, "Expert")],
+        "actions": [
+            _action(4, 1, "pioche"),
+            _action(5, 0, "pose", nb_tuiles_posees=4),
+            _action(6, 1, "passe", termine=True, gagnant_index=0, mains=mains_fin),
+        ],
+    }
+
+
+def test_premier_fichier_reprise_seul_est_abandonne():
+    # Référence : analysé isolément, le premier fichier est non terminé.
+    assert extraire_partie(_journal_reprise_partie1()) is None
+
+
+def test_charger_toutes_parties_relie_une_partie_reprise(tmp_path):
+    """Deux fichiers d'une même partie reprise -> UNE seule partie comptée,
+    avec son nombre de tours réel et toutes les décisions (point 4)."""
+    (tmp_path / "partie_20261026_100000.json").write_text(
+        json.dumps(_journal_reprise_partie1()), encoding="utf-8")
+    (tmp_path / "partie_20261026_113000.json").write_text(
+        json.dumps(_journal_reprise_partie2()), encoding="utf-8")
+
+    parties = charger_toutes_parties(tmp_path)
+    assert len(parties) == 1
+    partie = parties[0]
+    assert partie["partie_id"] == "reprise1"
+    assert partie["gagnant_index"] == 0
+    assert partie["nb_tours"] == 6                      # tours réels des 2 fichiers.
+    assert len(partie["decisions"]) == 6                # toutes les décisions.
+    assert partie["tuiles_restantes"] == {"Alain": 0, "Bot": 2}
+
+    bilan = calculer_bilan(parties)
+    assert bilan["Expert"]["parties"] == 1              # comptée une seule fois.
+    assert bilan["Expert"]["victoires_humain"] == 1
+    assert bilan["Expert"]["tours_moyens"] == 6
+
+
+# --------------------------------------------------------------------------- #
 # Intégration réelle : journal.logger_action -> bilan (même format exact).
 # --------------------------------------------------------------------------- #
 

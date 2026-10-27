@@ -23,11 +23,28 @@ Reconstitution de l'état avant une décision (voir ``extraire_decisions_ia``) :
 l'état avant la décision enregistrée à l'index ``i`` de ``actions`` est
 l'état enregistré PAR l'action précédente (``actions[i-1]`` : chevalets,
 plateau). La toute première action d'un journal ne peut donc jamais être
-reconstituée et est ignorée. La mise initiale d'un joueur est considérée
-faite s'il a déjà posé au moins une tuile (``action: "pose"``,
-``nb_tuiles_posees > 0``) plus tôt dans le même journal — en jeu réel, il est
-impossible de poser quoi que ce soit avant d'avoir atteint le minimum de
-mise initiale en une seule fois, donc toute pose antérieure l'atteste.
+reconstituée et est ignorée.
+
+Mise initiale d'un joueur (issue #202) — voir :func:`_mise_initiale_avant` :
+  - si l'action précédente porte la clé ``mises_initiales`` (journal #202+),
+    on la lit directement (elle décrit l'état du jeu au moment de l'action,
+    c'est-à-dire juste avant la décision) ;
+  - sinon, repli #188 : la mise initiale est considérée faite si le joueur a
+    déjà posé au moins une tuile (``action: "pose"``, ``nb_tuiles_posees >
+    0``) plus tôt dans la suite d'actions — en jeu réel, il est impossible de
+    poser avant d'avoir atteint le minimum de mise initiale en une fois, donc
+    toute pose antérieure l'atteste. Quand le DÉBUT de la partie est absent
+    (``debut_present=False`` : fichier de reprise ancien dont l'historique
+    initial a été supprimé par la rotation) et qu'aucune pose n'est observée,
+    l'état est INCONNU (``None``) : on ne suppose JAMAIS « non faite » dans ce
+    cas (point 3 de l'issue), la décision est marquée ``moment="inconnu"`` et
+    exclue du calcul (comptée à part dans le résumé).
+
+Parties reprises réparties sur plusieurs fichiers (issue #202) : voir
+``persistance/parties_liees.py``, qui regroupe les fichiers d'une même partie
+et les fusionne en une seule suite d'actions avant analyse — l'état de départ
+de la première action d'un fichier de reprise est alors l'état de la dernière
+action du fichier précédent.
 
 Limite documentée : le journal ne conserve pas la configuration de la partie
 (``mise_initiale_min``...) — ``config.MISE_INITIALE_MIN`` (valeur par défaut
@@ -48,6 +65,38 @@ from rummikub.persistance.bilan import _joueurs_normalises
 # Actions qui représentent une décision de piocher ou de passer (on exclut
 # "pose" et "annulation", sans intérêt pour cette analyse).
 _DECISIONS_SANS_POSE = {"pioche", "passe"}
+
+
+def _mise_initiale_avant(actions: list, i: int, idx: int,
+                         debut_present: bool = True):
+    """État « mise initiale faite » du joueur ``idx`` juste AVANT l'action
+    ``i`` d'une suite (éventuellement fusionnée, voir
+    ``persistance/parties_liees.py``) d'actions — issue #202.
+
+    Retourne ``True``/``False``, ou ``None`` si l'état ne peut pas être
+    déterminé (point 3 de l'issue : historique de début manquant et journal
+    sans la clé ``mises_initiales``). Voir le détail dans la docstring du
+    module.
+    """
+    precedente = actions[i - 1]
+    mises = precedente.get("mises_initiales")
+    if isinstance(mises, list) and 0 <= idx < len(mises):
+        return bool(mises[idx])
+    a_pose = any(
+        a.get("action") == "pose" and a.get("auteur_index") == idx
+        and (a.get("nb_tuiles_posees") or 0) > 0
+        for a in actions[:i])
+    if a_pose:
+        return True
+    return False if debut_present else None
+
+
+def _moment_depuis_mise(mi) -> str:
+    """``"inconnu"`` si ``mi`` est ``None`` (voir :func:`_mise_initiale_avant`),
+    sinon ``"apres_mise"``/``"avant_mise"``."""
+    if mi is None:
+        return "inconnu"
+    return "apres_mise" if mi else "avant_mise"
 
 
 # --------------------------------------------------------------------------- #
@@ -83,9 +132,18 @@ def filtrer_journaux_depuis(chemins: list, depuis: str = None) -> list:
 # Reconstitution des décisions analysables depuis un journal brut.
 # --------------------------------------------------------------------------- #
 
-def extraire_decisions_ia(data: dict) -> list:
+def extraire_decisions_ia(data: dict, debut_present: bool = True) -> list:
     """Décisions de piocher/passer d'une IA, avec l'état reconstitué juste
     avant chacune, prêtes pour :func:`analyser_decision`.
+
+    ``debut_present`` (issue #202) : indique si ``data`` couvre le début de la
+    partie. Mis à ``False`` pour un fichier de reprise ancien dont le début a
+    été supprimé par la rotation — une décision dont la mise initiale est alors
+    indéterminable reçoit ``moment="inconnu"`` (exclue du calcul), au lieu
+    d'être supposée à tort « avant la mise initiale » (voir
+    :func:`_mise_initiale_avant`). Quand ``data`` est une partie fusionnée
+    (``persistance/parties_liees.py``), ce drapeau vient de
+    ``fusionner_groupe``.
 
     Tolère les formats anciens/corrompus (retourne une liste vide plutôt que
     de lever une exception) : actions absentes/invalides, en-tête ``joueurs``
@@ -134,11 +192,12 @@ def extraire_decisions_ia(data: dict) -> list:
         if not isinstance(chevalet_dict, list):
             continue
 
-        mise_initiale_faite = any(
-            a.get("action") == "pose" and a.get("auteur_index") == idx
-            and (a.get("nb_tuiles_posees") or 0) > 0
-            for a in actions[:i]
-        )
+        mi = _mise_initiale_avant(actions, i, idx, debut_present)
+        moment = _moment_depuis_mise(mi)
+        # Valeur neutre quand l'état est inconnu : la décision est exclue du
+        # calcul (court-circuit dans analyser_decision), le drapeau ne sera
+        # jamais utilisé par le solveur.
+        mise_initiale_faite = bool(mi)
 
         joueurs_etat = [{"chevalet": [], "mise_initiale_faite": True}
                         for _ in joueurs]
@@ -150,7 +209,8 @@ def extraire_decisions_ia(data: dict) -> list:
             "niveau": niveau,
             "nom": joueur.get("nom"),
             "action": actuelle.get("action"),
-            "moment": "apres_mise" if mise_initiale_faite else "avant_mise",
+            "moment": moment,
+            "mise_initiale_inconnue": mi is None,
             "idx": idx,
             "etat": {
                 "joueurs": joueurs_etat,
@@ -184,6 +244,18 @@ def analyser_decision(decision: dict, budget_genereux: float = 10.0,
     ``BudgetDepasse``) : dans ce cas ``coup_rate`` vaut ``False`` par prudence
     (absence de preuve, pas preuve d'absence — voir avertissement du module).
     """
+    if decision.get("moment") == "inconnu":
+        # Historique de début manquant : on ne sait pas si la mise initiale
+        # est faite (issue #202, point 3). On n'interroge pas le solveur (toute
+        # hypothèse fausserait le résultat) et on marque la décision à part.
+        return {
+            "tour": decision["tour"], "niveau": decision["niveau"],
+            "nom": decision["nom"], "action": decision["action"],
+            "moment": "inconnu", "coup_rate": False, "nb_tuiles": None,
+            "points_ouverture": None, "budget_limite": None,
+            "inconclusif": False, "mise_initiale_inconnue": True,
+        }
+
     def _essayer(budget):
         try:
             return resoudre_coup(decision["etat"], decision["idx"],
@@ -218,6 +290,7 @@ def analyser_decision(decision: dict, budget_genereux: float = 10.0,
         "points_ouverture": points_ouverture,
         "budget_limite": budget_limite,
         "inconclusif": inconclusif,
+        "mise_initiale_inconnue": False,
     }
 
 
@@ -250,6 +323,13 @@ def calculer_resume(resultats: list) -> dict:
     :func:`analyser_decision`)."""
     out: dict = {}
     for r in resultats:
+        if r.get("moment") == "inconnu" or r.get("mise_initiale_inconnue"):
+            # Décisions dont l'état de mise initiale est inconnu (historique
+            # manquant) : exclues du calcul, comptées à part (issue #202).
+            inc = out.setdefault(r["niveau"], {}).setdefault(
+                "inconnu", {"decisions": 0})
+            inc["decisions"] += 1
+            continue
         bucket = out.setdefault(r["niveau"], {}).setdefault(r["moment"], {
             "decisions": 0, "coups_rates": 0, "budget_limite": 0,
             "inconclusifs": 0,
@@ -263,7 +343,9 @@ def calculer_resume(resultats: list) -> dict:
                 bucket["budget_limite"] += 1
 
     for par_moment in out.values():
-        for stats in par_moment.values():
+        for moment, stats in par_moment.items():
+            if moment == "inconnu":
+                continue
             stats["pct_rates"] = (
                 stats["coups_rates"] / stats["decisions"] if stats["decisions"] else None)
     return out
@@ -476,10 +558,13 @@ def decrire_coup(plateau_avant: list, plateau_apres: list, nom: str = None) -> d
 # Extraction généralisée (poses comprises, joueur quelconque).
 # --------------------------------------------------------------------------- #
 
-def extraire_toutes_decisions(data: dict, predicat_joueur) -> list:
+def extraire_toutes_decisions(data: dict, predicat_joueur,
+                              debut_present: bool = True) -> list:
     """Généralise ``extraire_decisions_ia`` aux poses et à un joueur
     quelconque sélectionné par ``predicat_joueur(joueur_normalise, idx) ->
-    bool``.
+    bool``. ``debut_present`` : voir :func:`extraire_decisions_ia` (issue
+    #202) — une décision dont la mise initiale est indéterminable reçoit
+    ``moment="inconnu"`` et ``mise_initiale_inconnue=True``.
 
     Comme ``extraire_decisions_ia``, l'état AVANT chaque décision est celui
     enregistré par l'action PRÉCÉDENTE du journal — y compris une
@@ -553,10 +638,9 @@ def extraire_toutes_decisions(data: dict, predicat_joueur) -> list:
             if isinstance(plateau_apres_courant, list):
                 plateau_apres_reel = plateau_apres_courant
 
-        mise_initiale_faite = any(
-            a.get("action") == "pose" and a.get("auteur_index") == idx
-            and (a.get("nb_tuiles_posees") or 0) > 0
-            for a in actions[:i])
+        mi = _mise_initiale_avant(actions, i, idx, debut_present)
+        moment = _moment_depuis_mise(mi)
+        mise_initiale_faite = bool(mi)
 
         joueurs_etat = [{"chevalet": [], "mise_initiale_faite": True}
                         for _ in joueurs]
@@ -582,7 +666,8 @@ def extraire_toutes_decisions(data: dict, predicat_joueur) -> list:
             "nb_tuiles_jouees": len(ids_tuiles_reelles),
             "ids_tuiles_reelles": ids_tuiles_reelles,
             "plateau_apres_reel": plateau_apres_reel,
-            "moment": "apres_mise" if mise_initiale_faite else "avant_mise",
+            "moment": moment,
+            "mise_initiale_inconnue": mi is None,
             "idx": idx,
             "etat": {
                 "joueurs": joueurs_etat,
@@ -595,21 +680,24 @@ def extraire_toutes_decisions(data: dict, predicat_joueur) -> list:
     return [brutes[k] for k in cles]
 
 
-def extraire_decisions_ia_toutes(data: dict) -> list:
+def extraire_decisions_ia_toutes(data: dict, debut_present: bool = True) -> list:
     """Décisions pose/pioche/passe de n'importe quelle IA (point 1 de
     l'issue #193) — contrairement à ``extraire_decisions_ia``, qui ne
-    regarde que pioche/passe (comportement #188 conservé tel quel)."""
+    regarde que pioche/passe (comportement #188 conservé tel quel).
+    ``debut_present`` : voir :func:`extraire_decisions_ia` (issue #202)."""
     def predicat(joueur, idx):
         return joueur.get("est_ia") is True and bool(joueur.get("niveau"))
-    return extraire_toutes_decisions(data, predicat)
+    return extraire_toutes_decisions(data, predicat, debut_present=debut_present)
 
 
-def extraire_decisions_joueur(data: dict, nom: str) -> list:
+def extraire_decisions_joueur(data: dict, nom: str,
+                              debut_present: bool = True) -> list:
     """Décisions pose/pioche/passe d'un joueur HUMAIN nommé ``nom`` (issue
-    #193, point 6 ter — option ``--joueur`` du script)."""
+    #193, point 6 ter — option ``--joueur`` du script). ``debut_present`` :
+    voir :func:`extraire_decisions_ia` (issue #202)."""
     def predicat(joueur, idx):
         return joueur.get("est_ia") is False and joueur.get("nom") == nom
-    return extraire_toutes_decisions(data, predicat)
+    return extraire_toutes_decisions(data, predicat, debut_present=debut_present)
 
 
 # --------------------------------------------------------------------------- #
@@ -648,6 +736,23 @@ def analyser_decision_complete(decision: dict, budget_genereux: float = 10.0,
     ``description_reel`` décrit en plus, de la même façon, le coup
     RÉELLEMENT joué par le joueur (à partir de ``plateau_apres_reel``), pour
     comparaison."""
+    if decision.get("moment") == "inconnu":
+        # Historique de début manquant (issue #202, point 3) : mise initiale
+        # indéterminable, aucune hypothèse n'est faite — décision exclue du
+        # calcul et comptée à part dans le résumé.
+        return {
+            "tour": decision["tour"], "niveau": decision["niveau"],
+            "nom": decision["nom"], "action": decision["action"],
+            "moment": "inconnu", "coup_rate": False,
+            "pose_sous_optimale": False, "joueur_bat_solveur": False,
+            "nb_tuiles_solveur": 0, "nb_tuiles_reel": 0,
+            "ids_tuiles_solveur": [], "nb_tuiles_manquantes": None,
+            "nb_tuiles_excedentaires": None, "points_ouverture": None,
+            "budget_limite": None, "inconclusif": False,
+            "description_solveur": None, "description_reel": None,
+            "mise_initiale_inconnue": True,
+        }
+
     def _essayer(budget):
         try:
             return resoudre_coup(decision["etat"], decision["idx"], budget_temps=budget)
@@ -732,6 +837,7 @@ def analyser_decision_complete(decision: dict, budget_genereux: float = 10.0,
         "inconclusif": inconclusif,
         "description_solveur": description_solveur,
         "description_reel": description_reel,
+        "mise_initiale_inconnue": False,
     }
 
 
@@ -798,6 +904,13 @@ def calculer_resume_complet(resultats: list) -> dict:
     de distinguer."""
     out: dict = {}
     for r in resultats:
+        if r.get("moment") == "inconnu" or r.get("mise_initiale_inconnue"):
+            # Décisions dont l'état de mise initiale est inconnu (historique
+            # manquant) : exclues du calcul, comptées à part (issue #202).
+            inc = out.setdefault(r["niveau"], {}).setdefault(
+                "inconnu", {"decisions": 0})
+            inc["decisions"] += 1
+            continue
         bucket = out.setdefault(r["niveau"], {}).setdefault(
             r["moment"], _bucket_complet_vierge())
         bucket["decisions"] += 1
@@ -1012,7 +1125,10 @@ def resume_joueur_humain(decisions: list, resultats: list, reserves: dict) -> di
             if jid.startswith("joker") and jid in jokers_vus_depuis:
                 jokers_tours_attente.append(i - jokers_vus_depuis.pop(jid))
 
-        if r["inconclusif"]:
+        if r["inconclusif"] or r.get("mise_initiale_inconnue"):
+            # Inconclusif (budget épuisé) ou mise initiale inconnue (historique
+            # manquant, issue #202) : exclu des statistiques de style et des
+            # listes — jamais compté comme pose/pioche ni comme coup raté.
             continue
         entree = {"tour": d["tour"], "action": d["action"], "moment": d["moment"],
                   "nb_tuiles_reel": r["nb_tuiles_reel"],
@@ -1068,7 +1184,9 @@ def resume_joueur_humain(decisions: list, resultats: list, reserves: dict) -> di
             nb_sans_joker += 1
 
     return {
-        "nb_tours_analyses": len([r for r in resultats if not r["inconclusif"]]),
+        "nb_tours_analyses": len([r for r in resultats
+                                  if not r["inconclusif"]
+                                  and not r.get("mise_initiale_inconnue")]),
         "coups_peut_etre_rates": coups_peut_etre_rates,
         "solveur_bat": solveur_bat,
         "reserves_reussies": reserves["reserves_reussies"],

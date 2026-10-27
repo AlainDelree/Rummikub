@@ -160,25 +160,73 @@ def afficher_description_coup(description, titre: str, flux=sys.stdout, indent="
 # Mode IA (défaut) : poses + pioches/passes, par niveau et par phase.
 # --------------------------------------------------------------------------- #
 
-def _analyser_tous_journaux_ia(chemins, budget_genereux=10.0,
-                               budget_production=BUDGET_TEMPS_EXPERT):
-    """Retourne la liste des résultats (avec ``fichier`` ajouté sur chaque
-    entrée) sur tous les journaux, IA uniquement."""
-    tous = []
+def _charger_parties(chemins):
+    """Charge les journaux de ``chemins`` et regroupe les fichiers d'une même
+    partie reprise en une seule suite d'actions (issue #202, voir
+    ``persistance/parties_liees.py``). Retourne la liste des parties fusionnées
+    (dicts de ``fusionner_groupe`` : ``data``, ``debut_present``, ``fichiers``,
+    ``partie_id``) ; les journaux illisibles sont signalés et ignorés."""
+    from rummikub.persistance.parties_liees import fusionner_journaux
+    journaux = []
     for chemin in chemins:
         data = charger_journal(chemin)
         if data is None:
             print(f"Journal illisible ou invalide, ignoré : {chemin}", file=sys.stderr)
             continue
-        print(f"Analyse de {chemin.name}...", file=sys.stderr)
-        decisions = extraire_decisions_ia_toutes(data)
+        journaux.append({"nom": chemin.name, "data": data})
+    return fusionner_journaux(journaux)
+
+
+def _etiquette_partie(partie) -> str:
+    """Nom représentatif d'une partie fusionnée pour l'affichage/les cas de
+    référence : le fichier le plus récent (où vivent les décisions de fin de
+    partie)."""
+    fichiers = partie["fichiers"]
+    return fichiers[-1] if fichiers else "?"
+
+
+def _decisions_ia_par_cle(chemins):
+    """``{(etiquette_partie, tour, nom): decision}`` pour toutes les IA, sur
+    les parties fusionnées — même clé que ``resultat["fichier"]`` produit par
+    :func:`_analyser_tous_journaux_ia` (nécessaire à --retenter-inconclusifs,
+    --budget-mesure et --enregistrer-cas-reference après le regroupement des
+    fichiers d'une partie reprise, issue #202)."""
+    par_cle = {}
+    for partie in _charger_parties(chemins):
+        etiq = _etiquette_partie(partie)
+        for d in extraire_decisions_ia_toutes(partie["data"], partie["debut_present"]):
+            par_cle[(etiq, d["tour"], d["nom"])] = d
+    return par_cle
+
+
+def _analyser_tous_journaux_ia(chemins, budget_genereux=10.0,
+                               budget_production=BUDGET_TEMPS_EXPERT):
+    """Retourne la liste des résultats (avec ``fichier`` ajouté sur chaque
+    entrée) sur toutes les parties, IA uniquement — les fichiers d'une même
+    partie reprise sont reliés et analysés d'un seul tenant (issue #202)."""
+    tous = []
+    for partie in _charger_parties(chemins):
+        fichiers = partie["fichiers"]
+        etiq = _etiquette_partie(partie)
+        if len(fichiers) > 1:
+            print(f"Analyse de la partie {etiq} (reprise répartie sur "
+                  f"{len(fichiers)} fichiers : {', '.join(fichiers)})...", file=sys.stderr)
+        else:
+            print(f"Analyse de {etiq}...", file=sys.stderr)
+        if not partie["debut_present"]:
+            print("  (début de partie manquant : les décisions dont la mise "
+                  "initiale est indéterminable sont exclues et comptées à part)",
+                  file=sys.stderr)
+        decisions = extraire_decisions_ia_toutes(partie["data"], partie["debut_present"])
         for decision in decisions:
             resultat = analyser_decision_complete(
                 decision, budget_genereux=budget_genereux,
                 budget_production=budget_production)
-            resultat["fichier"] = chemin.name
+            resultat["fichier"] = etiq
             marque = ""
-            if resultat["coup_rate"]:
+            if resultat.get("mise_initiale_inconnue"):
+                marque = " <- mise initiale inconnue (exclu)"
+            elif resultat["coup_rate"]:
                 marque = " <- coup raté"
             elif resultat["pose_sous_optimale"]:
                 marque = f" <- pose sous-optimale ({resultat['nb_tuiles_manquantes']} manquante(s))"
@@ -224,6 +272,10 @@ def afficher_resume_complet(resume: dict, flux=sys.stdout) -> None:
                       f"moyens (3-5) {s['coups_moyens']}, grands (6+) {s['coups_grands']} ; "
                       f"avec joker {s['coups_avec_joker']}, sans joker {s['coups_sans_joker']}",
                       file=flux)
+        inc = resume[niveau].get("inconnu")
+        if inc:
+            print(f"  Décisions dont l'état de mise initiale est inconnu (historique "
+                  f"de début manquant, exclues du calcul) : {inc['decisions']}", file=flux)
         print(file=flux)
 
 
@@ -330,20 +382,20 @@ def _detailer_tour(chemins, tour: int, budget_genereux: float, budget_production
     (généralement 0 ou 1 décision par fichier, un tour donné appartenant à un
     seul joueur)."""
     trouvees = []
-    for chemin in chemins:
-        data = charger_journal(chemin)
-        if data is None:
-            continue
+    for partie in _charger_parties(chemins):
+        etiq = _etiquette_partie(partie)
         if nom_joueur:
-            decisions = extraire_decisions_joueur(data, nom_joueur)
+            decisions = extraire_decisions_joueur(partie["data"], nom_joueur,
+                                                  partie["debut_present"])
         else:
-            decisions = extraire_decisions_ia_toutes(data)
+            decisions = extraire_decisions_ia_toutes(partie["data"],
+                                                     partie["debut_present"])
         for d in decisions:
             if d["tour"] != tour:
                 continue
             resultat = analyser_decision_complete(
                 d, budget_genereux=budget_genereux, budget_production=budget_production)
-            trouvees.append((chemin.name, d, resultat))
+            trouvees.append((etiq, d, resultat))
     return trouvees
 
 
@@ -410,9 +462,10 @@ def _enregistrer_cas_reference(decision: dict, attendu_min_tuiles: int, prefixe:
 
 def _analyser_joueur(chemins, nom_joueur, budget_genereux, budget_production,
                      verifier_reserve_pioche):
-    """Analyse ``nom_joueur`` journal par journal (la détection de réserve
-    compare deux tours CONSÉCUTIFS du même joueur dans la MÊME partie —
-    jamais à travers deux parties différentes)."""
+    """Analyse ``nom_joueur`` partie par partie (les fichiers d'une partie
+    reprise sont reliés d'abord, issue #202 : la détection de réserve compare
+    deux tours CONSÉCUTIFS du même joueur dans la MÊME partie — y compris à
+    travers la reprise — jamais à travers deux parties différentes)."""
     agrege = {"nb_tours_analyses": 0, "coups_peut_etre_rates": [],
               "solveur_bat": [], "reserves_reussies": [], "reserves_perdues": [],
               "poses": 0, "poses_max": 0, "total_reel": 0, "total_solveur": 0,
@@ -422,15 +475,13 @@ def _analyser_joueur(chemins, nom_joueur, budget_genereux, budget_production,
               "complexite_petits": 0, "complexite_moyens": 0, "complexite_grands": 0,
               "complexite_avec_joker": 0, "complexite_sans_joker": 0}
 
-    for chemin in chemins:
-        data = charger_journal(chemin)
-        if data is None:
-            print(f"Journal illisible ou invalide, ignoré : {chemin}", file=sys.stderr)
-            continue
-        decisions = extraire_decisions_joueur(data, nom_joueur)
+    for partie in _charger_parties(chemins):
+        etiq = _etiquette_partie(partie)
+        decisions = extraire_decisions_joueur(partie["data"], nom_joueur,
+                                              partie["debut_present"])
         if not decisions:
             continue
-        print(f"Analyse de {chemin.name} ({len(decisions)} décision(s) de "
+        print(f"Analyse de {etiq} ({len(decisions)} décision(s) de "
               f"{nom_joueur})...", file=sys.stderr)
         resultats = [analyser_decision_complete(d, budget_genereux=budget_genereux,
                                                 budget_production=budget_production)
@@ -442,7 +493,7 @@ def _analyser_joueur(chemins, nom_joueur, budget_genereux, budget_production,
         for liste_cle in ("coups_peut_etre_rates", "solveur_bat",
                           "reserves_reussies", "reserves_perdues"):
             for entree in resume[liste_cle]:
-                agrege[liste_cle].append(dict(entree, fichier=chemin.name))
+                agrege[liste_cle].append(dict(entree, fichier=etiq))
         agrege["nb_tours_analyses"] += resume["nb_tours_analyses"]
         agrege["complexite_simples"] += resume["complexite"]["simples"]
         agrege["complexite_complexes"] += resume["complexite"]["complexes"]
@@ -473,7 +524,7 @@ def _analyser_joueur(chemins, nom_joueur, budget_genereux, budget_production,
                 continue
             r = resultats[i]
             if r["joueur_bat_solveur"]:
-                d["fichier"] = chemin.name
+                d["fichier"] = etiq
                 agrege.setdefault("_decisions_solveur_bat", []).append((d, r))
 
     return agrege
@@ -675,13 +726,7 @@ def main(argv=None) -> int:
     resultats = _analyser_tous_journaux_ia(chemins, **kwargs)
 
     if args.retenter_inconclusifs:
-        decisions_par_cle = {}
-        for chemin in chemins:
-            data = charger_journal(chemin)
-            if data is None:
-                continue
-            for d in extraire_decisions_ia_toutes(data):
-                decisions_par_cle[(chemin.name, d["tour"], d["nom"])] = d
+        decisions_par_cle = _decisions_ia_par_cle(chemins)
         tranchees, arretees = _retenter_inconclusifs(
             resultats, decisions_par_cle, args.budget_inconclusifs,
             args.limite_temps_inconclusifs)
@@ -702,13 +747,7 @@ def main(argv=None) -> int:
         a_mesurer = [r for r in resultats if r["coup_rate"] or r["pose_sous_optimale"]]
         print(f"=== Budget nécessaire (mesuré sur {len(a_mesurer)} coup(s) "
               f"raté(s)/sous-optimal(aux)) ===")
-        decisions_par_cle = {}
-        for chemin in chemins:
-            data = charger_journal(chemin)
-            if data is None:
-                continue
-            for d in extraire_decisions_ia_toutes(data):
-                decisions_par_cle[(chemin.name, d["tour"], d["nom"])] = d
+        decisions_par_cle = _decisions_ia_par_cle(chemins)
         valeurs = []
         for r in a_mesurer:
             decision = decisions_par_cle.get((r["fichier"], r["tour"], r["nom"]))
@@ -725,18 +764,12 @@ def main(argv=None) -> int:
 
     if args.enregistrer_cas_reference:
         candidats = top_coups_rates_complet(resultats, n=3)
+        decisions_par_cle = _decisions_ia_par_cle(chemins)
         for r in candidats:
-            decision = None
-            for chemin in chemins:
-                data = charger_journal(chemin)
-                if data is None or chemin.name != r["fichier"]:
-                    continue
-                for d in extraire_decisions_ia_toutes(data):
-                    if d["tour"] == r["tour"] and d["nom"] == r["nom"]:
-                        decision = dict(d, fichier=chemin.name)
-                        break
-            if decision is None:
+            d = decisions_par_cle.get((r["fichier"], r["tour"], r["nom"]))
+            if d is None:
                 continue
+            decision = dict(d, fichier=r["fichier"])
             chemin_ecrit = _enregistrer_cas_reference(
                 decision, r["nb_tuiles_solveur"], "ia", _dossier_donnees_test(),
                 ecraser=args.ecraser)

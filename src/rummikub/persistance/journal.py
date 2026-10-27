@@ -40,6 +40,15 @@ existants (mains, plateau, pioche...) :
     ``termine`` : ``True`` si la partie est terminée après cette action.
     ``gagnant_index`` : index du gagnant de la manche si ``termine``, sinon
     ``None``.
+    ``mises_initiales`` : liste de booléens alignée sur ``joueurs`` (même ordre
+    que ``etat["joueurs"]``) — pour chaque joueur, ``True`` s'il a déjà fait sa
+    mise initiale au moment de cette action (issue #202, absent des journaux
+    antérieurs). Permet de relier correctement une partie reprise, qui repart
+    sur un nouveau fichier (voir ci-dessous) : l'analyse
+    (``persistance/coups_rates.py``) et le bilan (``persistance/bilan.py``)
+    n'ont plus à déduire la mise initiale de la seule présence d'une pose
+    antérieure DANS LE MÊME FICHIER — un fichier de reprise ne voit pas les
+    poses faites avant la fermeture du jeu.
 
 Une partie dont la DERNIÈRE action enregistrée n'a pas ``termine: True`` a été
 abandonnée en cours (ou est toujours en cours) : ``persistance/bilan.py``
@@ -85,6 +94,16 @@ def _main_humain(etat: dict) -> list:
         if not j.get("est_ia"):
             return copy.deepcopy(j.get("chevalet", []))
     return []
+
+
+def _mises_initiales(etat: dict) -> list:
+    """Liste de booléens alignée sur ``etat["joueurs"]`` : pour chaque joueur,
+    ``True`` s'il a déjà fait sa mise initiale au moment de l'action (issue
+    #202). Calculée d'après l'état du jeu courant — ``logger_action`` étant
+    appelé APRÈS que le coup a été appliqué (voir ``ui/api.py``), cette liste
+    reflète l'état postérieur à l'action, c'est-à-dire l'état de départ de
+    l'action suivante."""
+    return [bool(j.get("mise_initiale_faite")) for j in etat.get("joueurs", [])]
 
 
 def _mains_joueurs(etat: dict) -> list:
@@ -167,6 +186,7 @@ def logger_action(etat: dict, action: str, *,
             "nb_tuiles_deplacees": nb_tuiles_deplacees,
             "termine": bool(etat.get("terminee")),
             "gagnant_index": etat.get("gagnant_manche_index"),
+            "mises_initiales": _mises_initiales(etat),
             "main_humain": _main_humain(etat),
             "mains_joueurs": _mains_joueurs(etat),
             "plateau": copy.deepcopy(etat.get("plateau", [])),

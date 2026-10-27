@@ -1224,6 +1224,73 @@ déplacée : son compte n'a jamais été affecté.
   posées (3 tuiles déplacées) en y ajoutant 1 tuile de la main, et vérifie
   que le journal écrit porte `nb_tuiles_posees=1`, `nb_tuiles_deplacees=3`.
 
+### 11sexies. Relier les fichiers d'une partie reprise et enregistrer la mise initiale (issue #202, suite de #201)
+
+- **Problème corrigé** : à la fermeture puis réouverture du jeu, une partie
+  reprise repart sur un NOUVEAU fichier de journal (le cache mémoire de
+  `persistance/journal.py` est perdu au redémarrage). L'ancienne analyse
+  déduisait la mise initiale d'un joueur de la seule présence d'une pose
+  antérieure **dans le même fichier** : sur un fichier de reprise, elle croyait
+  donc à tort la mise initiale non faite, ce qui bride le solveur (avant la
+  mise, il ne peut pas utiliser le plateau) et fausse le résultat. Mesuré sur
+  trois cas réels où le solveur, supposé avant la mise, trouvait 0/0/6 tuiles
+  et concluait à tort « le joueur bat le solveur » ; supposé après la mise, il
+  trouve 2/3/7 (autant ou plus que le joueur) — aucun n'était un vrai cas de
+  solveur battu.
+- **Journal** (`persistance/journal.py`, `_mises_initiales`) : chaque action
+  porte désormais `mises_initiales`, liste de booléens alignée sur `joueurs`
+  (état « mise initiale faite » de chaque joueur au moment de l'action,
+  d'après l'état du jeu). Rétrocompatible : les anciens journaux n'ont pas
+  cette clé.
+- **Regroupement** (`persistance/parties_liees.py`, nouveau module pur) :
+  `grouper_journaux(journaux)` regroupe les fichiers d'une même partie par
+  `partie_id` (en-tête — conservé à la reprise, l'état restauré gardant le
+  même `id`), avec repli par mêmes joueurs + continuité des numéros de tour
+  si l'identifiant est absent/change ; `fusionner_groupe`/`fusionner_journaux`
+  concatènent les `actions` dans l'ordre chronologique en une seule suite.
+  L'état de départ de la première action d'un fichier de reprise est alors
+  l'état enregistré à la dernière action du fichier précédent (reconstitution
+  inchangée dans `coups_rates.py`/`bilan.py`). `fusionner_groupe` renvoie
+  aussi `debut_present` (faux si le plus ancien fichier commence au-delà du
+  tour `SEUIL_DEBUT_PARTIE=2`, c.-à-d. en plein milieu de partie).
+- **Déduction de la mise initiale** (`coups_rates.py`,
+  `_mise_initiale_avant`) : si l'action précédente porte `mises_initiales`
+  (journal #202+), elle est lue directement ; sinon repli #188 (pose
+  antérieure dans la suite d'actions FUSIONNÉE). **Historique manquant**
+  (point 3) : quand le début de partie est absent (`debut_present=False`) et
+  qu'aucune pose n'est observée, l'état est INCONNU — on ne suppose JAMAIS
+  « non faite » : la décision reçoit `moment="inconnu"` et
+  `mise_initiale_inconnue=True`, est exclue du calcul (le solveur n'est pas
+  interrogé) et comptée à part dans le résumé (`resume[niveau]["inconnu"]`).
+- **Bilan** (`bilan.py`, `charger_toutes_parties`) : regroupe les fichiers
+  d'une partie reprise et fusionne leurs actions avant `extraire_partie` — la
+  partie est comptée UNE SEULE FOIS, avec son nombre de tours réel et toutes
+  les décisions ; le premier fichier n'est plus pris pour une partie
+  abandonnée (seule la dernière action de la partie fusionnée décide si elle
+  est terminée).
+- **Scripts** : `scripts/analyser_coups_rates.py` (IA et `--joueur`) regroupe
+  désormais les fichiers par partie avant analyse (`_charger_parties`,
+  `_decisions_ia_par_cle`) et affiche le décompte des décisions « mise
+  initiale inconnue » ; `scripts/bilan_parties.py` en bénéficie via
+  `charger_toutes_parties`. Nouveau `scripts/verifier_cas_reference.py`
+  (point 5) : vérifie le drapeau `mise_initiale_faite` figé dans
+  `tests/donnees/cas_expert_*.json`, recalcule le drapeau correct à partir des
+  journaux d'origine regroupés (`--dossier`) et corrige les cas faux
+  (`--ecraser`). Les 9 cas existants portent déjà `mise_initiale_faite=True`
+  pour le joueur concerné (aucun faux dans le sens dangereux False→True). La
+  régénération des cas eux-mêmes reste possible via
+  `analyser_coups_rates.py --enregistrer-cas-reference --ecraser` (qui utilise
+  désormais l'analyse regroupée).
+- **Ne modifie jamais l'IA ni le moteur** : journal enrichi + lecture/analyse.
+- Tests : `tests/test_journal_mise_initiale.py` (nouveau champ `mises_initiales`
+  dans le journal et via `ui/api.py`), `tests/test_coups_rates_parties_liees.py`
+  (regroupement par `partie_id` et repli par continuité ; deux fichiers reliés
+  classant le second « après la mise » alors que seul il le classerait « avant »
+  — avec et sans la clé ; solveur recevant le bon drapeau bout en bout ;
+  historique manquant exclu et compté à part), et dans `tests/test_bilan.py`
+  (une partie reprise en deux fichiers comptée une seule fois, premier fichier
+  non pris pour une partie abandonnée).
+
 ## 12. Rendre lisible un coup complexe de l'IA (issue #189, puis #191)
 
 Depuis le solveur de réarrangement global (#186), un coup de l'IA peut

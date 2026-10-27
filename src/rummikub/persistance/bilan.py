@@ -271,13 +271,26 @@ def _finaliser(stats: dict) -> dict:
 
 def charger_toutes_parties(dossier: Path) -> list:
     """Lit et normalise tous les journaux du dossier (parties exploitables
-    uniquement — voir :func:`extraire_partie`)."""
-    out = []
+    uniquement — voir :func:`extraire_partie`).
+
+    Les fichiers d'une même partie reprise (fermée puis rouverte, repartie sur
+    un nouveau fichier) sont d'abord REGROUPÉS et fusionnés en une seule suite
+    d'actions (issue #202, voir ``persistance/parties_liees.py``) : la partie
+    est comptée UNE SEULE FOIS, avec son nombre de tours réel et toutes les
+    décisions de l'IA ; le premier fichier n'est plus pris pour une partie
+    abandonnée (seule la DERNIÈRE action de la partie fusionnée décide si elle
+    est terminée, voir :func:`extraire_partie`)."""
+    from rummikub.persistance.parties_liees import fusionner_journaux
+    journaux = []
     for chemin in lister_journaux(dossier):
         data = charger_journal(chemin)
         if data is None:
             continue
-        partie = extraire_partie(data)
+        journaux.append({"nom": chemin.name, "data": data})
+
+    out = []
+    for partie_fusionnee in fusionner_journaux(journaux):
+        partie = extraire_partie(partie_fusionnee["data"])
         if partie is not None:
             out.append(partie)
     return out
