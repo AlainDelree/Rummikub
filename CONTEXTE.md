@@ -499,6 +499,50 @@ plus grand nombre possible de tuiles du chevalet, jokers compris.
   été remplacé : le solveur y trouve légitimement un meilleur coup qu'« 
   aucun » (voir `test_expert_trouve_un_groupe_pour_le_joker_en_bout_de_
   suite`).
+- **Nouvelle stratégie de recherche (#194, suite de #190)** : #190
+  n'accélérait que les nœuds à candidats ex-aequo sur `_score_rapide` — ne
+  réglait pas le cas où le coup optimal exige d'enchaîner plusieurs
+  échanges de jokers à travers des zones différentes du plateau. Cas réel
+  (tour 57 de Bruno, `tests/donnees/cas_expert_bruno_tour57.json`) : Expert
+  n'avait posé qu'UNE tuile en partie, alors que le solveur en trouve 3
+  (joker d'un groupe de 4 remplacé par la tuile d'une suite voisine) — mais
+  seulement avec 10s de budget ; rien à 1.5s/3s/6s. Deux changements,
+  combinés (voir la docstring de `moteur/solveur.py` pour le détail
+  technique) :
+  1. **Recherche par paliers croissants** (`_meilleur_rearrangement`,
+     `_Contexte.objectif`, `_seuil_atteint`) : au lieu de viser l'optimum
+     en une seule passe, le solveur cherche d'abord « au moins 1 tuile
+     posable », puis si trouvé « au moins 2 », etc. Chaque palier coupe la
+     recherche dès qu'il est atteint n'importe où dans l'arbre — prouver
+     un petit palier est beaucoup moins coûteux que prouver l'optimum
+     exact d'un coup. Le dernier palier PROUVÉ atteignable avant expiration
+     du budget est renvoyé (comportement anytime déjà présent depuis #186,
+     affiné ici par palier plutôt que par nœud).
+  2. **Ordre de visite des emplacements par VALEUR** (`_ordre_slot`) plutôt
+     que par couleur : visiter toutes les valeurs d'une seule couleur avant
+     de passer à la suivante forçait la recherche à épuiser un bloc de
+     couleur combinatoire avant d'atteindre un groupe utile à la main d'une
+     tout autre couleur ; visiter par valeur croissante atteint ce groupe
+     dès que sa valeur revient, et le palier correspondant coupe alors la
+     recherche immédiatement.
+
+  Ni l'un ni l'autre ne change le résultat optimal trouvé avec un budget
+  suffisant pour explorer exhaustivement — seulement la vitesse pour
+  l'atteindre. Les pistes « zones indépendantes du plateau » et
+  « élagage anticipé sur une borne globale » évoquées par l'issue n'ont
+  **pas** été retenues : la mémoïsation par nœud (déjà en place depuis
+  #186) et le découpage en combinaisons gelées/flexibles
+  (`_separer_combos_figees`, #190) couvraient déjà l'essentiel de ce
+  gain pour un coût d'implémentation moindre — voir le rapport de clôture
+  #194 pour la mesure avant/après sur les deux cas de référence
+  (`cas_expert_budget_tour81.json` et `cas_expert_bruno_tour57.json`) et sur
+  des parties réelles.
+  Budget de production (`BUDGET_TEMPS_EXPERT`) **inchangé à 1.5s** : les
+  deux cas de référence sont désormais résolus dans ce budget.
+  Tests ajoutés : `test_solveur_cascade_joker_trouve_trois_tuiles_avec_
+  gros_budget` et `test_solveur_cascade_joker_trouve_un_coup_avec_budget_
+  de_production` (`tests/test_ia.py`), sur le nouveau cas de référence
+  `cas_expert_bruno_tour57.json`.
 
 ## 9. Scripts de simulation IA vs IA (`scripts/`)
 

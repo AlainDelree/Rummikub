@@ -1118,4 +1118,3 @@ def test_solveur_cascade_joker_trouve_un_coup_avec_budget_de_production():
     assert coup["action"] == "jouer"
     assert len(coup["ids_tuiles"]) >= attendu
     _verifier_coup_valide_sans_perte(etat, idx, coup)
-    _verifier_coup_valide_sans_perte(etat, idx, coup)

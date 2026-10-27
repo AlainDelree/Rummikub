@@ -73,6 +73,29 @@ jamais le résultat optimal trouvé avec un budget suffisant — seulement la
 vitesse pour l'atteindre, et, en cas d'égalité stricte du critère de
 départage ci-dessous, lequel des réarrangements équivalents est renvoyé.
 
+Une quatrième mesure (#194, suite de #190) change la STRATÉGIE de recherche
+plutôt que de simplement l'accélérer localement : sur un plateau où le coup
+optimal exige d'enchaîner plusieurs échanges de jokers à travers des zones
+différentes du plateau, prouver l'optimum exact restait trop coûteux pour le
+budget de production même après #190 (cas réel : tour 57 de Bruno — 1 seule
+tuile posée alors que 3 sont trouvées avec 10 s, rien en 1.5/3/6 s). Deux
+changements, combinés :
+- :func:`_meilleur_rearrangement` recherche désormais par PALIERS croissants
+  (1 tuile posable, puis 2, puis 3...) au lieu d'une seule passe visant
+  directement l'optimum — chaque palier intermédiaire coupe la recherche dès
+  qu'IL est atteint n'importe où dans l'arbre (voir ``_Contexte.objectif`` et
+  :func:`_seuil_atteint`), ce qui est beaucoup moins coûteux que de prouver
+  l'optimum d'un coup. Si le budget s'épuise en cours de palier, le dernier
+  palier PROUVÉ atteignable est renvoyé plutôt que de tout perdre ;
+- :func:`_ordre_slot` visite les emplacements obligatoires par VALEUR
+  croissante plutôt que par couleur : un groupe utile à la main peut alors
+  être atteint sans avoir à épuiser d'abord tout un bloc de couleur
+  combinatoire sans rapport avec elle.
+Comme pour les mesures précédentes, ni l'une ni l'autre ne change le
+résultat optimal trouvé avec un budget suffisant pour explorer
+exhaustivement — seulement la vitesse pour l'atteindre (voir le rapport de
+clôture #194 pour les mesures avant/après).
+
 Simplification volontaire (documentée, pas une approximation aléatoire) :
 pour une suite ancrée sur une tuile réelle précise, les positions
 intermédiaires utilisent la tuile réelle disponible dès qu'il y en a une, et
