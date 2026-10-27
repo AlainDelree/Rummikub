@@ -233,7 +233,7 @@ icône `assets/rummikub.ico` (facultative, absente → aucune icône).
   `tests/test_playwright_accueil_reglages.py` : vérifications front-end via
   Playwright (voir §7), sautées proprement si `playwright` ou chromium sont
   absents.
-- État actuel : **122 tests passent** (`pytest -q` → `122 passed`).
+- État actuel : **164 tests passent** (`pytest -q` → `164 passed`).
 
 ## 7. Vérification empirique d'un comportement front-end
 
@@ -543,6 +543,80 @@ plus grand nombre possible de tuiles du chevalet, jokers compris.
   gros_budget` et `test_solveur_cascade_joker_trouve_un_coup_avec_budget_
   de_production` (`tests/test_ia.py`), sur le nouveau cas de référence
   `cas_expert_bruno_tour57.json`.
+- **Préférer le coup le plus simple à nombre de tuiles posées égal (#199,
+  suite de #194)** : aucun des critères de départage ci-dessus ne tenait
+  compte de la PERTURBATION du plateau — parmi toutes les solutions posant
+  le même nombre de tuiles, le solveur pouvait renvoyer n'importe laquelle,
+  y compris une qui défait et recrée plusieurs combinaisons pour ne poser,
+  au final, qu'une seule tuile de la main. Cas réel (David, tour 31,
+  `tests/donnees/cas_expert_coup_simple_david_tour31.json`) : un 1 noir à
+  poser, qu'il suffisait d'ajouter au groupe de 1 (rouge, bleu, jaune) déjà
+  posé pour en faire un groupe de 4 couleurs en un seul geste — Expert
+  avait pourtant joué un coup en 12 étapes de pas-à-pas, fragmentant ce
+  groupe pour reformer une suite jaune ailleurs. Réglage `preferer_simple`
+  (`solveur.PREFERER_SIMPLICITE`, activé par défaut, exposé en paramètre de
+  `resoudre_coup`/`jouer_niveau_expert` pour comparer les deux versions par
+  simulation) :
+  - **Mesure de perturbation** `(tuiles_déplacées, combinaisons_modifiées)` :
+    nulle si un candidat n'utilise aucune tuile du plateau, ou si les
+    tuiles du plateau qu'il utilise reproduisent EXACTEMENT une combinaison
+    déjà posée avant ce tour (il ne fait qu'ajouter des tuiles de la main à
+    cette combinaison, ou la reconduire à l'identique) ; non nulle sinon
+    (fragmente ou fusionne des combinaisons existantes). Deux tuiles de
+    même aspect (même valeur, même couleur, ou deux jokers quelconques)
+    sont interchangeables, comme pour le pas-à-pas (#197,
+    `description_coup.py::_aspect`) — calculée directement sur les
+    compteurs par emplacement de la recherche (`_perturbation_candidat`),
+    sans jamais reconstruire le plateau concret. `mesurer_perturbation`
+    (API publique de `solveur.py`) calcule la même mesure, mais sur un
+    plateau avant/après concret — utilisée par les tests et par
+    `scripts/comparer_niveaux_ia.py`, pas par la recherche elle-même.
+  - **Nouvel ordre de départage** : nombre de tuiles posées, puis
+    perturbation minimale, puis points posés, puis économie de jokers
+    (`_meilleur_rearrangement`, `ctx.cle`).
+  - **Tri des candidats** (`_resoudre`) : la perturbation REMPLACE, plutôt
+    que compléter, le critère de signature d'origine (#190) — la signature
+    (forme + taille seulement, pas la composition exacte) aurait sinon pu
+    faire gagner, par coïncidence de forme, un candidat qui FRAGMENTE une
+    combinaison d'origine sur celui qui l'ÉTEND proprement, exactement le
+    bug observé. Mesuré sur un cas déjà difficile pour la recherche
+    (`cas_expert_ia_261026172338_tour61.json`, cascade de jokers à travers
+    tout le plateau, #194) : AJOUTER la perturbation en plus de la
+    signature (sans même réordonner les deux) suffisait déjà à faire
+    manquer, à budget identique, le palier que trouvait de justesse
+    l'ancien comportement — ce cas est nativement sans la moindre marge
+    pour un coût supplémentaire par nœud de recherche ; REMPLACER la
+    signature (plutôt que l'additionner) évite ce coût.
+  - **Limite documentée** : un candidat qui ne reconstitue qu'une FRACTION
+    d'une combinaison d'origine (celle-ci ayant été fragmentée entre
+    plusieurs candidats) compte sa propre perturbation indépendamment de
+    l'autre fragment — peut compter deux combinaisons modifiées là où un
+    œil humain n'en verrait qu'une scindée en deux, sans jamais fausser la
+    distinction nulle/non-nulle qui est l'essentiel de ce critère.
+  - **Tests** (`tests/test_ia.py`) : le cas de David (coup trouvé touchant
+    au plus une combinaison, zéro tuile déplacée) ; un petit plateau
+    fabriqué où deux solutions posent la même seule tuile et où la plus
+    simple est retenue (démarche de réduction du cas réel documentée dans
+    le rapport de clôture #199) ; non-régression sur tous les cas de
+    référence existants (`cas_expert_budget_tour81.json`,
+    `cas_expert_bruno_tour57.json`, `cas_expert_humain_*`,
+    `cas_expert_ia_*`) — au budget de production pour tous sauf
+    `cas_expert_ia_261026172338_tour61.json`, structurellement instable à
+    ce budget (le solveur y trouve souvent RIEN en 1.5s, avec ou sans le
+    nouveau critère, bien avant #199 déjà) et donc testé séparément à
+    budget large (12s).
+  - **Mesure** (campagne Avancé vs Expert, 10 donnes x 2 miroir, seed 42,
+    voir rapport de clôture #199 pour le détail) : taux de victoire
+    d'Expert 95.0 % ± 9.6 pt AVEC le critère contre 80.0 % ± 17.5 pt SANS
+    (IC qui se recoupent largement, écart non démontrable à cet
+    échantillon — comme pour #190/#194, aucune baisse, donc le critère
+    reste activé par défaut) ; perturbation moyenne par coup d'Expert
+    2.43 tuiles déplacées / 2.19 combinaisons modifiées AVEC, contre
+    3.00 / 2.63 SANS (baisse mesurée, conforme à l'objectif) ; temps moyen
+    par tour d'Expert comparable (204 ms AVEC contre 221 ms SANS, maximum
+    ~1.5 s dans les deux cas) ; replis sur Avancé par dépassement de budget
+    légèrement MOINDRES avec le critère (0.6 % contre 1.5 % des tours
+    d'Expert) — aucune dégradation observée.
 
 ## 9. Scripts de simulation IA vs IA (`scripts/`)
 
@@ -1256,3 +1330,15 @@ une au fur et à mesure que de futures issues les testent/implémentent.
   plutôt qu'un phénomène normal du jeu, et leur proportion est un
   **indicateur de qualité à suivre** : elle doit baisser quand l'IA
   progresse.
+- [x] **Traitée (#199) — simplicité du coup à nombre de tuiles posées
+  égal** : observation d'Alain qui a motivé cette issue (voir §8bis pour le
+  détail technique) — complexifier le plateau (défaire/recréer des
+  combinaisons pour poser le même nombre de tuiles) n'a **aucun bénéfice
+  stratégique démontré** : la campagne Avancé vs Expert avec et sans le
+  critère de simplicité (§8bis, §9) ne montre aucune baisse du taux de
+  victoire d'Expert en le préférant systématiquement, et sa perturbation
+  moyenne du plateau par coup baisse nettement. La simplicité est donc
+  désormais un critère MESURÉ (`mesurer_perturbation`, `moteur/solveur.py`)
+  et appliqué par défaut, pas seulement une préférence de lisibilité pour
+  le pas-à-pas — contrairement aux pistes 2 et 5 ci-dessus (évaluation de
+  la main restante, rôle des points), qui restent, elles, à tester.

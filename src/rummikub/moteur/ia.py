@@ -29,7 +29,9 @@ from rummikub.moteur.partie import (
     tuile_depuis_dict, plateau_depuis_dict, _plateau_vers_dict,
     _points_tuiles_posees,
 )
-from rummikub.moteur.solveur import resoudre_coup, BudgetDepasse
+from rummikub.moteur.solveur import (
+    resoudre_coup, BudgetDepasse, PREFERER_SIMPLICITE,
+)
 
 
 # --------------------------------------------------------------------------- #
@@ -800,7 +802,8 @@ def jouer_niveau_avance(etat, idx):
 BUDGET_TEMPS_EXPERT = 1.5  # secondes ; voir solveur.resoudre_coup (#186).
 
 
-def jouer_niveau_expert(etat, idx, budget_temps=None, on_repli=None):
+def jouer_niveau_expert(etat, idx, budget_temps=None, on_repli=None,
+                        preferer_simple=None):
     """Réarrangement global du plateau (solveur, #186) : toutes les
     combinaisons du plateau peuvent être redécoupées librement (aucune de
     leurs tuiles n'est jamais retirée du plateau) pour poser le plus grand
@@ -831,13 +834,23 @@ def jouer_niveau_expert(etat, idx, budget_temps=None, on_repli=None):
     a ≤ 3 tuiles » : la campagne de #184 n'a montré aucun avantage mesurable
     à la prudence, et poser davantage de tuiles est presque toujours
     préférable (voir rapport de clôture #186).
+
+    ``preferer_simple`` (#199, voir ``solveur.PREFERER_SIMPLICITE`` et
+    ``solveur.resoudre_coup``) : à nombre de tuiles posées égal, préférer
+    le coup qui perturbe le moins le plateau. ``None`` (défaut) lit le
+    réglage global au lieu de le figer au chargement du module — même
+    principe que ``budget_temps`` ci-dessous, pour rester ajustable dans
+    une campagne de simulation (``scripts/comparer_niveaux_ia.py``).
     """
     if budget_temps is None:
         budget_temps = BUDGET_TEMPS_EXPERT  # lu à l'appel (pas figé au
         # chargement du module) pour rester ajustable, ex. dans une
         # campagne de simulation (scripts/comparer_niveaux_ia.py).
+    if preferer_simple is None:
+        preferer_simple = PREFERER_SIMPLICITE
     try:
-        coup = resoudre_coup(etat, idx, budget_temps=budget_temps)
+        coup = resoudre_coup(etat, idx, budget_temps=budget_temps,
+                             preferer_simple=preferer_simple)
         timeout = False
     except BudgetDepasse:
         coup = None

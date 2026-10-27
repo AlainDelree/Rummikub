@@ -10,10 +10,10 @@ from rummikub.moteur.ia import (
     jouer_niveau_facile, jouer_niveau_intermediaire, NIVEAUX_IA,
     BUDGET_TEMPS_EXPERT,
 )
-from rummikub.moteur.partie import creer_partie
+from rummikub.moteur.partie import creer_partie, _plateau_vers_dict
 from rummikub.moteur.validation import valider_plateau
-from rummikub.moteur.tuiles import tuile_depuis_dict
-from rummikub.moteur.solveur import resoudre_coup, BudgetDepasse
+from rummikub.moteur.tuiles import tuile_depuis_dict, Tuile
+from rummikub.moteur.solveur import resoudre_coup, BudgetDepasse, mesurer_perturbation
 
 _DONNEES = Path(__file__).resolve().parent / "donnees"
 
@@ -1118,3 +1118,158 @@ def test_solveur_cascade_joker_trouve_un_coup_avec_budget_de_production():
     assert coup["action"] == "jouer"
     assert len(coup["ids_tuiles"]) >= attendu
     _verifier_coup_valide_sans_perte(etat, idx, coup)
+
+
+# --------------------------------------------------------------------------- #
+# Issue #199 (suite de #194) : à nombre de tuiles posées égal, préférer le
+# coup le plus simple (celui qui déplace le moins de tuiles du plateau) —
+# voir ``tests/donnees/cas_expert_coup_simple_david_tour31.json`` : l'IA
+# avait un unique 1 noir à poser, qu'il suffisait d'ajouter au groupe de 1
+# (rouge, bleu, jaune) déjà posé pour en faire un groupe de 4 couleurs en un
+# seul geste ; avant #199, le solveur pouvait renvoyer n'importe quelle
+# solution posant la même tuile, y compris une qui défait et recrée
+# plusieurs combinaisons (constaté en jeu : 12 étapes de pas-à-pas pour
+# poser une seule tuile).
+# --------------------------------------------------------------------------- #
+
+def test_solveur_coup_simple_trouve_et_retient_le_coup_sans_perturbation():
+    """Sur le cas réel de David (tour 31), le solveur doit non seulement
+    trouver au moins la tuile attendue, mais la poser en touchant au plus
+    une seule combinaison du plateau (idéalement le groupe de 1, étendu
+    sans qu'aucune tuile ne soit déplacée) — pas en fragmentant/recréant
+    plusieurs combinaisons pour le même résultat."""
+    with open(_DONNEES / "cas_expert_coup_simple_david_tour31.json",
+              encoding="utf-8") as f:
+        data = json.load(f)
+    etat, idx = data["etat"], data["idx"]
+    assert data["coup_simple_existe"]
+
+    coup = resoudre_coup(etat, idx, budget_temps=BUDGET_TEMPS_EXPERT)
+    assert coup is not None
+    assert coup["action"] == "jouer"
+    assert len(coup["ids_tuiles"]) >= data["attendu_min_tuiles"]
+    _verifier_coup_valide_sans_perte(etat, idx, coup)
+
+    deplacees, modifiees = mesurer_perturbation(
+        etat["plateau"], coup["nouveau_plateau"])
+    assert modifiees <= 1, (
+        f"le coup touche {modifiees} combinaison(s) du plateau alors qu'un "
+        f"coup simple (étendre le groupe de 1) n'en touche qu'une")
+    assert deplacees == 0, (
+        f"le coup déplace {deplacees} tuile(s) du plateau alors qu'un coup "
+        f"simple n'en déplace aucune (il ne fait qu'ajouter la tuile de la "
+        f"main au groupe de 1)")
+
+
+def test_solveur_departage_petit_plateau_fabrique_prefere_la_solution_simple():
+    """Reproduction minimale du cas ci-dessus (voir le rapport de clôture
+    #199 pour la démarche de réduction) : un groupe de 1 (rouge, bleu,
+    jaune) et une suite jaune (2 à 4) sur le plateau ; en main, le 1 noir
+    (qui complète le groupe en un seul geste, sans toucher la suite) et un
+    12 jaune sans rapport (qui rend la suite jaune « flexible » pour la
+    recherche, et donc une seconde solution possible : fragmenter le groupe
+    pour reformer la suite en 1-4). Les deux solutions posent la même seule
+    tuile (le 1 noir) ; seule la seconde déplace des tuiles du plateau —
+    désactiver ``preferer_simple`` retrouve d'ailleurs cette seconde
+    solution (vérifié ci-dessous), ce qui confirme que le plateau fabriqué
+    crée bien une égalité réelle entre les deux, pas une coïncidence."""
+    plateau = [
+        [Tuile("rouge_1_a", 1, "rouge"), Tuile("bleu_1_a", 1, "bleu"),
+         Tuile("jaune_1_a", 1, "jaune")],
+        [Tuile("jaune_2_a", 2, "jaune"), Tuile("jaune_3_a", 3, "jaune"),
+         Tuile("jaune_4_a", 4, "jaune")],
+    ]
+    chevalet = [Tuile("noir_1_a", 1, "noir"), Tuile("jaune_12_a", 12, "jaune")]
+    etat = {
+        "joueurs": [{"chevalet": [t.as_dict() for t in chevalet],
+                     "mise_initiale_faite": True}],
+        "plateau": _plateau_vers_dict(plateau),
+        "config": {"mise_initiale_min": 30},
+    }
+
+    coup = resoudre_coup(etat, 0)
+    assert coup is not None and coup["action"] == "jouer"
+    assert coup["ids_tuiles"] == ["noir_1_a"]
+    deplacees, modifiees = mesurer_perturbation(
+        etat["plateau"], coup["nouveau_plateau"])
+    assert (deplacees, modifiees) == (0, 1), (
+        "le solveur n'a pas retenu la solution simple (étendre le groupe "
+        f"de 1) : perturbation mesurée {(deplacees, modifiees)}")
+
+    # Preuve que le plateau fabriqué crée une vraie égalité (et pas un cas
+    # où la solution compliquée n'existe simplement pas) : désactiver le
+    # critère retrouve l'ancien comportement, qui fragmente le groupe.
+    coup_sans_critere = resoudre_coup(etat, 0, preferer_simple=False)
+    deplacees_sc, _ = mesurer_perturbation(
+        etat["plateau"], coup_sans_critere["nouveau_plateau"])
+    assert deplacees_sc > 0
+
+
+# --------------------------------------------------------------------------- #
+# Non-régression (#199) : sur tous les cas de référence existants (dont
+# ceux où le solveur n'atteint pas ``attendu_min_tuiles`` même avant #199 —
+# cas « coups ratés » gardés comme matériau pour une future issue, pas
+# comme objectif de ce correctif), le nouveau critère de départage ne doit
+# jamais poser MOINS de tuiles que l'ancien comportement.
+# --------------------------------------------------------------------------- #
+
+@pytest.mark.parametrize("nom_fichier", [
+    "cas_expert_budget_tour81.json",
+    "cas_expert_bruno_tour57.json",
+    "cas_expert_humain_261026172338_tour66.json",
+    "cas_expert_humain_261026174101_tour81.json",
+    "cas_expert_humain_261026213723_tour65.json",
+    "cas_expert_ia_261026172338_tour37.json",
+    "cas_expert_ia_261026172338_tour59.json",
+])
+def test_preferer_simple_ne_pose_jamais_moins_de_tuiles_au_budget_de_production(
+        nom_fichier):
+    """Au budget de production (celui réellement utilisé en jeu), le
+    nouveau réglage ne doit jamais trouver moins de tuiles que l'ancien
+    comportement. ``cas_expert_ia_261026172338_tour61.json`` est exclu de
+    cette liste et testé séparément ci-dessous, à budget plus large : ce cas
+    est nativement à la limite du budget de production même AVANT #199 (le
+    solveur n'y trouve souvent rien dans les 1,5s, avec ou sans le nouveau
+    critère — un écart d'une fraction de seconde suffit à faire basculer le
+    résultat d'un côté ou de l'autre), le comparer à budget de production
+    serait un test structurellement instable, pas une mesure de régression."""
+
+    def _nb_tuiles(preferer_simple):
+        try:
+            coup = resoudre_coup(etat, idx, budget_temps=BUDGET_TEMPS_EXPERT,
+                                 preferer_simple=preferer_simple)
+        except BudgetDepasse:
+            return 0
+        return len(coup["ids_tuiles"]) if coup else 0
+
+    with open(_DONNEES / nom_fichier, encoding="utf-8") as f:
+        data = json.load(f)
+    etat, idx = data["etat"], data["idx"]
+
+    assert _nb_tuiles(True) >= _nb_tuiles(False), (
+        f"{nom_fichier} : preferer_simple pose moins de tuiles que l'ancien "
+        f"comportement (régression)")
+
+
+def test_preferer_simple_atteint_le_meme_plafond_sur_le_cas_le_plus_dur():
+    """``cas_expert_ia_261026172338_tour61.json`` (cascade de jokers à
+    travers tout le plateau, déjà documenté #194 comme à la limite du
+    budget de production) : à budget LARGE (12s, assez pour que les deux
+    réglages convergent de façon stable vers leur plafond respectif —
+    contrairement au budget de production, voir le test ci-dessus), le
+    nouveau critère doit atteindre le même plafond que l'ancien
+    comportement, pas moins."""
+    with open(_DONNEES / "cas_expert_ia_261026172338_tour61.json",
+              encoding="utf-8") as f:
+        data = json.load(f)
+    etat, idx = data["etat"], data["idx"]
+
+    def _nb_tuiles(preferer_simple):
+        try:
+            coup = resoudre_coup(etat, idx, budget_temps=12.0,
+                                 preferer_simple=preferer_simple)
+        except BudgetDepasse:
+            return 0
+        return len(coup["ids_tuiles"]) if coup else 0
+
+    assert _nb_tuiles(True) >= _nb_tuiles(False)
