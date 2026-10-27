@@ -25,6 +25,11 @@ Options :
                         abandon (défaut 300). Les parties arrêtées par ce
                         garde-fou sont comptées à part, jamais mêlées aux
                         victoires.
+    --sans-preferer-simple
+                        Désactive le critère de simplicité du solveur
+                        Expert (#199, activé par défaut) — relancer la
+                        même commande (même --seed) avec et sans ce
+                        drapeau pour comparer les deux versions.
     -v, --verbose       Journalise chaque partie jouée.
 """
 
@@ -50,6 +55,7 @@ from rummikub.moteur.partie import (  # noqa: E402
     passer_tour,
     piocher,
 )
+from rummikub.moteur.solveur import mesurer_perturbation  # noqa: E402
 from rummikub.moteur.tuiles import creer_sac  # noqa: E402
 
 logger = logging.getLogger("comparer_niveaux_ia")
@@ -92,7 +98,8 @@ def _anomalies_conservation(etat: dict) -> list[str]:
 # --------------------------------------------------------------------------- #
 
 def jouer_un_tour(etat: dict, idx: int, temps_par_niveau: dict,
-                  replis_expert: list) -> tuple[dict, bool, bool]:
+                  replis_expert: list, preferer_simple: bool,
+                  perturbations_expert: list) -> tuple[dict, bool, bool]:
     """Joue le tour de l'IA à l'index ``idx``.
 
     Chronomètre l'appel à ``jouer_ia`` et l'ajoute à
@@ -113,9 +120,14 @@ def jouer_un_tour(etat: dict, idx: int, temps_par_niveau: dict,
     de temps SANS avoir rien trouvé (:class:`BudgetDepasse` — la seule
     cause que l'accélération de #190 peut réduire : l'autre cause, un coup
     légitimement impossible, ne dépend pas de la vitesse de recherche).
+    ``preferer_simple`` (#199) est transmis tel quel à ``jouer_niveau_
+    expert`` ; quand Expert pose effectivement un coup, sa perturbation du
+    plateau (``mesurer_perturbation``, voir ``moteur/solveur.py``) est
+    ajoutée à ``perturbations_expert`` pour la mesure de campagne.
     """
     niveau = etat["joueurs"][idx]["niveau"]
     backup_debut_tour(etat)
+    plateau_avant = etat["plateau"]
 
     def _compter_repli(timeout):
         replis_expert[0] += 1
@@ -126,7 +138,8 @@ def jouer_un_tour(etat: dict, idx: int, temps_par_niveau: dict,
     try:
         if niveau == "Expert":
             res_ia = jouer_niveau_expert(
-                etat, idx, on_repli=_compter_repli)
+                etat, idx, on_repli=_compter_repli,
+                preferer_simple=preferer_simple)
         else:
             res_ia = jouer_ia(etat, idx)
     except Exception:
@@ -135,6 +148,10 @@ def jouer_un_tour(etat: dict, idx: int, temps_par_niveau: dict,
         annuler_tour(etat)
         return piocher(etat)["etat"], True, False
     temps_par_niveau.setdefault(niveau, []).append(time.monotonic() - debut)
+
+    if niveau == "Expert" and res_ia.get("action") == "jouer":
+        perturbations_expert.append(
+            mesurer_perturbation(plateau_avant, res_ia["nouveau_plateau"]))
 
     action = res_ia.get("action")
     if action == "jouer":
@@ -167,7 +184,8 @@ def jouer_un_tour(etat: dict, idx: int, temps_par_niveau: dict,
 # --------------------------------------------------------------------------- #
 
 def jouer_partie(config_joueurs: list[dict], max_tours: int,
-                 temps_par_niveau: dict, replis_expert: list) -> dict:
+                 temps_par_niveau: dict, replis_expert: list,
+                 preferer_simple: bool, perturbations_expert: list) -> dict:
     """Joue une manche complète à 2 joueurs jusqu'à sa fin naturelle
     (chevalet vidé ou pioche épuisée) ou jusqu'au garde-fou ``max_tours``.
     """
@@ -187,7 +205,8 @@ def jouer_partie(config_joueurs: list[dict], max_tours: int,
             break
         idx = etat["index_joueur_actuel"]
         etat, invalide, tuiles_disparues = jouer_un_tour(
-            etat, idx, temps_par_niveau, replis_expert)
+            etat, idx, temps_par_niveau, replis_expert, preferer_simple,
+            perturbations_expert)
         if invalide:
             coups_invalides += 1
         if tuiles_disparues:
@@ -218,7 +237,11 @@ def jouer_partie(config_joueurs: list[dict], max_tours: int,
 # --------------------------------------------------------------------------- #
 
 def comparer(niveau_a: str, niveau_b: str, nb_donnes: int, seed: int,
-            max_tours: int) -> dict:
+            max_tours: int, preferer_simple: bool = True) -> dict:
+    """``preferer_simple`` (#199) : réglage transmis à chaque appel
+    d'Expert — comparer deux campagnes identiques (même graine), l'une avec
+    et l'autre sans, permet de mesurer l'effet du critère de simplicité sur
+    la force d'Expert (voir CONTEXTE.md §9 et §13)."""
     rng_graines = random.Random(seed)
     graines = [rng_graines.randrange(2**32) for _ in range(nb_donnes)]
 
@@ -237,6 +260,10 @@ def comparer(niveau_a: str, niveau_b: str, nb_donnes: int, seed: int,
     # ``jouer_partie``. [0] = replis total (toute cause), [1] = parmi eux,
     # ceux dus à un dépassement de budget sans rien trouvé (voir #190).
     replis_expert = [0, 0]
+    # Perturbation (#199) de chaque coup effectivement posé par Expert :
+    # liste de ``(tuiles_deplacees, combos_modifiees)`` (voir
+    # ``mesurer_perturbation``, ``moteur/solveur.py``).
+    perturbations_expert: list[tuple[int, int]] = []
 
     for i, graine in enumerate(graines):
         for ordre, camps in enumerate((("A", "B"), ("B", "A"))):
@@ -248,7 +275,8 @@ def comparer(niveau_a: str, niveau_b: str, nb_donnes: int, seed: int,
                 for camp in camps
             ]
             resultat = jouer_partie(config_joueurs, max_tours, temps_par_niveau,
-                                    replis_expert)
+                                    replis_expert, preferer_simple,
+                                    perturbations_expert)
             coups_invalides_total += resultat["coups_invalides"]
             coups_tuiles_disparues_total += resultat["coups_tuiles_disparues"]
             anomalies_conservation_total += resultat["anomalies_conservation"]
@@ -292,6 +320,8 @@ def comparer(niveau_a: str, niveau_b: str, nb_donnes: int, seed: int,
         "anomalies_conservation_total": anomalies_conservation_total,
         "replis_expert_total": replis_expert[0],
         "replis_expert_timeout": replis_expert[1],
+        "perturbations_expert": perturbations_expert,
+        "preferer_simple": preferer_simple,
         "nb_donnes": nb_donnes,
         "nb_parties": 2 * nb_donnes,
     }
@@ -383,6 +413,17 @@ def afficher_rapport(resume: dict) -> None:
         print(f"    — dont coup légitimement impossible (aucun rapport "
              f"avec la vitesse) : {replis - replis_timeout}/{tours_expert} "
              f"tour(s) ({(replis - replis_timeout) / tours_expert * 100:.1f} %)")
+
+    perturbations = resume["perturbations_expert"]
+    if perturbations:
+        deplacees = [d for d, _ in perturbations]
+        modifiees = [m for _, m in perturbations]
+        reglage = "activé" if resume["preferer_simple"] else "désactivé"
+        print(f"  Perturbation du plateau par coup d'Expert (#199, "
+             f"preferer_simple {reglage}) : en moyenne "
+             f"{moyenne(deplacees):.2f} tuile(s) déplacée(s) et "
+             f"{moyenne(modifiees):.2f} combinaison(s) modifiée(s), "
+             f"sur {len(perturbations)} coup(s) posé(s) par Expert.")
     print("=" * 70)
 
 
@@ -405,6 +446,12 @@ def main(argv: list[str]) -> int:
                         help="Graine aléatoire (défaut 0, reproductible).")
     parser.add_argument("--max-tours", type=int, default=300,
                         help="Garde-fou anti-blocage par partie (défaut 300).")
+    parser.add_argument("--sans-preferer-simple", action="store_true",
+                        help="Désactive le critère de simplicité du "
+                             "solveur Expert (#199, activé par défaut) — "
+                             "pour comparer les deux versions par "
+                             "simulation (relancer la même commande avec "
+                             "et sans ce drapeau, même --seed).")
     parser.add_argument("-v", "--verbose", action="store_true",
                         help="Journalise chaque partie jouée.")
     args = parser.parse_args(argv[1:])
@@ -419,7 +466,8 @@ def main(argv: list[str]) -> int:
 
     debut = time.monotonic()
     resume = comparer(args.niveau_a, args.niveau_b, args.donnes, args.seed,
-                      args.max_tours)
+                      args.max_tours,
+                      preferer_simple=not args.sans_preferer_simple)
     duree = time.monotonic() - debut
 
     afficher_rapport(resume)
