@@ -38,6 +38,7 @@ une partie a été jouée avec des réglages personnalisés.
 import copy
 
 from rummikub import config
+from rummikub.moteur import description_coup
 from rummikub.moteur.ia import BUDGET_TEMPS_EXPERT
 from rummikub.moteur.partie import plateau_depuis_dict, _points_tuiles_posees
 from rummikub.moteur.solveur import resoudre_coup, BudgetDepasse
@@ -271,6 +272,114 @@ BUDGETS_SERIE_DEFAUT = (1.5, 3.0, 6.0, 10.0, 20.0, 30.0)
 
 
 # --------------------------------------------------------------------------- #
+# Description en français + complexité d'un coup (issue #196, suite de #193).
+# --------------------------------------------------------------------------- #
+
+def _signature_tuile(t: dict) -> tuple:
+    return (t.get("valeur"), t.get("couleur"), bool(t.get("est_joker")))
+
+
+def _relabeler_tuiles_indiscernables(plateau_avant: list, plateau_apres: list) -> list:
+    """Corrige, dans une COPIE de ``plateau_apres``, un artefact bénin du
+    solveur (``moteur/solveur.py`` ne raisonne que sur des « emplacements »
+    (couleur, valeur) — voir sa docstring — jamais sur l'identifiant physique
+    exact d'une tuile) : deux tuiles du plateau déjà posées avant le coup,
+    strictement indiscernables (même valeur/couleur, non joker), peuvent
+    échanger leurs identifiants entre deux combinaisons SANS aucun
+    changement réel de contenu. ``moteur/description_coup.py`` (#191), qui
+    suit chaque tuile par son identifiant, y lit alors un cycle de
+    dépendance (sa propre docstring : « dépendance cyclique improbable »)
+    qui casse son tri causal — jamais rencontré avec un coup réellement
+    joué (déterministe), mais possible avec un coup PROPOSÉ par le solveur
+    (nouveau cas d'usage de l'issue #196).
+
+    Repère les combinaisons d'après dont le CONTENU (multiset
+    valeur/couleur/joker, ignorant l'identifiant précis) est IDENTIQUE à une
+    combinaison d'avant encore non appariée, et relabellise ses tuiles pour
+    reprendre exactement les identifiants de cette combinaison d'avant —
+    cette combinaison devient alors un pur no-op pour
+    ``_construire_operations`` (ids avant == ids après), ce qui élimine
+    l'artefact. Ne modifie JAMAIS une tuile posée depuis la main (elle
+    n'apparaît dans aucune combinaison d'avant) ni une combinaison dont le
+    contenu a réellement changé — aucune information de jeu n'est perdue :
+    deux tuiles indiscernables échangées sans effet visible restent, par
+    définition, indiscernables pour le joueur."""
+    def _cle_tri(s):
+        return (s[0] is None, s[0] or 0, s[1] or "", s[2])
+
+    def _signature_combo(combo):
+        return tuple(sorted((_signature_tuile(t) for t in combo), key=_cle_tri))
+
+    plateau_apres = copy.deepcopy(plateau_apres)
+    avant_disponibles = {i: combo for i, combo in enumerate(plateau_avant) if combo}
+    ids_avant_total = {t["id"] for combo in plateau_avant for t in combo}
+    deja_apparies = set()
+
+    for combo_apres in plateau_apres:
+        if not combo_apres:
+            continue
+        if any(t["id"] not in ids_avant_total for t in combo_apres):
+            # Au moins une tuile de cette combinaison vient de la main (pas
+            # du plateau d'avant) : un changement RÉEL a eu lieu, jamais un
+            # pur artefact d'étiquetage — ne jamais relabelliser, même si le
+            # contenu ressemble par coïncidence à une combinaison d'avant.
+            continue
+        signature = _signature_combo(combo_apres)
+        for i, combo_avant in avant_disponibles.items():
+            if i in deja_apparies:
+                continue
+            if _signature_combo(combo_avant) != signature:
+                continue
+            dispo = list(combo_avant)
+            for k, t in enumerate(combo_apres):
+                cle = _signature_tuile(t)
+                for pos, cand in enumerate(dispo):
+                    if _signature_tuile(cand) == cle:
+                        combo_apres[k] = dict(t, id=cand["id"])
+                        dispo.pop(pos)
+                        break
+            deja_apparies.add(i)
+            break
+
+    return plateau_apres
+
+
+def _complexite_coup(resume: dict, etapes: list) -> dict:
+    """Mesure simple de la complexité d'un coup décrit par
+    ``moteur/description_coup.py`` (point 3 de l'issue #196) : nombre de
+    combinaisons du plateau touchées (défaites + créées + modifiées),
+    présence d'au moins un échange de joker, nombre d'étapes RÉELLES du
+    rejeu pas à pas (celles à titre vide — les écrans d'information
+    « Départ »/« Les jokers » ne comptent pas, par cohérence avec
+    ``nbChangementsPasAPas`` côté front-end). Un coup est classé
+    ``"complexe"`` s'il touche 3 combinaisons ou plus, ou s'il déplace au
+    moins un joker ; sinon ``"simple"`` (une ou deux combinaisons, sans
+    chaîne de jokers)."""
+    nb_touchees = (resume["nb_combinaisons_defaites"] + resume["nb_combinaisons_creees"]
+                   + resume["nb_combinaisons_modifiees"])
+    a_joker = bool(resume["jokers_deplaces"])
+    nb_etapes = len([e for e in etapes if not e["titre"]])
+    categorie = "complexe" if (nb_touchees >= 3 or a_joker) else "simple"
+    return {"nb_combinaisons_touchees": nb_touchees, "a_joker": a_joker,
+            "nb_etapes": nb_etapes, "categorie": categorie}
+
+
+def decrire_coup(plateau_avant: list, plateau_apres: list, nom: str = None) -> dict:
+    """Décrit en français un coup (celui proposé par le solveur, ou celui
+    réellement joué, pour comparaison) à partir du plateau avant/après,
+    accompagné de sa mesure de complexité (issue #196, points 1 et 3).
+    Réutilise tel quel ``moteur/description_coup.py`` (#189/#191) — aucun
+    changement au solveur, à l'IA ni au moteur.
+
+    Retourne ``{"texte": str, "etapes": [...], "complexite": {...}}``."""
+    plateau_apres = _relabeler_tuiles_indiscernables(plateau_avant or [], plateau_apres or [])
+    resume = description_coup.decrire_coup_ia(plateau_avant, plateau_apres, nom=nom)
+    etapes = description_coup.etapes_coup_ia(plateau_avant, plateau_apres)
+    return {"texte": resume["texte"], "etapes": etapes,
+            "complexite": _complexite_coup(resume, etapes)}
+
+
+# --------------------------------------------------------------------------- #
 # Extraction généralisée (poses comprises, joueur quelconque).
 # --------------------------------------------------------------------------- #
 
@@ -291,7 +400,11 @@ def extraire_toutes_decisions(data: dict, predicat_joueur) -> list:
     Pour une ``"pose"``, ``ids_tuiles_reelles`` (ids effectivement posés) est
     calculé par différence entre le chevalet d'avant et celui enregistré par
     l'action elle-même (état APRÈS la pose) — nécessaire à
-    :func:`detecter_reserves_joueur`.
+    :func:`detecter_reserves_joueur` ; ``plateau_apres_reel`` (le plateau tel
+    qu'enregistré par cette même action, ``None`` pour une pioche/passe) sert
+    à décrire en français le coup RÉELLEMENT joué, pour comparaison avec le
+    coup proposé par le solveur (issue #196, cas où le joueur bat le
+    solveur).
     """
     if not isinstance(data, dict):
         return []
@@ -331,6 +444,7 @@ def extraire_toutes_decisions(data: dict, predicat_joueur) -> list:
             continue
 
         ids_tuiles_reelles = []
+        plateau_apres_reel = None
         if action == "pose":
             mains_apres = actuelle.get("mains_joueurs")
             if not isinstance(mains_apres, list) or not (0 <= idx < len(mains_apres)) \
@@ -342,6 +456,9 @@ def extraire_toutes_decisions(data: dict, predicat_joueur) -> list:
             ids_avant = {t.get("id") for t in chevalet_dict if isinstance(t, dict)}
             ids_apres = {t.get("id") for t in chevalet_apres if isinstance(t, dict)}
             ids_tuiles_reelles = sorted(ids_avant - ids_apres)
+            plateau_apres_courant = actuelle.get("plateau")
+            if isinstance(plateau_apres_courant, list):
+                plateau_apres_reel = plateau_apres_courant
 
         mise_initiale_faite = any(
             a.get("action") == "pose" and a.get("auteur_index") == idx
@@ -361,6 +478,7 @@ def extraire_toutes_decisions(data: dict, predicat_joueur) -> list:
             "action": action,
             "nb_tuiles_jouees": actuelle.get("nb_tuiles_posees") or 0,
             "ids_tuiles_reelles": ids_tuiles_reelles,
+            "plateau_apres_reel": plateau_apres_reel,
             "moment": "apres_mise" if mise_initiale_faite else "avant_mise",
             "idx": idx,
             "etat": {
@@ -416,7 +534,17 @@ def analyser_decision_complete(decision: dict, budget_genereux: float = 10.0,
     (``inconclusif``), aucune des trois catégories ci-dessus n'est retenue
     (absence de preuve, pas preuve d'absence — voir avertissement du
     module) : ne JAMAIS afficher ce cas comme « pas de coup raté », toujours
-    comme « inconclusif » (point 3 de l'issue)."""
+    comme « inconclusif » (point 3 de l'issue).
+
+    Issue #196 (suite de #193) : pour toute décision signalée (``coup_rate``,
+    ``pose_sous_optimale`` ou ``joueur_bat_solveur``) où le solveur a
+    effectivement proposé un plateau, ``description_solveur`` (voir
+    :func:`decrire_coup`) donne le texte français du coup proposé, ses
+    étapes et sa complexité — ``None`` sinon (y compris si le solveur ne
+    trouve littéralement aucun coup). Pour ``joueur_bat_solveur``,
+    ``description_reel`` décrit en plus, de la même façon, le coup
+    RÉELLEMENT joué par le joueur (à partir de ``plateau_apres_reel``), pour
+    comparaison."""
     def _essayer(budget):
         try:
             return resoudre_coup(decision["etat"], decision["idx"], budget_temps=budget)
@@ -436,6 +564,26 @@ def analyser_decision_complete(decision: dict, budget_genereux: float = 10.0,
     coup_rate = (not inconclusif) and action in ("pioche", "passe") and nb_solveur > 0
     pose_sous_optimale = (not inconclusif) and action == "pose" and ecart > 0
     joueur_bat_solveur = (not inconclusif) and action == "pose" and ecart < 0
+
+    # Description en français + complexité du coup proposé par le solveur
+    # (issue #196) : seulement pour les décisions signalées (sinon rien à
+    # comparer), et seulement si le solveur a effectivement proposé un
+    # plateau (``coup`` peut être ``None`` même avec ``joueur_bat_solveur``,
+    # si le solveur ne trouve absolument aucun coup, ``nb_solveur == 0``).
+    description_solveur = None
+    if coup is not None and (coup_rate or pose_sous_optimale or joueur_bat_solveur):
+        description_solveur = decrire_coup(decision["etat"].get("plateau") or [],
+                                            coup["nouveau_plateau"],
+                                            nom=decision.get("nom"))
+
+    # Description du coup RÉELLEMENT joué par le joueur, pour comparaison,
+    # uniquement quand le solveur est battu (le cas le plus précieux —
+    # point 1 de l'issue #196).
+    description_reel = None
+    if joueur_bat_solveur and decision.get("plateau_apres_reel") is not None:
+        description_reel = decrire_coup(decision["etat"].get("plateau") or [],
+                                         decision["plateau_apres_reel"],
+                                         nom=decision.get("nom"))
 
     points_ouverture = None
     if coup and action != "pose" and decision["moment"] == "avant_mise":
@@ -463,6 +611,8 @@ def analyser_decision_complete(decision: dict, budget_genereux: float = 10.0,
         "points_ouverture": points_ouverture,
         "budget_limite": budget_limite,
         "inconclusif": inconclusif,
+        "description_solveur": description_solveur,
+        "description_reel": description_reel,
     }
 
 
@@ -494,6 +644,8 @@ def _bucket_complet_vierge() -> dict:
         "joueur_bat_solveur": 0,
         "budget_limite": 0,
         "inconclusifs": 0,
+        "coups_simples": 0,
+        "coups_complexes": 0,
     }
 
 
@@ -505,7 +657,13 @@ def calculer_resume_complet(resultats: list) -> dict:
     tuiles manquantes cumulées ``tuiles_manquantes_poses``). ``niveau`` vaut
     ``None`` pour un joueur humain (voir ``extraire_decisions_joueur`` — pas
     l'usage prévu de cette fonction, voir plutôt
-    :func:`resume_joueur_humain`)."""
+    :func:`resume_joueur_humain`).
+
+    Issue #196 (point 3) : ``coups_simples``/``coups_complexes`` répartissent
+    l'ensemble des coups ratés/poses sous-optimales (les deux catégories
+    ci-dessus confondues) selon la complexité du coup proposé par le solveur
+    (voir :func:`decrire_coup`/:func:`_complexite_coup`) — c'est cette
+    répartition qui dit si les coups ratés sont à la portée d'un humain."""
     out: dict = {}
     for r in resultats:
         bucket = out.setdefault(r["niveau"], {}).setdefault(
@@ -523,6 +681,13 @@ def calculer_resume_complet(resultats: list) -> dict:
             bucket["tuiles_manquantes_poses"] += r["nb_tuiles_manquantes"] or 0
             if r.get("budget_limite"):
                 bucket["budget_limite"] += 1
+        if r["coup_rate"] or r["pose_sous_optimale"]:
+            complexite = (r.get("description_solveur") or {}).get("complexite")
+            if complexite:
+                if complexite["categorie"] == "simple":
+                    bucket["coups_simples"] += 1
+                else:
+                    bucket["coups_complexes"] += 1
     return out
 
 
@@ -679,7 +844,15 @@ def resume_joueur_humain(decisions: list, resultats: list, reserves: dict) -> di
     d'un petit échantillon de parties) : nombre de tours analysés, part des
     poses qui atteignent le maximum du solveur, nombre moyen de tuiles
     posées par tour contre le maximum, fréquence des pioches alors qu'un
-    coup existait."""
+    coup existait.
+
+    Issue #196 (point 1/3) : chaque entrée de ``coups_peut_etre_rates``/
+    ``solveur_bat`` porte en plus ``description_solveur`` (texte, étapes,
+    complexité du coup proposé par le solveur — voir :func:`decrire_coup`) ;
+    ``solveur_bat`` porte aussi ``description_reel`` (le coup réellement
+    joué, pour comparaison). ``complexite`` répartit ``coups_peut_etre_rates``
+    en coups simples/complexes (même seuil que pour l'IA, voir
+    :func:`calculer_resume_complet`)."""
     exclure = reserves["indices_a_exclure"]
     coups_peut_etre_rates, solveur_bat = [], []
     nb_poses = nb_poses_max = 0
@@ -719,9 +892,26 @@ def resume_joueur_humain(decisions: list, resultats: list, reserves: dict) -> di
         if i in exclure:
             continue
         if r["pose_sous_optimale"] or r["coup_rate"]:
-            coups_peut_etre_rates.append(dict(entree, nb_tuiles_manquantes=r["nb_tuiles_manquantes"]))
+            coups_peut_etre_rates.append(dict(
+                entree, nb_tuiles_manquantes=r["nb_tuiles_manquantes"],
+                description_solveur=r.get("description_solveur")))
         if r["joueur_bat_solveur"]:
-            solveur_bat.append(dict(entree, nb_tuiles_excedentaires=r["nb_tuiles_excedentaires"]))
+            solveur_bat.append(dict(
+                entree, nb_tuiles_excedentaires=r["nb_tuiles_excedentaires"],
+                description_solveur=r.get("description_solveur"),
+                description_reel=r.get("description_reel")))
+
+    # Répartition simple/complexe des coups peut-être ratés (issue #196,
+    # point 3) — comme pour l'IA (voir calculer_resume_complet), seulement
+    # sur les cas où le solveur a effectivement proposé un coup décrit.
+    nb_simples = nb_complexes = 0
+    for e in coups_peut_etre_rates:
+        complexite = (e.get("description_solveur") or {}).get("complexite")
+        if complexite:
+            if complexite["categorie"] == "simple":
+                nb_simples += 1
+            else:
+                nb_complexes += 1
 
     return {
         "nb_tours_analyses": len([r for r in resultats if not r["inconclusif"]]),
@@ -729,6 +919,7 @@ def resume_joueur_humain(decisions: list, resultats: list, reserves: dict) -> di
         "solveur_bat": solveur_bat,
         "reserves_reussies": reserves["reserves_reussies"],
         "reserves_perdues": reserves["reserves_perdues"],
+        "complexite": {"simples": nb_simples, "complexes": nb_complexes},
         "style": {
             "nb_poses": nb_poses,
             "part_poses_au_max": (nb_poses_max / nb_poses) if nb_poses else None,
