@@ -217,6 +217,22 @@ def test_joker_recupere_puis_rejoue_ailleurs():
                         if i > idx_libere and "joker_1" not in _ids_cadre(e["cadre"]))
     assert idx_libere < idx_repris
 
+    # Surbrillance de l'écran « Les jokers » (issue #209) : le joker ET sa
+    # tuile de remplacement (le 7 rouge), tous deux nommés par la phrase, sont
+    # mis en avant — ni plus, ni moins.
+    assert set(jokers_ecran["surbrillance"]) == {"joker_1", "rouge_7_a"}
+
+
+def test_surbrillance_jokers_libere_sans_remplacant():
+    # Vrai coup de Clara (tour 45) : son joker est simplement LIBÉRÉ (aucun
+    # remplaçant) de la suite bleue puis rejoint un groupe de 2. Seul le joker
+    # est nommé par la phrase, donc seul le joker est mis en avant (issue #209).
+    avant, apres = _charger_plateaux("pas_a_pas_clara_tour45.json")
+    etapes = etapes_coup_ia(avant, apres)
+    jokers_ecran = next(e for e in etapes if e["titre"] == "Les jokers")
+    assert "libéré" in jokers_ecran["texte"]
+    assert jokers_ecran["surbrillance"] == ["joker_1"]
+
 
 # --------------------------------------------------- démantèlement d'un groupe
 

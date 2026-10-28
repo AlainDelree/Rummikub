@@ -1011,8 +1011,16 @@ def _etapes_coup_ia(plateau_avant: list, plateau_apres: list,
                 phrases.append(
                     f"Le joker {_contracter('de', origine)} est "
                     f"libéré et rejoint {destination}.")
-        etapes.append(etat_courant("Les jokers", " ".join(phrases),
-                                    [depl["id"] for depl in jokers]))
+        # Surbrillance de l'écran « Les jokers » (issue #209) : chaque joker ET,
+        # s'il est remplacé, sa ou ses tuiles de remplacement — exactement les
+        # tuiles que les phrases ci-dessus nomment, pour que la mise en avant
+        # côté front corresponde mot pour mot au texte.
+        ids_jokers = []
+        for depl in jokers:
+            ids_jokers.append(depl["id"])
+            for d in (depl["remplacant"] or []):
+                ids_jokers.append(d["id"])
+        etapes.append(etat_courant("Les jokers", " ".join(phrases), ids_jokers))
 
     # Une étape par opération, dans l'ordre causal déjà calculé. Pour une
     # "update", le cadre/plateau sont TOUJOURS mis à jour avec les listes

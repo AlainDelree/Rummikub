@@ -1545,9 +1545,11 @@ position d'après.
   - `rendreApercuPlateauPasAPas` ajoute `.combi-provisoire` (liseré ambre
     pointillé + mention, visuellement distinct de `.combi-invalide` qui
     reste réservée aux vraies erreurs du joueur sur le vrai tapis) sur les
-    combinaisons listées dans `etape.provisoires`, et `.tuile-ia-highlight`
-    (surbrillance déjà existante) sur les tuiles listées dans
-    `etape.surbrillance`.
+    combinaisons listées dans `etape.provisoires`, et la **surbrillance forte**
+    `.tuile-pas-active` (issue #209, voir §12quinquies — remplace l'ancien
+    `.tuile-ia-highlight` discret, désormais réservé au rejeu animé) sur les
+    tuiles listées dans `etape.surbrillance`. `rendreCadrePasAPas` applique la
+    même `.tuile-pas-active` aux tuiles du cadre nommées par l'étape.
   - `#btn-pas-a-pas-coup-ia` démasqué par `rafraichirBoutonRejouerIA()` —
     critère revu par #207 (`coupMeriteePasAPas`, voir §12quater), qui remplace
     l'ancien `nbChangementsPasAPas(coup.etapes) >= 2`.
@@ -1764,6 +1766,53 @@ défauts d'affichage. **Aucun changement au moteur, à l'IA ni à la sauvegarde.
   `tests/test_playwright_pas_a_pas.py` (bouton présent pour Clara, absent pour
   une création pure, ligne de taille, bouton « Détailler », bascule
   Avant/Après).
+
+### 12quinquies. Surbrillance forte de la tuile active (issue #209)
+
+Dans le pas-à-pas condensé (#207), chaque étape décrit un geste précis (« Le
+2 bleu, le 2 noir et le joker forment un groupe de 2 ») mais la ou les tuiles
+concernées n'avaient qu'un liseré discret (`.tuile-ia-highlight`), noyé sous le
+cadre « provisoire » et le liseré de la combinaison modifiée. #209 rend la
+tuile active **repérable d'un coup d'œil, sans lire la phrase**.
+**Front-end uniquement** (`jeu.css`/`jeu.js`), plus un ajustement de la liste
+`surbrillance` côté `description_coup.py` pour l'écran « Les jokers » ; aucun
+changement au moteur de jeu, à l'IA, à la sauvegarde ni au texte/découpage.
+
+- **Nouvelle classe `.tuile-pas-active`** (`jeu.css`) : contour épais magenta
+  (3 px), double halo pulsé, léger agrandissement (`scale(1.1)`) et fond
+  légèrement teinté (voile `::after` glissé SOUS le chiffre via
+  `.tuile-pas-active > * { z-index:1 }`, pour ne jamais masquer la valeur ni la
+  couleur). **Intensité volontairement supérieure** à `.combi-modifiee`
+  (liseré bleu 2 px) et à `.combi-provisoire` (liseré ambre pointillé) → la
+  hiérarchie saute aux yeux : d'abord la tuile active, puis la combinaison
+  touchée, puis le reste. Le magenta est absent des couleurs de tuile
+  (rouge/bleu/jaune/noir) et des deux liserés, donc aucune confusion ; visible
+  sur le fond vert du plateau comme sur le fond clair du cadre.
+- **Remplacement de `.tuile-ia-highlight`** dans `rendreApercuPlateauPasAPas`
+  par `.tuile-pas-active`. `.tuile-ia-highlight` reste utilisée UNIQUEMENT par
+  le rejeu animé (`animerPoseTuiles`), inchangé.
+- **Surbrillance aussi dans le cadre** : `rendreCadrePasAPas(conteneur, cadre,
+  surbrillance)` applique `.tuile-pas-active` aux tuiles du cadre « tuiles à
+  placer » nommées par l'étape (par-dessus leur pourtour de provenance
+  vert/orange) — écran « Départ » (tuiles de la main prêtes à poser) et toute
+  tuile qui vient de rejoindre le cadre.
+- **Cohérence texte ↔ surbrillance** : les tuiles mises en avant à une étape
+  sont EXACTEMENT celles de `etape.surbrillance`, plateau et cadre confondus.
+  Correctif associé dans `description_coup.py` : la `surbrillance` de l'écran
+  « Les jokers » inclut désormais le joker ET, s'il est remplacé, sa ou ses
+  tuiles de remplacement (auparavant le seul id du joker), pour correspondre
+  mot pour mot à la phrase « Le joker … est remplacé par … ».
+- Tests : `tests/test_description_coup.py`
+  (`test_joker_recupere_puis_rejoue_ailleurs` vérifie la `surbrillance`
+  joker+remplaçant ; `test_surbrillance_jokers_libere_sans_remplacant` qu'un
+  joker simplement libéré ne met en avant que lui) ;
+  `tests/test_playwright_pas_a_pas.py`
+  (`test_surbrillance_forte_suit_exactement_les_tuiles_de_chaque_etape` : à
+  chaque étape du coup de Clara, les tuiles `.tuile-pas-active`
+  plateau+cadre == `etape.surbrillance`, au moins une par étape ;
+  `test_surbrillance_forte_joker_et_remplacant_plateau_et_cadre` : écran
+  « Les jokers » du cas Bruno, joker sur le plateau + remplaçant dans le cadre
+  tous deux mis en avant).
 
 ## 13. Pistes d'amélioration de l'IA à tester (issue #195)
 

@@ -499,6 +499,43 @@ body { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
   border-color: #f59e0b;
 }
 
+/* Surbrillance FORTE de la ou des tuiles concernées par l'étape en cours du
+   pas-à-pas (issue #209), appliquée aussi bien sur l'aperçu du plateau que
+   dans le cadre « tuiles à placer ». Volontairement BEAUCOUP plus marquée que
+   le liseré bleu d'une combinaison modifiée (.combi-modifiee) et que le cadre
+   ambre « provisoire » (.combi-provisoire) : la hiérarchie doit sauter aux
+   yeux — d'abord la tuile active, puis la combinaison touchée, puis le reste.
+   Contour épais magenta + double halo + léger agrandissement + fond légèrement
+   teinté (voile ::after glissé SOUS le chiffre, donc valeur et couleur de la
+   tuile restent lisibles sur n'importe quelle couleur et sur les deux thèmes).
+   Le magenta est absent des couleurs de tuile (rouge/bleu/jaune/noir) comme
+   des deux liserés ci-dessus, pour ne jamais prêter à confusion. */
+.tuile-jeu.tuile-pas-active {
+  border: 3px solid #d6176a;
+  transform: scale(1.1);
+  z-index: 3;
+  box-shadow: 0 0 0 3px rgba(236,64,140,0.55),
+              0 0 16px 4px rgba(236,64,140,0.8),
+              0 3px 5px rgba(40,30,10,0.38);
+  animation: pulse-pas-active 1.1s ease-in-out infinite alternate;
+}
+/* Contenu de la tuile (disque + chiffre + marque gravée) remonté au-dessus du
+   voile teinté ::after, pour que rien ne masque la valeur. */
+.tuile-jeu.tuile-pas-active > * { position: relative; z-index: 1; }
+.tuile-jeu.tuile-pas-active::after {
+  content: ""; position: absolute; inset: 0; z-index: 0;
+  background: rgba(236,64,140,0.16); border-radius: inherit;
+  pointer-events: none;
+}
+@keyframes pulse-pas-active {
+  from { box-shadow: 0 0 0 3px rgba(236,64,140,0.45),
+                     0 0 10px 2px rgba(236,64,140,0.6),
+                     0 3px 5px rgba(40,30,10,0.38); }
+  to   { box-shadow: 0 0 0 3px rgba(236,64,140,0.72),
+                     0 0 20px 6px rgba(236,64,140,0.95),
+                     0 3px 5px rgba(40,30,10,0.38); }
+}
+
 /* Indicateur « L'IA réfléchit… » sur la fiche active */
 .fiche-joueur.ia-reflechit .meta-fiche::after {
   content: " …";

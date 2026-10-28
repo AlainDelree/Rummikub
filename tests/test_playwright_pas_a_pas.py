@@ -150,6 +150,57 @@ def test_cadre_se_vide_progressivement_et_plateau_final_correct(page):
     assert page.locator("#btn-pas-a-pas-suivant").is_disabled()
 
 
+def _ids_surbrillance_forte(page):
+    """Ids des tuiles portant la classe de surbrillance FORTE de l'étape
+    courante (issue #209), que ce soit dans l'aperçu du plateau ou dans le
+    cadre « tuiles à placer »."""
+    return set(page.locator(
+        "#zone-plateau-pas-a-pas .tuile-jeu.tuile-pas-active,"
+        " #cadre-tuiles-pas-a-pas .tuile-jeu.tuile-pas-active"
+    ).evaluate_all("els => els.map(e => e.dataset.id)"))
+
+
+def test_surbrillance_forte_suit_exactement_les_tuiles_de_chaque_etape(page):
+    """Issue #209 : à CHAQUE étape, les tuiles portant la classe de
+    surbrillance forte sont exactement celles que la phrase nomme
+    (etape.surbrillance), ni plus ni moins, plateau et cadre confondus — et il
+    y en a au moins une dès que l'étape décrit un geste sur une tuile."""
+    coup = _coup_clara()
+    _injecter_coup(page, coup)
+    page.click("#btn-pas-a-pas-coup-ia")
+
+    etapes = coup["etapes"]
+    assert len(etapes) >= 2  # coup à plusieurs étapes (point 5 de l'issue)
+    for i, etape in enumerate(etapes):
+        if i:
+            page.click("#btn-pas-a-pas-suivant")
+        attendus = set(etape["surbrillance"])
+        assert _ids_surbrillance_forte(page) == attendus, f"étape {i}"
+        # Chaque étape du coup de Clara décrit un geste → au moins une tuile.
+        assert attendus, f"étape {i} sans tuile mise en avant"
+
+
+def test_surbrillance_forte_joker_et_remplacant_plateau_et_cadre(page):
+    """Issue #209, point 2 : à l'écran « Les jokers » d'un coup où un joker est
+    remplacé (cas Bruno), le joker (sur le plateau) ET sa tuile de remplacement
+    (dans le cadre) sont tous deux mis en avant."""
+    _injecter_coup(page, _coup_bruno())
+    page.click("#btn-pas-a-pas-coup-ia")
+    page.click("#btn-pas-a-pas-suivant")  # étape 1 : « Les jokers »
+    assert page.evaluate(
+        'document.getElementById("soustitre-etape-pas-a-pas").textContent'
+    ) == "Les jokers"
+    # joker_1 est encore dans son groupe d'origine (plateau), bleu_3_a attend
+    # dans le cadre : la surbrillance forte couvre les deux provenances.
+    assert _ids_surbrillance_forte(page) == {"joker_1", "bleu_3_a"}
+    assert page.locator(
+        "#cadre-tuiles-pas-a-pas .tuile-jeu.tuile-pas-active"
+    ).count() == 1
+    assert page.locator(
+        "#zone-plateau-pas-a-pas .tuile-jeu.tuile-pas-active"
+    ).count() == 1
+
+
 def test_quitter_pas_a_pas_ne_modifie_jamais_la_partie(page):
     coup = _coup_bruno()
     _injecter_coup(page, coup)

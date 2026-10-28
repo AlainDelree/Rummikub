@@ -1893,8 +1893,11 @@ function nbChangementsPasAPas(etapes) {
 // identique au vrai tapis, mais sans AUCUN écouteur d'événement. Marque les
 // combinaisons "provisoires" (issue #191 : une combinaison mi-démantelée,
 // temporairement invalide, affichée différemment d'une vraie "combinaison
-// invalide" du jeu) et surligne les tuiles juste posées/libérées en
-// réutilisant la surbrillance existante (tuile-ia-highlight).
+// invalide" du jeu) et met en SURBRILLANCE FORTE (tuile-pas-active, issue
+// #209) la ou les tuiles concernées par l'étape courante — exactement celles
+// que la phrase de l'étape nomme (etape.surbrillance), pour qu'on les repère
+// d'un coup d'œil, nettement plus que le cadre provisoire et le liseré de la
+// combinaison modifiée.
 function rendreApercuPlateauPasAPas(conteneur, plateau, provisoires, surbrillance) {
   conteneur.innerHTML = "";
   const provSet = new Set(provisoires || []);
@@ -1905,7 +1908,7 @@ function rendreApercuPlateauPasAPas(conteneur, plateau, provisoires, surbrillanc
     if (provSet.has(idx)) groupe.classList.add("combi-provisoire");
     combo.forEach((d) => {
       const el = tuileDepuisDict(d);
-      if (surbSet.has(d.id)) el.classList.add("tuile-ia-highlight");
+      if (surbSet.has(d.id)) el.classList.add("tuile-pas-active");
       groupe.appendChild(el);
     });
     conteneur.appendChild(groupe);
@@ -1915,9 +1918,14 @@ function rendreApercuPlateauPasAPas(conteneur, plateau, provisoires, surbrillanc
 // Construit le cadre « tuiles à placer » : tuiles de la main (pourtour vert,
 // même code couleur que la légende "ce-tour") et tuiles libérées du plateau
 // (pourtour orange, "deplacee-tapis") pas encore replacées à ce stade.
-// Affiche "vide" une fois le cadre réellement vide (dernière étape).
-function rendreCadrePasAPas(conteneur, cadre) {
+// Affiche "vide" une fois le cadre réellement vide (dernière étape). Une tuile
+// du cadre nommée par l'étape courante (etape.surbrillance : par ex. une tuile
+// de la main à l'écran « Départ », ou une tuile qui vient de rejoindre le
+// cadre) reçoit la MÊME surbrillance forte (tuile-pas-active) que sur le
+// plateau (issue #209), par-dessus son pourtour de provenance vert/orange.
+function rendreCadrePasAPas(conteneur, cadre, surbrillance) {
   conteneur.innerHTML = "";
+  const surbSet = new Set(surbrillance || []);
   if (!cadre || !cadre.length) {
     const vide = document.createElement("span");
     vide.className = "cadre-vide";
@@ -1928,6 +1936,7 @@ function rendreCadrePasAPas(conteneur, cadre) {
   cadre.forEach((entree) => {
     const el = tuileDepuisDict(entree.tuile);
     el.classList.add(entree.origine === "main" ? "ce-tour" : "deplacee-tapis");
+    if (surbSet.has(entree.tuile.id)) el.classList.add("tuile-pas-active");
     conteneur.appendChild(el);
   });
 }
@@ -1942,7 +1951,8 @@ function rendreEtapePasAPas() {
     document.getElementById("zone-plateau-pas-a-pas"), etape.plateau,
     etape.provisoires, etape.surbrillance);
   rendreCadrePasAPas(
-    document.getElementById("cadre-tuiles-pas-a-pas"), etape.cadre);
+    document.getElementById("cadre-tuiles-pas-a-pas"), etape.cadre,
+    etape.surbrillance);
   document.getElementById("compteur-etape-pas-a-pas").textContent =
     "Étape " + (indexEtapePasAPas + 1) + " / " + etapesPasAPasActuelles.length;
   document.getElementById("btn-pas-a-pas-precedent").disabled =
