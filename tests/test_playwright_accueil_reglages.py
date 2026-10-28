@@ -1,8 +1,9 @@
-"""Vérification du front-end de l'écran d'accueil pour le réglage « Nombre de
-manches » réintroduit (issue #203, suite de #192), avec Playwright, chargé
-directement sur `accueil.html` (jamais la vraie application pywebview,
-inaccessible en test, voir CONTEXTE.md §7) : on mocke `window.pywebview.api`
-et on pilote l'interface comme le ferait un joueur.
+"""Vérification du front-end de l'écran d'accueil pour le choix « Nombre de
+manches » (issue #203, suite de #192), déplacé sur la carte principale de
+l'accueil par #205 (juste au-dessus de « Lancer la partie », plus rien dans
+les Réglages). Avec Playwright, chargé directement sur `accueil.html` (jamais
+la vraie application pywebview, inaccessible en test, voir CONTEXTE.md §7) :
+on mocke `window.pywebview.api` et on pilote l'interface comme un joueur.
 
 Nécessite `pip install playwright` puis `playwright install chromium` (pas
 une dépendance de production : absente de requirements.txt, le test est
@@ -19,7 +20,7 @@ playwright_sync = pytest.importorskip("playwright.sync_api")
 WEB_DIR = Path(__file__).resolve().parents[1] / "src" / "rummikub" / "ui" / "web"
 
 # Réglages sauvegardés avec un nombre de manches valide (3) : la valeur que
-# l'app doit réafficher et transmettre à la création de la partie.
+# l'app doit réafficher sur l'accueil et transmettre à la création de la partie.
 _REGLAGES = {
     "prenom": "Alain",
     "avatar_index": 0,
@@ -84,26 +85,34 @@ def page(browser):
     pg.close()
 
 
-def test_champ_nombre_de_manches_present(page):
-    # Le champ réintroduit par #203 existe dans le panneau « Règles du jeu ».
+def test_champ_nombre_de_manches_sur_accueil(page):
+    # Le choix est désormais sur la carte principale, juste avant « Lancer ».
+    champ = page.query_selector("#acc-manches")
+    assert champ is not None
+    assert "Nombre de manches" in page.inner_text("#choix-manches")
+    # Il précède immédiatement le bouton « Lancer la partie » dans le DOM.
+    position = page.evaluate(
+        "document.getElementById('choix-manches').compareDocumentPosition("
+        "document.getElementById('btn-lancer'))")
+    assert position & 4  # DOCUMENT_POSITION_FOLLOWING : btn-lancer est après
+
+
+def test_champ_absent_des_reglages(page):
+    # Plus aucun champ « Nombre de manches » dans l'onglet « Règles du jeu ».
     page.click("#btn-reglages")
     page.click("button[data-onglet='regles']")
-    assert page.query_selector("#rgl-manches") is not None
-    assert "Nombre de manches" in page.inner_text("#overlay-reglages")
+    assert page.query_selector("#rgl-manches") is None
+    assert "Nombre de manches" not in page.inner_text("#overlay-reglages")
 
 
 def test_valeur_rechargee_depuis_les_reglages(page):
-    # remplirChampsReglages() reflète la valeur enregistrée (3 ici).
-    page.click("#btn-reglages")
-    page.click("button[data-onglet='regles']")
-    assert page.input_value("#rgl-manches") == "3"
+    # remplirChampManches() reflète la valeur enregistrée (3 ici) sur l'accueil.
+    assert page.input_value("#acc-manches") == "3"
 
 
-def test_reglages_enregistrent_le_nombre_de_manches(page):
-    page.click("#btn-reglages")
-    page.click("button[data-onglet='regles']")
-    page.select_option("#rgl-manches", "5")
-    page.click("#btn-fermer-rgl")
+def test_choix_enregistre_le_nombre_de_manches(page):
+    # Changer le choix sur l'accueil le mémorise via sauvegarder_reglages.
+    page.select_option("#acc-manches", "5")
     page.wait_for_function("window._reglagesSauvegardes !== null")
     donnees = page.evaluate("window._reglagesSauvegardes")
     assert donnees["nb_manches"] == 5
@@ -111,13 +120,10 @@ def test_reglages_enregistrent_le_nombre_de_manches(page):
 
 
 def test_lancer_partie_transmet_le_nombre_de_manches(page):
-    # Ajoute un adversaire puis règle 4 manches et lance : lancer_nouvelle_partie
-    # doit recevoir nb_manches dans les règles.
+    # Ajoute un adversaire, règle 4 manches sur l'accueil et lance :
+    # lancer_nouvelle_partie doit recevoir nb_manches dans les règles.
     page.click("button.btn-ajout-niveau[data-niveau='Facile']")
-    page.click("#btn-reglages")
-    page.click("button[data-onglet='regles']")
-    page.select_option("#rgl-manches", "4")
-    page.click("#btn-fermer-rgl")
+    page.select_option("#acc-manches", "4")
     page.click("#btn-lancer")
     page.wait_for_function("window._partieLancee !== null")
     config = page.evaluate("window._partieLancee")
@@ -127,8 +133,8 @@ def test_lancer_partie_transmet_le_nombre_de_manches(page):
 
 def test_valeur_hors_bornes_retombe_sur_1(page):
     # Une valeur enregistrée hors de [1, 9] (ou absente) est réaffichée comme 1.
-    page.evaluate("etat.reglages.nb_manches = 99; remplirChampsReglages();")
-    assert page.input_value("#rgl-manches") == "1"
-    page.evaluate("delete etat.reglages.nb_manches; remplirChampsReglages();")
-    assert page.input_value("#rgl-manches") == "1"
+    page.evaluate("etat.reglages.nb_manches = 99; remplirChampManches();")
+    assert page.input_value("#acc-manches") == "1"
+    page.evaluate("delete etat.reglages.nb_manches; remplirChampManches();")
+    assert page.input_value("#acc-manches") == "1"
     assert page._erreurs_console == []

@@ -33,6 +33,24 @@
       <div id="liste-parties"></div>
     </section>
 
+    <!-- Nombre de manches du match (issue #205) : choix propre à chaque partie,
+         compact, juste au-dessus du bouton Lancer (même style que « Ajouter
+         un adversaire : »). Mémorisé sous la clé nb_manches. -->
+    <div id="choix-manches">
+      <label id="label-manches" for="acc-manches">Nombre de manches :</label>
+      <select id="acc-manches">
+        <option value="1" selected>1</option>
+        <option value="2">2</option>
+        <option value="3">3</option>
+        <option value="4">4</option>
+        <option value="5">5</option>
+        <option value="6">6</option>
+        <option value="7">7</option>
+        <option value="8">8</option>
+        <option value="9">9</option>
+      </select>
+    </div>
+
     <button id="btn-lancer" class="btn-primaire">Lancer la partie</button>
   </div>
 
@@ -72,18 +90,6 @@
           <label><input type="radio" name="joker-val" value="25"> 25 pts</label>
           <label><input type="radio" name="joker-val" value="30" checked> 30 pts</label>
         </div>
-        <label>Nombre de manches<br>
-          <select id="rgl-manches">
-            <option value="1" selected>1</option>
-            <option value="2">2</option>
-            <option value="3">3</option>
-            <option value="4">4</option>
-            <option value="5">5</option>
-            <option value="6">6</option>
-            <option value="7">7</option>
-            <option value="8">8</option>
-            <option value="9">9</option>
-          </select></label>
       </div>
       <button id="btn-fermer-rgl" class="btn-primaire" style="margin-top:16px">Fermer</button>
     </div>

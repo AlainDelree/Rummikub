@@ -37,6 +37,8 @@ async function init() {
 
   // Pré-remplir les champs de réglages
   remplirChampsReglages();
+  // Pré-sélectionner le nombre de manches mémorisé sur l'écran d'accueil.
+  remplirChampManches();
 }
 
 // ---------------------------------------------------------------- joueurs (humain + IA)
@@ -226,14 +228,6 @@ function remplirChampsReglages() {
   document.querySelectorAll("input[name='joker-val']").forEach((el) => {
     el.checked = el.value === jokerVal;
   });
-  // Nombre de manches (issue #203) : 1 à 9, défaut 1. Un ancien config.json
-  // sans la clé (ou avec une valeur hors bornes) retombe proprement sur 1.
-  const champManches = document.getElementById("rgl-manches");
-  if (champManches) {
-    let nbManches = parseInt(r.nb_manches, 10);
-    if (!(nbManches >= 1 && nbManches <= 9)) nbManches = 1;
-    champManches.value = String(nbManches);
-  }
   const modeReorg = r.mode_reorg || "clic";
   document.querySelectorAll("input[name='mode-reorg']").forEach((el) => {
     el.checked = el.value === modeReorg;
@@ -258,11 +252,34 @@ function construireGrilleAvatars() {
   });
 }
 
-// Lit le champ « Nombre de manches » (1 à 9), avec repli sur 1 (issue #203).
+// Lit le champ « Nombre de manches » de l'écran d'accueil (1 à 9), avec repli
+// sur 1 (issue #203, déplacé sur l'accueil par #205).
 function lireNbManches() {
-  const el = document.getElementById("rgl-manches");
+  const el = document.getElementById("acc-manches");
   const n = el ? parseInt(el.value, 10) : 1;
   return (n >= 1 && n <= 9) ? n : 1;
+}
+
+// Pré-sélectionne le nombre de manches mémorisé (clé nb_manches) sur l'écran
+// d'accueil (issue #205). Une valeur absente ou hors de [1, 9] retombe sur 1,
+// sans erreur même si un ancien config.json porte encore la clé.
+function remplirChampManches() {
+  const el = document.getElementById("acc-manches");
+  if (!el) return;
+  let n = parseInt((etat.reglages || {}).nb_manches, 10);
+  if (!(n >= 1 && n <= 9)) n = 1;
+  el.value = String(n);
+}
+
+// Mémorise le nombre de manches choisi sur l'accueil, sous la même clé et via
+// la même API que les autres réglages (issue #205). Silencieux : pas de toast,
+// le choix se fait au fil de l'eau sur la page principale.
+async function enregistrerNbManches() {
+  try {
+    etat.reglages = await window.pywebview.api.sauvegarder_reglages({
+      nb_manches: lireNbManches(),
+    });
+  } catch (e) { /* enregistrement silencieux */ }
 }
 
 async function sauvegarderReglages() {
@@ -342,6 +359,7 @@ function brancherEvenements() {
     b.addEventListener("click", () => ajouterAdversaire(b.dataset.niveau));
   });
   document.getElementById("btn-lancer").addEventListener("click", lancerPartie);
+  document.getElementById("acc-manches").addEventListener("change", enregistrerNbManches);
   document.querySelectorAll(".onglet").forEach((o) => {
     o.addEventListener("click", () => ouvrirOnglet(o.dataset.onglet));
   });

@@ -48,6 +48,15 @@
 .badge-terminee { background: #555; color: #fff; border-radius: 4px;
   padding: 1px 7px; font-size: 0.75rem; }
 
+/* Nombre de manches (issue #205) : contrôle compact au-dessus de « Lancer la
+   partie », même esprit que « Ajouter un adversaire : ». Reste sur une ligne,
+   sans débordement, à la taille minimale de la fenêtre. */
+#choix-manches { display: flex; flex-wrap: wrap; align-items: center;
+  gap: 6px; margin-bottom: 24px; }
+#label-manches { font-size: 0.85rem; opacity: 0.8; margin-right: 4px; }
+#acc-manches { padding: 4px 8px; border: 1px solid #ccc; border-radius: 4px;
+  background: #fff; cursor: pointer; }
+
 .overlay-cache { display: none; }
 .overlay-visible { display: block; position: fixed; inset: 0;
   background: rgba(0,0,0,0.55); z-index: 100; overflow-y: auto; }

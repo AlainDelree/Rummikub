@@ -133,11 +133,18 @@ tests/                      pytest : test_moteur.py + test_ia.py + test_descript
 **Règles des manches (issue #203) :**
 
 - Le joueur choisit le **nombre de manches** du match (1 à 9, défaut 1), via
-  le champ « Nombre de manches » réaffiché dans les réglages de l'accueil
-  (onglet « Règles du jeu », `accueil.html`/`accueil.js`) et persisté sous
-  la clé `nb_manches` de `config.json` (`reglages.DEFAUTS`). Un `config.json`
-  ancien ou sans la clé retombe sur 1 (fusion `{**DEFAUTS, ...}` + bornage
-  dans `creer_partie`).
+  un contrôle compact « Nombre de manches » placé sur la carte principale de
+  l'écran d'accueil, juste au-dessus du bouton « Lancer la partie » (issue
+  #205 : choix propre à chaque match, au même endroit que les adversaires, et
+  **retiré de l'onglet « Règles du jeu » des Réglages**). Le choix est persisté
+  sous la clé `nb_manches` de `config.json` (`reglages.DEFAUTS`) dès qu'il
+  change (événement `change` → `sauvegarder_reglages({nb_manches})`, sans
+  toast), puis présélectionné à l'ouverture suivante (`remplirChampManches`).
+  Un `config.json` ancien ou sans la clé, ou une valeur hors de [1, 9],
+  retombe sur 1 (fusion `{**DEFAUTS, ...}` + bornage côté JS
+  `lireNbManches`/`remplirChampManches` et côté moteur dans `creer_partie`).
+  Code : `accueil.html`/`accueil.js`/`accueil.css` (`#choix-manches`,
+  `#acc-manches`).
 - **Fin d'une manche** : un joueur vide son chevalet, ou la partie est
   bloquée (pioche épuisée — règle existante, approximation de « tous
   bloqués »). `calculer_scores_manche` applique alors le barème (perdants :
@@ -193,8 +200,9 @@ intermédiaire vs match, scores cumulés, rotation du donneur, vainqueur au
 cumul ≠ gagnant de la dernière manche, égalité, reprise au milieu / reprise
 d'une ancienne sauvegarde) ; `tests/test_bilan.py` (un match de plusieurs
 manches compté une seule fois) ; `tests/test_coups_rates.py` (manches non
-confondues) ; `tests/test_playwright_accueil_reglages.py` (champ présent,
-valeur rechargée/enregistrée/transmise, bornage à 1) ;
+confondues) ; `tests/test_playwright_accueil_reglages.py` (choix présent sur
+l'accueil et absent des Réglages, valeur rechargée/enregistrée/transmise,
+bornage à 1 — mis à jour par #205) ;
 `tests/test_playwright_manches.py` (indicateur « Manche N / M », écran de fin
 de manche intermédiaire, classement final, affichage de l'égalité).
 
