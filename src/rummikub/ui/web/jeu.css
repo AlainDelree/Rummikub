@@ -588,8 +588,43 @@ button:disabled { opacity: 0.4; cursor: not-allowed; }
    celles de confirmation, pour accueillir un aperçu du tapis en lecture
    seule (mêmes tuiles/styles que le vrai tapis, mais sans aucun gestionnaire
    d'interaction — voir rendreApercuPlateauPasAPas dans jeu.js). */
-.carte-pas-a-pas { max-width: 720px; width: 90vw; text-align: center; }
-.carte-pas-a-pas h2 { color: var(--couleur-ordinateur); margin-bottom: 10px; }
+.carte-pas-a-pas { max-width: 820px; width: 92vw; text-align: center; }
+.carte-pas-a-pas h2 { color: var(--couleur-ordinateur); margin-bottom: 6px; }
+
+/* Ligne d'ampleur du coup en tête du pas-à-pas (issue #207, point 3). */
+.ligne-taille-pas-a-pas { color: var(--couleur-texte); font-size: 0.9rem;
+  font-weight: 600; opacity: 0.9; margin: 0 0 10px; }
+.ligne-taille-pas-a-pas:empty { display: none; }
+
+/* Barre des deux modes de consultation (issue #207) : « Détailler » et
+   « Avant / Après ». */
+.controles-pas-a-pas { display: flex; justify-content: center; gap: 10px;
+  margin-bottom: 12px; }
+.btn-mode-pas-a-pas { padding: 8px 14px; background: #fff;
+  color: var(--couleur-texte); border: 2px solid var(--couleur-bordure);
+  border-radius: 6px; font-size: 0.9rem; font-weight: 700; cursor: pointer;
+  transition: background 0.15s; }
+.btn-mode-pas-a-pas:hover { background: #f0f0f0; }
+.btn-mode-pas-a-pas[hidden] { display: none; }
+
+/* Vue comparative « Avant / Après » (issue #207, point 4). */
+.comparaison-colonnes { display: flex; gap: 12px; margin-bottom: 12px; }
+.comparaison-colonne { flex: 1; min-width: 0; }
+.comparaison-titre { color: var(--couleur-ordinateur); font-size: 0.8rem;
+  font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em;
+  margin-bottom: 6px; }
+.comparaison-plateau { max-height: 42vh; margin-bottom: 0; }
+/* Combinaison modifiée ou créée mise en évidence (liseré bleu doux). */
+.zone-plateau-pas-a-pas .groupe-combinaison.combi-modifiee {
+  border: 2px solid #3b82f6; background: rgba(59,130,246,0.12);
+  border-radius: 6px; }
+.legende-pas-a-pas { display: flex; flex-wrap: wrap; justify-content: center;
+  gap: 14px; margin-bottom: 12px; font-size: 0.78rem;
+  color: var(--couleur-texte); }
+.legende-pas-item { display: flex; align-items: center; gap: 6px; }
+.legende-combi-modifiee { display: inline-block; width: 22px; height: 16px;
+  border: 2px solid #3b82f6; background: rgba(59,130,246,0.12);
+  border-radius: 4px; }
 .soustitre-etape-pas-a-pas { color: var(--couleur-ordinateur); font-size: 0.85rem;
   font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em;
   margin: 0 0 2px; min-height: 1.1em; }

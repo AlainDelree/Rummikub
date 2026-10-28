@@ -760,16 +760,30 @@ function rafraichirBoutonRejouerIA() {
   // #189 (champ "resume" alors absent du dict persisté).
   if (divResume) divResume.textContent = (type === "pose" && coup.resume) || "";
 
-  // Bouton « Pas à pas » (issue #189, #191) : visible seulement si le coup
-  // touche au moins 2 changements réels sur le plateau — les écrans
-  // "Départ"/"Les jokers" ne comptent pas, un coup simple n'en a qu'un
-  // (voire zéro pour une pioche/un passage) et garde donc le seul rejeu animé.
-  const etapes = (type === "pose" && coup.etapes) || [];
+  // Bouton « Pas à pas » (issue #189/#191, critère revu #207) : visible dès
+  // que le coup déplace au moins une tuile du plateau OU modifie au moins deux
+  // combinaisons (défaites/modifiées, échanges de tuiles identiques ignorés).
+  // Un coup qui ne fait qu'ajouter des tuiles de la main à une seule
+  // combinaison, ou en créer, reste sans bouton (seul le rejeu animé).
   if (btnPasAPas) {
-    const afficher = nbChangementsPasAPas(etapes) >= 2;
+    const afficher = type === "pose" && coupMeriteePasAPas(coup);
     btnPasAPas.hidden = !afficher;
     btnPasAPas.disabled = !afficher;
   }
+}
+
+// Décide si le bouton « Pas à pas » doit apparaître pour ce coup (issue #207).
+// S'appuie sur coup.mesure (calculée côté Python, moteur/description_coup.py).
+// Repli pour les parties sauvegardées avant #207 (mesure absente) : ancien
+// critère sur le nombre de changements condensés (>= 2).
+function coupMeriteePasAPas(coup) {
+  if (!coup) return false;
+  const m = coup.mesure;
+  if (m) {
+    return (m.nb_tuiles_plateau_deplacees || 0) >= 1 ||
+           (m.nb_combinaisons_modifiees || 0) >= 2;
+  }
+  return nbChangementsPasAPas(coup.etapes || []) >= 2;
 }
 
 // ------------------------------------------------------------ sélection / placement
@@ -1859,6 +1873,12 @@ async function rejouerDernierCoupIA() {
 // jamais l'état de la partie ; peut être quitté à tout moment.
 let etapesPasAPasActuelles = [];
 let indexEtapePasAPas = 0;
+// Coup en cours d'inspection + modes d'affichage (issue #207) : le découpage
+// condensé est toujours le mode par défaut à chaque ouverture ; « Détailler »
+// bascule vers le tuile-par-tuile, « Avant / Après » vers la comparaison.
+let coupPasAPasActuel = null;
+let modeDetaillePasAPas = false;
+let modeComparaisonPasAPas = false;
 
 // Nombre de CHANGEMENTS réels (hors écrans "Départ"/"Les jokers", qui ne
 // modifient rien à l'écran) : c'est ce compte, pas la longueur brute de la
@@ -1931,19 +1951,148 @@ function rendreEtapePasAPas() {
     indexEtapePasAPas === etapesPasAPasActuelles.length - 1;
 }
 
+// Phrase d'ampleur du coup affichée en tête du pas-à-pas (issue #207, point 3)
+// à partir de coup.mesure (moteur/description_coup.py::mesurer_coup_ia). Vide
+// si la mesure est absente (partie d'avant #207).
+const TAILLE_FEMININE = { petit: "petite", moyen: "moyenne", grand: "grande" };
+function majLigneTaillePasAPas(coup) {
+  const ligne = document.getElementById("ligne-taille-pas-a-pas");
+  if (!ligne) return;
+  const m = coup && coup.mesure;
+  if (!m) { ligne.textContent = ""; return; }
+  // Accord singulier/pluriel sur le nom ET son participe (0 et 1 → singulier).
+  const acc = (n, nom, participe) =>
+    `${n} ${nom}${n > 1 ? "s" : ""} ${participe}${n > 1 ? "s" : ""}`;
+  const taille = TAILLE_FEMININE[m.taille] || m.taille;
+  ligne.textContent =
+    `Coup de ${taille} taille : ` +
+    acc(m.nb_tuiles_plateau_deplacees, "tuile", "du plateau déplacée") + ", " +
+    acc(m.nb_combinaisons_modifiees, "combinaison", "modifiée") + ", " +
+    acc(m.nb_tuiles_posees, "tuile", "posée") + " depuis la main.";
+}
+
+// Étapes à afficher selon le mode courant (condensé par défaut, détaillé après
+// « Détailler »). Repli sur coup.etapes si etapes_detaillees est absent.
+function etapesSelonMode(coup) {
+  if (modeDetaillePasAPas && coup && coup.etapes_detaillees &&
+      coup.etapes_detaillees.length) {
+    return coup.etapes_detaillees;
+  }
+  return (coup && coup.etapes) || [];
+}
+
 // Ouvre le mode pas-à-pas sur le dernier coup de l'IA. Le bouton qui déclenche
-// cet appel n'est affiché/activé par rafraichirBoutonRejouerIA() que quand
-// coup.etapes contient au moins 2 changements réels.
+// cet appel n'est affiché/activé par rafraichirBoutonRejouerIA() que pour un
+// coup qui mérite le pas-à-pas (coupMeriteePasAPas).
 function ouvrirPasAPas() {
   const coup = etat.dernier_coup_ia;
-  const etapes = (coup && coup.etapes) || [];
-  if (nbChangementsPasAPas(etapes) < 2) return;
-  etapesPasAPasActuelles = etapes;
+  if (!coupMeriteePasAPas(coup)) return;
+  coupPasAPasActuel = coup;
+  // Mode condensé + vue « étapes » à CHAQUE ouverture (issue #207, point 2).
+  modeDetaillePasAPas = false;
+  modeComparaisonPasAPas = false;
+  etapesPasAPasActuelles = etapesSelonMode(coup);
   indexEtapePasAPas = 0;
   document.getElementById("titre-pas-a-pas").textContent =
     "Rejeu pas à pas — " + ((coup && coup.nom) || "l'ordinateur");
+  majLigneTaillePasAPas(coup);
+  majBoutonsModePasAPas();
+  appliquerVuePasAPas();
   rendreEtapePasAPas();
   document.getElementById("overlay-pas-a-pas").className = "overlay-visible";
+}
+
+// Met à jour le libellé/état des deux boutons de mode.
+function majBoutonsModePasAPas() {
+  const btnDet = document.getElementById("btn-pas-a-pas-detailler");
+  const btnCmp = document.getElementById("btn-pas-a-pas-comparaison");
+  if (btnDet) {
+    btnDet.textContent = modeDetaillePasAPas ? "Condenser" : "Détailler";
+    // Le découpage détaillé n'a d'intérêt que s'il diffère du condensé.
+    const aDetail = coupPasAPasActuel && coupPasAPasActuel.etapes_detaillees &&
+      coupPasAPasActuel.etapes_detaillees.length >
+      ((coupPasAPasActuel.etapes || []).length);
+    btnDet.hidden = modeComparaisonPasAPas || !aDetail;
+  }
+  if (btnCmp) {
+    btnCmp.textContent = modeComparaisonPasAPas ? "Voir les étapes" : "Avant / Après";
+  }
+}
+
+// Affiche la vue « étapes » ou la vue « comparaison » selon le mode.
+function appliquerVuePasAPas() {
+  const vueEtapes = document.getElementById("vue-etapes-pas-a-pas");
+  const vueComp = document.getElementById("vue-comparaison-pas-a-pas");
+  if (vueEtapes) vueEtapes.hidden = modeComparaisonPasAPas;
+  if (vueComp) vueComp.hidden = !modeComparaisonPasAPas;
+  if (modeComparaisonPasAPas) rendreComparaisonPasAPas();
+}
+
+// Bascule condensé <-> détaillé (bouton « Détailler »/« Condenser »).
+function basculerDetaillerPasAPas() {
+  if (!coupPasAPasActuel) return;
+  modeDetaillePasAPas = !modeDetaillePasAPas;
+  etapesPasAPasActuelles = etapesSelonMode(coupPasAPasActuel);
+  indexEtapePasAPas = 0;
+  majBoutonsModePasAPas();
+  rendreEtapePasAPas();
+}
+
+// Bascule vue étapes <-> comparaison Avant/Après (bouton « Avant / Après »).
+function basculerComparaisonPasAPas() {
+  if (!coupPasAPasActuel) return;
+  modeComparaisonPasAPas = !modeComparaisonPasAPas;
+  majBoutonsModePasAPas();
+  appliquerVuePasAPas();
+}
+
+// Construit la vue comparative « Avant / Après » (issue #207, point 4) : les
+// deux plateaux en lecture seule, combinaisons modifiées ou créées mises en
+// évidence, tuiles distinguées selon leur origine (main de l'IA / déplacée).
+function rendreComparaisonPasAPas() {
+  const coup = coupPasAPasActuel;
+  if (!coup) return;
+  const avant = coup.plateau_avant || [];
+  const apres = coup.plateau_apres || [];
+  const idsAvant = new Set();
+  avant.forEach((c) => c.forEach((d) => idsAvant.add(d.id)));
+  // Tuiles du plateau déplacées (même logique que l'animation / la mesure).
+  const deplacees = new Set(
+    trouverTuilesDeplacees(avant, apres).map((info) => info.dict.id));
+  // Combinaisons inchangées (mêmes ids) : NON mises en évidence.
+  const cle = (c) => c.map((d) => d.id).sort().join(",");
+  const clesAvant = new Set(avant.map(cle));
+  const clesApres = new Set(apres.map(cle));
+
+  rendreCoteComparaison(
+    document.getElementById("comparaison-avant"), avant,
+    (c) => !clesApres.has(cle(c)), () => "neutre");
+  rendreCoteComparaison(
+    document.getElementById("comparaison-apres"), apres,
+    (c) => !clesAvant.has(cle(c)),
+    (d) => (!idsAvant.has(d.id) ? "main"
+            : (deplacees.has(d.id) ? "deplacee" : "neutre")));
+}
+
+// Rend un plateau dans la vue comparative. `comboEnEvidence(combo)` décide si
+// la combinaison est mise en évidence ; `origineTuile(dict)` renvoie
+// "main"/"deplacee"/"neutre" pour colorer le pourtour de chaque tuile.
+function rendreCoteComparaison(conteneur, plateau, comboEnEvidence, origineTuile) {
+  if (!conteneur) return;
+  conteneur.innerHTML = "";
+  (plateau || []).forEach((combo) => {
+    const groupe = document.createElement("div");
+    groupe.className = "groupe-combinaison";
+    if (comboEnEvidence(combo)) groupe.classList.add("combi-modifiee");
+    combo.forEach((d) => {
+      const el = tuileDepuisDict(d);
+      const origine = origineTuile(d);
+      if (origine === "main") el.classList.add("ce-tour");
+      else if (origine === "deplacee") el.classList.add("deplacee-tapis");
+      groupe.appendChild(el);
+    });
+    conteneur.appendChild(groupe);
+  });
 }
 
 function fermerPasAPas() {
@@ -2140,6 +2289,10 @@ function brancherEvenements() {
     .addEventListener("click", etapePasAPasPrecedente);
   document.getElementById("btn-pas-a-pas-quitter")
     .addEventListener("click", fermerPasAPas);
+  document.getElementById("btn-pas-a-pas-detailler")
+    .addEventListener("click", basculerDetaillerPasAPas);
+  document.getElementById("btn-pas-a-pas-comparaison")
+    .addEventListener("click", basculerComparaisonPasAPas);
   document.getElementById("btn-verifier-calc").addEventListener("click", onVerifierCalc);
   document.getElementById("btn-jouer").addEventListener("click", onJouer);
   // Le bouton #btn-piocher (fusion Piocher/Passer) reçoit son écouteur

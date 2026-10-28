@@ -150,21 +150,59 @@
   <div id="overlay-pas-a-pas" class="overlay-cache">
     <div class="carte carte-pas-a-pas">
       <h2 id="titre-pas-a-pas">Rejeu pas à pas</h2>
-      <p id="soustitre-etape-pas-a-pas" class="soustitre-etape-pas-a-pas"></p>
-      <p id="texte-etape-pas-a-pas" class="texte-etape-pas-a-pas"></p>
-      <!-- Cadre « tuiles à placer » (issue #191) : au-dessus de l'aperçu du
-           plateau, contient les tuiles pas encore reposées (venues de la
-           main ou libérées du plateau) ; vide à la toute dernière étape. -->
-      <div id="zone-cadre-pas-a-pas" class="zone-cadre-pas-a-pas">
-        <div class="cadre-label">Tuiles à placer</div>
-        <div id="cadre-tuiles-pas-a-pas" class="cadre-tuiles-pas-a-pas"></div>
+      <!-- Ligne d'ampleur du coup (issue #207, point 3) : « Coup de grande
+           taille : N tuiles du plateau déplacées, N combinaisons modifiées,
+           N tuiles posées depuis la main ». Renseignée par majLigneTaillePasAPas
+           à partir de coup.mesure. -->
+      <p id="ligne-taille-pas-a-pas" class="ligne-taille-pas-a-pas"></p>
+      <!-- Deux modes de consultation (issue #207) : le découpage en étapes
+           (condensé par défaut, « Détailler » pour le tuile-par-tuile) et la
+           bascule « Avant / Après » (comparaison du plateau, lecture seule). -->
+      <div id="controles-pas-a-pas" class="controles-pas-a-pas">
+        <button type="button" id="btn-pas-a-pas-detailler" class="btn-mode-pas-a-pas">Détailler</button>
+        <button type="button" id="btn-pas-a-pas-comparaison" class="btn-mode-pas-a-pas">Avant / Après</button>
       </div>
-      <div id="zone-plateau-pas-a-pas" class="zone-plateau-pas-a-pas"></div>
-      <div class="boutons-pas-a-pas">
-        <button type="button" id="btn-pas-a-pas-precedent" class="btn-secondaire">← Précédent</button>
-        <span id="compteur-etape-pas-a-pas" class="compteur-etape-pas-a-pas"></span>
-        <button type="button" id="btn-pas-a-pas-suivant" class="btn-primaire">Suivant →</button>
+
+      <!-- Vue « étapes » -->
+      <div id="vue-etapes-pas-a-pas">
+        <p id="soustitre-etape-pas-a-pas" class="soustitre-etape-pas-a-pas"></p>
+        <p id="texte-etape-pas-a-pas" class="texte-etape-pas-a-pas"></p>
+        <!-- Cadre « tuiles à placer » (issue #191) : au-dessus de l'aperçu du
+             plateau, contient les tuiles pas encore reposées (venues de la
+             main ou libérées du plateau) ; vide à la toute dernière étape. -->
+        <div id="zone-cadre-pas-a-pas" class="zone-cadre-pas-a-pas">
+          <div class="cadre-label">Tuiles à placer</div>
+          <div id="cadre-tuiles-pas-a-pas" class="cadre-tuiles-pas-a-pas"></div>
+        </div>
+        <div id="zone-plateau-pas-a-pas" class="zone-plateau-pas-a-pas"></div>
+        <div class="boutons-pas-a-pas">
+          <button type="button" id="btn-pas-a-pas-precedent" class="btn-secondaire">← Précédent</button>
+          <span id="compteur-etape-pas-a-pas" class="compteur-etape-pas-a-pas"></span>
+          <button type="button" id="btn-pas-a-pas-suivant" class="btn-primaire">Suivant →</button>
+        </div>
       </div>
+
+      <!-- Vue « Avant / Après » (issue #207, point 4) : comparaison en lecture
+           seule du plateau avant et après le coup, combinaisons modifiées ou
+           créées mises en évidence, tuiles distinguées selon leur origine. -->
+      <div id="vue-comparaison-pas-a-pas" hidden>
+        <div class="comparaison-colonnes">
+          <div class="comparaison-colonne">
+            <div class="comparaison-titre">Avant le coup</div>
+            <div id="comparaison-avant" class="zone-plateau-pas-a-pas comparaison-plateau"></div>
+          </div>
+          <div class="comparaison-colonne">
+            <div class="comparaison-titre">Après le coup</div>
+            <div id="comparaison-apres" class="zone-plateau-pas-a-pas comparaison-plateau"></div>
+          </div>
+        </div>
+        <div id="legende-pas-a-pas" class="legende-pas-a-pas">
+          <span class="legende-pas-item"><span class="legende-tuile-mini tuile-jeu ce-tour"></span> Venue de la main de l'IA</span>
+          <span class="legende-pas-item"><span class="legende-tuile-mini tuile-jeu deplacee-tapis"></span> Déplacée d'une autre combinaison</span>
+          <span class="legende-pas-item"><span class="legende-combi-modifiee"></span> Combinaison modifiée ou créée</span>
+        </div>
+      </div>
+
       <button type="button" id="btn-pas-a-pas-quitter" class="btn-secondaire btn-pas-a-pas-quitter">
         Quitter le pas à pas
       </button>
