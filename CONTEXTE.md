@@ -280,7 +280,34 @@ icône `assets/rummikub.ico` (facultative, absente → aucune icône).
   `tests/test_playwright_accueil_reglages.py` : vérifications front-end via
   Playwright (voir §7), sautées proprement si `playwright` ou chromium sont
   absents.
-- État actuel : **164 tests passent** (`pytest -q` → `164 passed`).
+- **Fiabilité des tests dépendant de la vitesse machine ou de la source du
+  scénario (issue #210, suite de #209).** Deux familles de tests pouvaient
+  échouer par intermittence sans aucune régression réelle :
+  - *Tests au budget de temps en secondes* (recherche de repli
+    `moteur/solveur.py`, qui met plusieurs secondes sur les cas durs) : leur
+    budget est multiplié par le `facteur_machine` mesuré une fois par session
+    dans `tests/conftest.py` (micro-benchmark CPU, ≈ 1 sur la machine de dev,
+    ≥ 1 sur une machine plus lente, plafonné à 30 — voir #206). Le RÉSULTAT
+    exigé (coup trouvé, nombre de tuiles, conservation du plateau) est
+    strictement inchangé ; seule la sensibilité à la charge disparaît.
+    Vérifié sous charge CPU artificielle (8 cœurs saturés → `facteur_machine`
+    ≈ 2,7 → tous les tests sensibles passent).
+  - *Pas-à-pas condensé du coup de Bruno (tour 57)* : jugé désormais sur le
+    coup du solveur **MAISON** (`moteur/solveur_exact.py`, celui réellement
+    joué), déterministe (13 étapes condensées, borne « au plus 13 », contre
+    27 en détaillé), et non plus sur la bibliothèque externe `rummikub-solver`
+    qui proposait un arrangement un peu différent (12 étapes), d'où l'ancien
+    seuil « < 11 » instable. Les propriétés GÉNÉRALES du condensé restent, elles,
+    testées via la bibliothèque externe (insensibles à la source).
+- **Marqueur `@pytest.mark.lent`** (déclaré dans `pytest.ini`) : posé sur les
+  tests de solveur à gros budget (plusieurs secondes chacun : cas de
+  référence #190/#194/#200, cascade de jokers #194, départage #199/#200).
+  Ils restent exécutés par défaut avec toute la suite ; le marqueur sert
+  uniquement à pouvoir les lancer ou les isoler à part (`pytest -m lent`,
+  `pytest -m "not lent"`) sans jamais les exclure par défaut.
+- État actuel : **282 tests passent** (`pytest -q` → `282 passed, 3 skipped`,
+  les 3 sautés étant les tests Playwright quand chromium/playwright sont
+  absents). Suite stable sur deux exécutions consécutives (issue #210).
 
 ## 7. Vérification empirique d'un comportement front-end
 

@@ -70,14 +70,20 @@ def test_indisponible_leve_message_installation(monkeypatch):
                                0)
 
 
-def test_expert_se_replie_si_modele_exact_indisponible(monkeypatch):
+def test_expert_se_replie_si_modele_exact_indisponible(monkeypatch,
+                                                       facteur_machine):
     """highspy/numpy absents : Expert doit jouer le coup de la recherche
     conservée (``solveur.py``), pas lever ni bloquer. On force l'indisponibilité
-    et on vérifie qu'Expert pose le coup de 3 tuiles que trouve la recherche."""
+    et on vérifie qu'Expert pose le coup de 3 tuiles que trouve la recherche.
+
+    Budget (10 s, largement au-dessus des ~0,5 s mesurés au calme) mis à
+    l'échelle de la vitesse machine (``facteur_machine`` #206) pour ne pas
+    lever ``BudgetDepasse`` à tort sur une machine très lente (issue #210) ;
+    le RÉSULTAT exigé (coup joué, ≥1 tuile) est inchangé."""
     monkeypatch.setattr(se, "DISPONIBLE", False)
     data = _charger("cas_expert_ia_261026172338_tour37.json")
     etat, idx = data["etat"], data["idx"]
-    coup = jouer_niveau_expert(etat, idx, budget_temps=10.0)
+    coup = jouer_niveau_expert(etat, idx, budget_temps=10.0 * facteur_machine)
     assert coup["action"] == "jouer"
     assert len(coup["ids_tuiles"]) >= 1
 

@@ -1031,6 +1031,7 @@ def _verifier_coup_valide_sans_perte(etat, idx, coup):
     assert ids_apres == ids_avant, "des tuiles ont disparu (ou sont apparues)"
 
 
+@pytest.mark.lent
 def test_solveur_plateau_charge_trouve_au_moins_trois_tuiles_avec_gros_budget(
         facteur_machine):
     """Avec un budget confortable (10 s, largement au-dessus du temps
@@ -1048,6 +1049,7 @@ def test_solveur_plateau_charge_trouve_au_moins_trois_tuiles_avec_gros_budget(
     _verifier_coup_valide_sans_perte(etat, idx, coup)
 
 
+@pytest.mark.lent
 def test_solveur_plateau_charge_trouve_un_coup_avec_budget_de_production(
         facteur_machine):
     """Avec le budget de production d'Expert (voir ``BUDGET_TEMPS_EXPERT``
@@ -1090,6 +1092,7 @@ def _charger_cas_bruno_tour57():
     return data["etat"], data["idx"], data["attendu_min_tuiles"]
 
 
+@pytest.mark.lent
 def test_solveur_cascade_joker_trouve_trois_tuiles_avec_gros_budget(
         facteur_machine):
     """Avec un budget confortable (10 s), le solveur doit trouver le coup à
@@ -1106,6 +1109,7 @@ def test_solveur_cascade_joker_trouve_trois_tuiles_avec_gros_budget(
     _verifier_coup_valide_sans_perte(etat, idx, coup)
 
 
+@pytest.mark.lent
 def test_solveur_cascade_joker_trouve_un_coup_avec_budget_de_production(
         facteur_machine):
     """Avec le budget de production d'Expert, le solveur doit désormais
@@ -1223,6 +1227,7 @@ def test_solveur_departage_petit_plateau_fabrique_prefere_la_solution_simple():
 # jamais poser MOINS de tuiles que l'ancien comportement.
 # --------------------------------------------------------------------------- #
 
+@pytest.mark.lent
 @pytest.mark.parametrize("nom_fichier", [
     "cas_expert_budget_tour81.json",
     "cas_expert_bruno_tour57.json",
@@ -1264,6 +1269,7 @@ def test_preferer_simple_ne_pose_jamais_moins_de_tuiles_au_budget_de_production(
         f"comportement (régression)")
 
 
+@pytest.mark.lent
 def test_preferer_simple_atteint_le_meme_plafond_sur_le_cas_le_plus_dur(
         facteur_machine):
     """``cas_expert_ia_261026172338_tour61.json`` (cascade de jokers à
@@ -1335,6 +1341,7 @@ def _charger_cas(nom_fichier):
     return data["etat"], data["idx"], data["attendu_min_tuiles"]
 
 
+@pytest.mark.lent
 @pytest.mark.parametrize("nom_fichier,gros_budget", [
     ("cas_expert_humain_261026172338_tour66.json", 10.0),
     ("cas_expert_humain_261026174101_tour81.json", 10.0),
@@ -1343,18 +1350,25 @@ def _charger_cas(nom_fichier):
     ("cas_expert_ia_261026172338_tour59.json", 10.0),
 ])
 def test_solveur_cas_reference_200_atteint_attendu_avec_gros_budget(
-        nom_fichier, gros_budget):
+        nom_fichier, gros_budget, facteur_machine):
     """Avec un budget confortable, le solveur retrouve bien
     ``attendu_min_tuiles`` sur chacun de ces cas de référence, sans jamais
-    perdre de tuile du plateau."""
+    perdre de tuile du plateau.
+
+    Budget mis à l'échelle de la vitesse machine (``facteur_machine`` #206) :
+    ``tour59`` prend ~2 s à 4 s au calme pour sa dernière tuile et dépassait
+    le budget de 10 s codé en dur quand la machine était chargée (issue
+    #210). Le RÉSULTAT exigé (``attendu`` tuiles, plateau conservé) est
+    inchangé."""
     etat, idx, attendu = _charger_cas(nom_fichier)
-    coup = resoudre_coup(etat, idx, budget_temps=gros_budget)
+    coup = resoudre_coup(etat, idx, budget_temps=gros_budget * facteur_machine)
     assert coup is not None
     assert coup["action"] == "jouer"
     assert len(coup["ids_tuiles"]) >= attendu
     _verifier_coup_valide_sans_perte(etat, idx, coup)
 
 
+@pytest.mark.lent
 @pytest.mark.parametrize("nom_fichier", [
     "cas_expert_humain_261026172338_tour66.json",
     "cas_expert_humain_261026174101_tour81.json",
@@ -1363,16 +1377,22 @@ def test_solveur_cas_reference_200_atteint_attendu_avec_gros_budget(
     "cas_expert_ia_261026172338_tour59.json",
 ])
 def test_solveur_cas_reference_200_atteint_attendu_avec_budget_de_production(
-        nom_fichier):
+        nom_fichier, facteur_machine):
     """Au budget de production, tolérance large (×6, comme pour les cas
     #190/#194 ci-dessus) pour ne pas échouer par hasard sur une machine de CI
     lente — PAS un relâchement de l'objectif de vitesse : mesuré en
     développement, ``tour66``/``tour81``/``tour65``/``tour37`` sont trouvés
     en moins de 0,5 s, et ``tour59`` en ~2 s (voir le commentaire au-dessus
     de ``_charger_cas`` : ``tour59`` reste juste au-dessus du budget de
-    production strict de 1,5 s, pas de quoi justifier de l'augmenter)."""
+    production strict de 1,5 s, pas de quoi justifier de l'augmenter).
+
+    La tolérance ×6 est en outre mise à l'échelle de la vitesse machine
+    (``facteur_machine`` #206), comme les tests #190/#194 analogues
+    (``*_budget_de_production`` ci-dessus) : ``tour59`` (~4 s au calme)
+    pouvait dépasser le budget ×6 (9 s) quand la machine était chargée
+    (issue #210). Le RÉSULTAT exigé est inchangé."""
     etat, idx, attendu = _charger_cas(nom_fichier)
-    budget_test = BUDGET_TEMPS_EXPERT * 6
+    budget_test = BUDGET_TEMPS_EXPERT * 6 * facteur_machine
     coup = resoudre_coup(etat, idx, budget_temps=budget_test)
     assert coup is not None, (
         f"aucun coup trouvé même avec {budget_test} s (× 6 le budget de "
@@ -1382,7 +1402,9 @@ def test_solveur_cas_reference_200_atteint_attendu_avec_budget_de_production(
     _verifier_coup_valide_sans_perte(etat, idx, coup)
 
 
-def test_solveur_cascade_joker_61_trouve_attendu_avec_gros_budget():
+@pytest.mark.lent
+def test_solveur_cascade_joker_61_trouve_attendu_avec_gros_budget(
+        facteur_machine):
     """``cas_expert_ia_261026172338_tour61.json`` : cascade de jokers à
     travers 13 combinaisons du plateau, déjà documentée #194 comme
     structurellement difficile (voir
@@ -1395,9 +1417,15 @@ def test_solveur_cascade_joker_61_trouve_attendu_avec_gros_budget():
     le test cité ci-dessus) : volontairement PAS de test au budget de
     production pour ce cas, qui serait soit flaky (juste en dessous du
     nécessaire) soit trompeur (avec une tolérance ×6 ou plus, qui masquerait
-    le fait que ce cas reste loin du budget réel)."""
+    le fait que ce cas reste loin du budget réel).
+
+    Budget mis à l'échelle de la vitesse machine (``facteur_machine`` #206,
+    voir ``tests/conftest.py``) : le budget de 12 s était jusqu'ici codé en
+    dur et dépassé à tort quand la machine était chargée (le coup prend ~5 s
+    au calme, mais la suite complète charge le CPU) — issue #210. Le RÉSULTAT
+    exigé (coup trouvé, ``attendu`` tuiles, plateau conservé) est inchangé."""
     etat, idx, attendu = _charger_cas("cas_expert_ia_261026172338_tour61.json")
-    coup = resoudre_coup(etat, idx, budget_temps=12.0)
+    coup = resoudre_coup(etat, idx, budget_temps=12.0 * facteur_machine)
     assert coup is not None
     assert coup["action"] == "jouer"
     assert len(coup["ids_tuiles"]) >= attendu
