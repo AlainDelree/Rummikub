@@ -50,9 +50,18 @@ def _lancer_actualise_au_demarrage():
         print(f"[Rummikub] Lancement d'Actualise ignoré : {exc}", file=sys.stderr)
 
 
-from rummikub.ui.application import main
-
 if __name__ == "__main__":
+    # Autotest en ligne de commande (issue #208) : vérifie, SANS ouvrir de
+    # fenêtre et SANS importer l'interface graphique (pywebview), que le
+    # solveur exact d'Expert (highspy + numpy) fonctionne dans ce binaire. La
+    # détection a lieu AVANT tout import de rummikub.ui.application pour ne
+    # charger ni pywebview ni le moteur de fenêtre. Fonctionne depuis les
+    # sources comme depuis l'exécutable gelé.
+    if "--autotest" in sys.argv[1:]:
+        from rummikub.autotest import executer_autotest
+        raise SystemExit(executer_autotest(sys.argv[1:]))
+
     _lancer_actualise_au_demarrage()
     _lancer_actualise_ui_si_flag()
+    from rummikub.ui.application import main
     raise SystemExit(main())

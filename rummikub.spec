@@ -84,7 +84,31 @@ a = Analysis(
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
-    excludes=[],
+    # Exclusions (issue #208) : le jeu n'utilise de numpy/highspy QUE le strict
+    # nécessaire au solveur exact (moteur/solveur_exact.py = import numpy +
+    # highspy). On retire donc :
+    #   - les gros paquets scientifiques jamais utilisés, au cas où un hook les
+    #     entraînerait (scipy, matplotlib, pandas) ;
+    #   - les toolkits d'interface inutiles (le jeu utilise pywebview, pas Tk/Qt) ;
+    #   - les sous-paquets de développement/compilation/tests de numpy (f2py,
+    #     distutils, tests), inutiles au runtime et volumineux.
+    # Aucune de ces exclusions ne touche l'import du solveur (vérifié par
+    # l'essai de build Linux + l'autotest, issue #208).
+    excludes=[
+        "scipy",
+        "matplotlib",
+        "pandas",
+        "tkinter",
+        "PyQt5",
+        "PyQt6",
+        "PySide2",
+        "PySide6",
+        "numpy.f2py",
+        "numpy.distutils",
+        "numpy.testing",
+        "numpy.tests",
+        "numpy.array_api",
+    ],
     noarchive=False,
 )
 

@@ -730,6 +730,52 @@ victoire immédiate de 2 tuiles manquée). La recherche de §8bis reste le
   (optimum sur tous les cas, accord avec `verif_solveur` et avec la
   bibliothèque de #204 si installée, mise initiale, départage, replis).
 
+### 8quater. Autotest de l'exécutable `--autotest` (issue #208, suite de #206)
+
+Depuis #206, l'exécutable embarque `highspy` + `numpy` (modèle exact d'Expert,
+§8ter). Si PyInstaller collecte mal ces paquets natifs, Expert retombe
+**silencieusement** sur la recherche arborescente (§8bis) : rien, sans ouvrir
+la fenêtre, ne permettait de le détecter. L'option `--autotest` (issue #208)
+répond à ce risque.
+
+- **Point d'entrée** : `main.py` détecte `--autotest` dans `sys.argv` **avant**
+  tout import de `rummikub.ui.application` → ni `pywebview` ni le moteur de
+  fenêtre ne sont chargés, aucune fenêtre ne s'ouvre. La logique vit dans un
+  module dédié, embarqué et testable : **`src/rummikub/autotest.py`**
+  (`executer_autotest(argv)`).
+- **Ce qu'il vérifie et affiche** (quelques lignes lisibles) : version de
+  Python, mode (sources / exécutable gelé), versions de `numpy` et `highspy`,
+  présence des ressources web (`RACINE_WEB/accueil.html` + `jeu.html`), puis
+  résout une **petite position intégrée** (plateau vide + suite 5-6-7 + groupe
+  de 10, 6 tuiles attendues) avec `solveur_exact.resoudre_exact` et affiche le
+  nombre de tuiles posées et la durée. **Code 0** si tout fonctionne, **1**
+  sinon avec la cause. Ne lit/écrit **aucune donnée utilisateur** (ni SQLite ni
+  `config.json`).
+- **Rapport fichier** : l'exe Windows est fenêtré (`console=False`), sa sortie
+  standard est perdue ; `--autotest <chemin>` écrit donc le même compte rendu
+  dans ce fichier. Le script de build le récupère (`type`).
+- **Script de build** (`build/rebuild_rummikub.bat`, Windows) : nouvelle
+  sous-étape **5bis** — lance `dist\Rummikub\Rummikub.exe --autotest <log>`
+  après PyInstaller, reprend le log dans le compte rendu, et **refuse le build**
+  (exit 1) si le code de sortie n'est pas 0. Garde-fous de taille **élargis**
+  pour numpy+highspy (valeurs provisoires, à confirmer au 1ᵉʳ build Windows) :
+  dossier non compressé **20-120 Mo** (étape 5), installeur et zip compressés
+  **5-50 Mo** (étapes 6/7).
+- **`rummikub.spec`** : `excludes` ajoutés (issue #208) pour ne pas embarquer
+  d'inutile — `scipy`, `matplotlib`, `pandas`, `tkinter`, Qt/PySide, et les
+  sous-paquets de dev/compilation/tests de numpy (`f2py`, `distutils`,
+  `testing`, `tests`, `array_api`). ⚠️ `numpy.libs/libscipy_openblas64_*.so`
+  (~27 Mo) est l'**OpenBLAS vendu par numpy**, PAS le paquet `scipy` : il est
+  **requis** et ne doit jamais être exclu.
+- **Essai Linux (issue #208)** : build PyInstaller onedir validé hors dépôt
+  (venv `.venv-exact`, gitignoré) → `--autotest` renvoie 0 (6 tuiles, HiGHS),
+  dossier **~74 Mo** (numpy.libs 27 Mo + numpy 14 Mo + highspy 6 Mo + runtime).
+  Aucun paquet exclu n'est entraîné. Un essai Linux ne remplace PAS le build
+  Windows : il ne sert qu'à détecter tôt une erreur de collecte.
+- **Tests** : `tests/test_autotest.py` (succès, dépendances absentes simulées,
+  ressources manquantes, écriture du rapport, et garantie que `--autotest`
+  n'importe jamais `pywebview`/l'UI).
+
 ### 8bis-bis. Coups de grande envergure et bug de mesure côté humain (issue #200, suite de #194)
 
 - **Contexte** : `scripts/analyser_coups_rates.py --joueur "Alain" --budget 10`

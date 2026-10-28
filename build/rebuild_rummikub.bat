@@ -9,6 +9,7 @@ REM    2.    Environnement virtuel .venv_build + dependances
 REM    3.    Fermer Rummikub.exe si en cours
 REM    4.    PyInstaller (rummikub.spec)
 REM    5.    Verifier dist\Rummikub\Rummikub.exe + taille (dossier non compresse)
+REM    5bis. Autotest fonctionnel de l'exe (--autotest : solveur exact, issue #208)
 REM    6.    ISCC (installeur) + copie du Setup (local + worktree) + garde-fou taille
 REM    7.    manifest.json + zip (dist + manifest) + copie vers le worktree + garde-fou taille
 REM    8.    Copie de l'installeur et du zip vers le dossier fixe hors worktree
@@ -226,8 +227,11 @@ REM ===========================================================================
 REM  ETAPE 5 : verification de l'executable produit
 REM  Gabarit de taille attendu : cette mesure porte sur le DOSSIER dist\Rummikub
 REM  NON COMPRESSE (arborescence PyInstaller onedir), et non sur l'installeur.
-REM  Taille normale observee du dossier dist\Rummikub : ~28 Mo (28 712 051 octets).
-REM  Fourchette de sanite : 20 Mo a 45 Mo (20971520 a 47185920 octets).
+REM  Depuis le solveur exact d'Expert (issue #206 : numpy ~43 Mo + highspy
+REM  ~12 Mo, soit ~+55 Mo sur disque), le dossier passe d'environ 26 Mo (build
+REM  13) a environ 80 Mo attendus. Fourchette de sanite ELARGIE (issue #208) :
+REM  20 Mo a 120 Mo (20971520 a 125829120 octets). Valeurs PROVISOIRES a
+REM  confirmer/resserrer apres le premier build Windows avec highspy/numpy.
 REM  Hors de cette fourchette -> simple avertissement, pas d'echec.
 REM  (Le garde-fou sur l'installeur final compresse est a l'etape 6.)
 REM ===========================================================================
@@ -241,16 +245,53 @@ set "TOTAL=0"
 for /f "usebackq delims=" %%S in (`powershell -NoProfile -Command "(Get-ChildItem -Recurse -File 'dist\Rummikub' | Measure-Object -Sum Length).Sum"`) do set "TOTAL=%%S"
 echo       OK : dist\Rummikub\Rummikub.exe present.
 echo       Taille totale du dossier dist\Rummikub ^(non compresse^) : %TOTAL% octets
-if %TOTAL% LSS 20971520 echo       [ATTENTION] Dossier dist\ inhabituellement PETIT ^(attendu ~28 Mo, fourchette 20-45 Mo^).
-if %TOTAL% GTR 47185920 echo       [ATTENTION] Dossier dist\ inhabituellement GRAND ^(attendu ~28 Mo, fourchette 20-45 Mo^).
+if %TOTAL% LSS 20971520 echo       [ATTENTION] Dossier dist\ inhabituellement PETIT ^(attendu ~80 Mo, fourchette 20-120 Mo^).
+if %TOTAL% GTR 125829120 echo       [ATTENTION] Dossier dist\ inhabituellement GRAND ^(attendu ~80 Mo, fourchette 20-120 Mo^).
+
+REM ===========================================================================
+REM  ETAPE 5bis : autotest fonctionnel de l'executable (issue #208)
+REM  Lance dist\Rummikub\Rummikub.exe --autotest, qui verifie SANS ouvrir de
+REM  fenetre (et sans charger pywebview) que le solveur exact d'Expert
+REM  (highspy + numpy) est bien collecte et FONCTIONNE dans le binaire gele :
+REM  sinon Expert retomberait silencieusement sur l'ancienne recherche sans que
+REM  personne ne le voie (risque n^o 1 de l'issue #206/#208). L'executable etant
+REM  fenetre (console=False), sa sortie standard est perdue : --autotest ecrit
+REM  donc son compte rendu dans le fichier passe en argument, qu'on reprend ici
+REM  via "type". Code de sortie != 0 => build REFUSE (echec franc, pas un simple
+REM  avertissement : un paquet ou Expert est casse ne doit pas etre publie).
+REM ===========================================================================
+echo.
+echo [5bis/9] Autotest de l'executable ^(--autotest^)...
+set "AUTOTEST_LOG=%BUILDDIR%\autotest_rapport.txt"
+if exist "!AUTOTEST_LOG!" del /f /q "!AUTOTEST_LOG!"
+"dist\Rummikub\Rummikub.exe" --autotest "!AUTOTEST_LOG!"
+set "AUTOTEST_RC=!errorlevel!"
+if exist "!AUTOTEST_LOG!" (
+    echo       --- Compte rendu de l'autotest ---
+    type "!AUTOTEST_LOG!"
+    echo       --- Fin du compte rendu ---
+) else (
+    echo       [ATTENTION] Aucun rapport d'autotest produit ^(!AUTOTEST_LOG! absent^).
+)
+if not "!AUTOTEST_RC!"=="0" (
+    echo [ERREUR] L'autotest de l'executable a echoue ^(code de sortie !AUTOTEST_RC!^).
+    echo          Le solveur exact d'Expert ne fonctionne PAS dans l'executable
+    echo          construit : highspy/numpy mal collectes par PyInstaller, ou
+    echo          ressources web absentes. Expert retomberait silencieusement sur
+    echo          l'ancienne recherche. Build REFUSE -- voir le compte rendu ci-dessus.
+    popd & exit /b 1
+)
+echo       Autotest OK ^(code 0^) : le solveur exact fonctionne dans l'executable.
 
 REM ===========================================================================
 REM  ETAPE 6 : installeur Inno Setup + copie (local + worktree) + garde-fou
 REM  Garde-fou sur l'INSTALLEUR FINAL COMPRESSE (Rummikub-Setup.exe).
 REM  Distinct de l'etape 5 (dossier dist\ non compresse) : ici on mesure le .exe
-REM  d'installation genere par Inno Setup, soit ~12 Mo (12 180 000 octets observes).
-REM  Fourchette de sanite : 5 Mo a 25 Mo (5242880 a 26214400 octets).
-REM  Hors de cette fourchette -> simple avertissement, pas d'echec.
+REM  d'installation genere par Inno Setup, soit ~12,8 Mo au build 13 ; avec le
+REM  solveur exact (issue #206) il grossira nettement (numpy + highspy).
+REM  Fourchette de sanite ELARGIE (issue #208) : 5 Mo a 50 Mo (5242880 a
+REM  52428800 octets). Valeurs PROVISOIRES a confirmer apres le premier build
+REM  Windows avec highspy/numpy. Hors fourchette -> simple avertissement.
 REM ===========================================================================
 echo.
 echo [6/9] Generation de l'installeur avec Inno Setup...
@@ -293,8 +334,8 @@ if errorlevel 1 ( echo [ERREUR] Echec de la copie de l'installeur vers le worktr
 set "SETUPSIZE=0"
 for /f "usebackq delims=" %%S in (`powershell -NoProfile -Command "(Get-Item '%SETUP%').Length"`) do set "SETUPSIZE=%%S"
 echo       Taille de l'installeur %SETUPNAME% ^(compresse^) : %SETUPSIZE% octets
-if %SETUPSIZE% LSS 5242880 echo       [ATTENTION] Installeur inhabituellement PETIT ^(attendu ~12 Mo, fourchette 5-25 Mo^).
-if %SETUPSIZE% GTR 26214400 echo       [ATTENTION] Installeur inhabituellement GRAND ^(attendu ~12 Mo, fourchette 5-25 Mo^).
+if %SETUPSIZE% LSS 5242880 echo       [ATTENTION] Installeur inhabituellement PETIT ^(attendu ~30 Mo, fourchette 5-50 Mo^).
+if %SETUPSIZE% GTR 52428800 echo       [ATTENTION] Installeur inhabituellement GRAND ^(attendu ~30 Mo, fourchette 5-50 Mo^).
 
 REM ===========================================================================
 REM  ETAPE 7 : manifest.json + zip (dist\Rummikub\* + manifest.json)
@@ -303,8 +344,9 @@ REM  (l'updater Actualise l'extrait directement par-dessus le dossier installe).
 REM  Nom toujours numerote (rummikub-vN.zip), publie ou non (issue #178) : le
 REM  dossier fixe hors worktree (etape 8) a besoin du numero reel dans tous les
 REM  modes, donc plus de nom fixe "rummikub.zip" pour les builds de test.
-REM  Garde-fou de taille sur le zip : fourchette 5 Mo a 25 Mo (memes bornes que
-REM  l'installeur compresse) -> hors fourchette = simple avertissement.
+REM  Garde-fou de taille sur le zip : fourchette 5 Mo a 50 Mo (memes bornes que
+REM  l'installeur compresse, elargies issue #208 pour numpy+highspy) -> hors
+REM  fourchette = simple avertissement.
 REM ===========================================================================
 set "ZIPNAME=rummikub-v!EXEBUILD!.zip"
 echo.
@@ -324,8 +366,8 @@ if not exist "installeur\output\!ZIPNAME!" (
 set "ZIPSIZE=0"
 for /f "usebackq delims=" %%S in (`powershell -NoProfile -Command "(Get-Item 'installeur\output\!ZIPNAME!').Length"`) do set "ZIPSIZE=%%S"
 echo       Taille de !ZIPNAME! ^(compresse^) : %ZIPSIZE% octets
-if %ZIPSIZE% LSS 5242880 echo       [ATTENTION] !ZIPNAME! inhabituellement PETIT ^(attendu ~13 Mo, fourchette 5-25 Mo^).
-if %ZIPSIZE% GTR 26214400 echo       [ATTENTION] !ZIPNAME! inhabituellement GRAND ^(attendu ~13 Mo, fourchette 5-25 Mo^).
+if %ZIPSIZE% LSS 5242880 echo       [ATTENTION] !ZIPNAME! inhabituellement PETIT ^(attendu ~30 Mo, fourchette 5-50 Mo^).
+if %ZIPSIZE% GTR 52428800 echo       [ATTENTION] !ZIPNAME! inhabituellement GRAND ^(attendu ~30 Mo, fourchette 5-50 Mo^).
 
 echo       Copie de !ZIPNAME! vers le worktree ^(%ORIGDIR%\installeur\output^)...
 copy /y "installeur\output\!ZIPNAME!" "%ORIGDIR%\installeur\output\!ZIPNAME!" >nul
