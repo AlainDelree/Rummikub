@@ -227,11 +227,19 @@ class Api:
             # avant/après déjà disponible, puis simplement affichés côté JS.
             try:
                 from rummikub.moteur.description_coup import (
-                    decrire_coup_ia, etapes_coup_ia)
+                    decrire_coup_ia, etapes_coup_ia, mesurer_coup_ia)
                 resume = decrire_coup_ia(plateau_avant, plateau_apres,
                                           nom=etat["joueurs"][idx]["nom"])
                 etat["dernier_coup_ia"]["resume"] = resume["texte"]
+                # Pas-à-pas CONDENSÉ par défaut (issue #207) + découpage
+                # DÉTAILLÉ (bouton « Détailler »), calculés une seule fois ici.
                 etat["dernier_coup_ia"]["etapes"] = etapes_coup_ia(
+                    plateau_avant, plateau_apres, condense=True)
+                etat["dernier_coup_ia"]["etapes_detaillees"] = etapes_coup_ia(
+                    plateau_avant, plateau_apres, condense=False)
+                # Mesure d'ampleur du coup : ligne de titre du pas-à-pas et
+                # critère d'affichage du bouton « Pas à pas ».
+                etat["dernier_coup_ia"]["mesure"] = mesurer_coup_ia(
                     plateau_avant, plateau_apres)
             except Exception as exc:
                 # La description du coup est un simple confort d'affichage :
@@ -252,6 +260,8 @@ class Api:
                     pass
                 etat["dernier_coup_ia"]["resume"] = ""
                 etat["dernier_coup_ia"]["etapes"] = []
+                etat["dernier_coup_ia"]["etapes_detaillees"] = []
+                etat["dernier_coup_ia"]["mesure"] = None
         self._app.etat_jeu = res["etat"]
         backup_debut_tour(self._app.etat_jeu)
         sauvegarder_partie(self._app.etat_jeu)

@@ -1548,14 +1548,15 @@ position d'après.
     combinaisons listées dans `etape.provisoires`, et `.tuile-ia-highlight`
     (surbrillance déjà existante) sur les tuiles listées dans
     `etape.surbrillance`.
-  - `#btn-pas-a-pas-coup-ia` démasqué par `rafraichirBoutonRejouerIA()`
-    seulement si `nbChangementsPasAPas(coup.etapes) >= 2`.
+  - `#btn-pas-a-pas-coup-ia` démasqué par `rafraichirBoutonRejouerIA()` —
+    critère revu par #207 (`coupMeriteePasAPas`, voir §12quater), qui remplace
+    l'ancien `nbChangementsPasAPas(coup.etapes) >= 2`.
   - `#overlay-pas-a-pas` reste une carte modale en LECTURE SEULE, totalement
     indépendante de `rejouerDernierCoupIA` (bouton de rejeu animé,
     inchangé) ; navigation Suivant/Précédent par index local
     (`indexEtapePasAPas`), « Quitter » referme sans effet sur la partie.
-  - **Bascule Avant/Après (point 2 de l'issue #189) : toujours NON
-    implémentée**, hors périmètre de #191 également.
+  - **Bascule Avant/Après (point 2 de l'issue #189) : réalisée par #207**
+    (voir §12quater), de même que le pas-à-pas condensé et la ligne de taille.
 - Tests : `tests/test_description_coup.py` — contractions (`_contracter`,
   du/au/des/aux, groupe/suite) ; coups simples (extension de suite, groupe
   créé depuis la main, aucun changement) ; joker récupéré puis rejoué dans
@@ -1694,6 +1695,75 @@ de complexité (§11quater) :
   cas Bruno (#191) attendait `"Il a créé..."`/`"Il a complété..."`
   (désormais `"Création d'un groupe de 11."`/`"Le 3 bleu remplace le
   joker dans le groupe de 3."`) — même contenu, formulation différente.
+
+### 12quater. Pas-à-pas condensé, taille du coup, bascule Avant/Après (issue #207)
+
+Depuis l'Expert exact (#206), un coup peut déplacer beaucoup de tuiles : le
+pas-à-pas tuile-par-tuile (#191) devenait très long (30 étapes pour un vrai
+coup de Clara). L'issue #207 condense le découpage, annonce l'ampleur du coup,
+ajoute un mode détaillé optionnel et la bascule Avant/Après, et corrige deux
+défauts d'affichage. **Aucun changement au moteur, à l'IA ni à la sauvegarde.**
+
+- **Pas-à-pas condensé par défaut** (`etapes_coup_ia(avant, apres,
+  condense=True)`, défaut) : regroupe les gestes par combinaison. Les tuiles
+  libérées d'une combinaison défaite transitent par le cadre **sans étape
+  dédiée** (la combinaison rétrécie reste « provisoire ») ; **une étape par
+  combinaison créée ou complétée** ; départ, écran « Les jokers », cadre,
+  provisoires, surbrillances et dernière étape (plateau d'après exact, cadre
+  vide) inchangés. Résultat : le coup de Clara passe de 30 à **10 étapes**
+  (< 12), celui de Bruno #57 de 27 à < 11. Un coup court donne le même
+  découpage qu'en détaillé. Implémentation : en mode condensé, les opérations
+  « retrait » et les « update » invisibles mettent à jour working/cadre mais
+  **n'émettent pas d'étape** (le suivi causal reste exact) ; un filet ajoute
+  une dernière étape « plateau d'après » dédoublonnée par
+  `_sans_etapes_sans_effet`.
+- **Mode détaillé** : `etapes_coup_ia(..., condense=False)` conserve le
+  découpage tuile-par-tuile de #191. `api.py` calcule et stocke les DEUX
+  (`etat["dernier_coup_ia"]["etapes"]` = condensé, `["etapes_detaillees"]` =
+  détaillé). Front : bouton `#btn-pas-a-pas-detailler` (« Détailler » ↔
+  « Condenser »), condensé à chaque ouverture. **Note importante** : la
+  relabellisation des tuiles indiscernables (ci-dessous) n'est PAS appliquée à
+  `etapes_coup_ia` (elle casse le suivi causal d'un très gros coup : le repli
+  à 2 étapes s'y substituerait) — seulement au résumé et à la mesure.
+- **Mesure / taille du coup** (`mesurer_coup_ia(avant, apres)` →
+  `{"nb_tuiles_posees", "nb_tuiles_plateau_deplacees",
+  "nb_combinaisons_modifiees", "nb_combinaisons_creees", "taille"}`), stockée
+  dans `etat["dernier_coup_ia"]["mesure"]`. `nb_combinaisons_modifiees` =
+  combinaisons DÉFAITES ou MODIFIÉES (hors créations pures). `taille` =
+  « petit »/« moyen »/« grand » selon les combinaisons TOUCHÉES
+  (défaites+créées+modifiées), **mêmes seuils que `coups_rates.py`** (1-2 /
+  3-5 / 6+, `_taille_mot` recopie ces bornes pour ne pas dépendre de la
+  persistance). `nb_tuiles_plateau_deplacees` = même définition que
+  `trouverTuilesDeplacees` de `jeu.js`. Affichée en tête du pas-à-pas par
+  `majLigneTaillePasAPas` : « Coup de grande taille : 14 tuiles du plateau
+  déplacées, 6 combinaisons modifiées, 4 tuiles posées depuis la main. »
+- **Bascule Avant/Après** (point 2 de #189, enfin réalisé) : bouton
+  `#btn-pas-a-pas-comparaison` ; `#vue-comparaison-pas-a-pas` montre les deux
+  plateaux côte à côte en LECTURE SEULE, combinaisons modifiées/créées en
+  évidence (`.combi-modifiee`), tuiles distinguées par origine (`.ce-tour`
+  main, `.deplacee-tapis` déplacée), avec légende `#legende-pas-a-pas`.
+  Ne modifie jamais la partie.
+- **Défaut 1 corrigé (résumé)** : `decrire_coup_ia` (et `mesurer_coup_ia`)
+  passent d'abord par `_relabeler_tuiles_indiscernables` (remontée depuis
+  `coups_rates.py`, enrichie d'un **appariement bijectif global** + garde-fou
+  itératif contre la duplication d'id — notamment d'un joker resté dans un
+  autre groupe). Deux tuiles de même aspect qui échangent leurs places dans
+  une même combinaison ou entre combinaisons ne produisent plus de phrase
+  « X remplace Y » ; une combinaison identique avant/après n'est ni modifiée
+  ni défaite.
+- **Défaut 2 corrigé (seuil du bouton)** : le bouton « Pas à pas » apparaît
+  dès que le coup **déplace ≥ 1 tuile du plateau OU modifie ≥ 2 combinaisons**
+  (`coupMeriteePasAPas`, à partir de `coup.mesure`), plus seulement « ≥ 2
+  étapes nettoyées ». Un coup qui n'ajoute que des tuiles de la main à une
+  seule combinaison, ou en crée, reste sans bouton. Repli sur l'ancien
+  critère pour les parties d'avant #207.
+- Tests : `tests/test_description_coup.py` (condensé < 12 étapes pour Clara,
+  invariants condensés, position fabriquée, coup court inchangé, mesure,
+  défaut 1) ; `tests/test_condense_solveur.py` (coups réels du modèle exact,
+  dont Bruno #57 < 11 — sauté sans `rummikub-solver`) ;
+  `tests/test_playwright_pas_a_pas.py` (bouton présent pour Clara, absent pour
+  une création pure, ligne de taille, bouton « Détailler », bascule
+  Avant/Après).
 
 ## 13. Pistes d'amélioration de l'IA à tester (issue #195)
 

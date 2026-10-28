@@ -19,8 +19,95 @@ dans le cadre « tuiles à placer » (tant qu'elle n'a pas encore rejoint sa
 combinaison finale).
 """
 
+import copy
+
 from rummikub.moteur.tuiles import tuile_depuis_dict
 from rummikub.moteur.validation import valider_combinaison
+
+
+# ------------------------------------------ normalisation des tuiles identiques
+
+def _signature_tuile(t: dict) -> tuple:
+    return (t.get("valeur"), t.get("couleur"), bool(t.get("est_joker")))
+
+
+def _relabeler_tuiles_indiscernables(plateau_avant: list, plateau_apres: list) -> list:
+    """Corrige, dans une COPIE de ``plateau_apres``, les échanges de tuiles
+    STRICTEMENT INDISCERNABLES (même valeur/couleur, ou deux jokers) qui ne
+    changent rien à l'écran mais dont les identifiants ont bougé — que l'échange
+    ait lieu dans une même combinaison ou ENTRE combinaisons (issue #207,
+    défaut 1). Le suivi tuile-par-tuile de ``_construire_operations`` (#191), qui
+    distingue les tuiles par leur identifiant, lit sinon un changement là où le
+    joueur n'en voit aucun : « le 13 jaune remplace le 13 bleu … le 13 bleu
+    remplace le 13 jaune », alors que les deux groupes restent identiques.
+
+    Repère les combinaisons d'après dont le CONTENU (multiset
+    valeur/couleur/joker, identifiant ignoré) est IDENTIQUE à une combinaison
+    d'avant encore non appariée, et relabellise ses tuiles pour reprendre
+    exactement les identifiants de cette combinaison d'avant — elle devient
+    alors un pur no-op (ids avant == ids après), donc ni « modifiée » ni
+    « défaite ». Ne touche jamais une combinaison contenant une tuile venue de
+    la main (changement réel), ni une combinaison dont le contenu a réellement
+    changé — aucune information de jeu n'est perdue : deux tuiles
+    indiscernables échangées restent, par définition, indiscernables.
+
+    Même logique que ``persistance/coups_rates.py`` (issue #196), remontée ici
+    pour que le résumé/les étapes d'un coup RÉELLEMENT joué (chemin direct par
+    ``ui/api.py``, sans passer par ``coups_rates``) en bénéficient aussi."""
+    def _cle_tri(s):
+        return (s[0] is None, s[0] or 0, s[1] or "", s[2])
+
+    def _signature_combo(combo):
+        return tuple(sorted((_signature_tuile(t) for t in combo), key=_cle_tri))
+
+    plateau_apres = copy.deepcopy(plateau_apres)
+    ids_avant_total = {t["id"] for combo in plateau_avant for t in combo}
+
+    # 1) Appariement glouton : chaque combinaison d'après ENTIÈREMENT faite de
+    #    tuiles du plateau (pas de tuile de la main) et de CONTENU identique à
+    #    une combinaison d'avant encore libre.
+    avant_libres = {i: combo for i, combo in enumerate(plateau_avant) if combo}
+    appariements = {}   # index combo_apres -> index combo_avant
+    for c, combo_apres in enumerate(plateau_apres):
+        if not combo_apres:
+            continue
+        if any(t["id"] not in ids_avant_total for t in combo_apres):
+            continue
+        signature = _signature_combo(combo_apres)
+        for i, combo_avant in avant_libres.items():
+            if i not in appariements.values() and _signature_combo(combo_avant) == signature:
+                appariements[c] = i
+                break
+
+    # 2) Garde-fou itératif : réutiliser les ids d'une combinaison d'avant
+    #    appariée est sûr seulement si aucun de ces ids ne vit encore dans une
+    #    combinaison d'après NON relabellisée (sinon on le dupliquerait — cas
+    #    d'un joker resté dans un autre groupe, issue #207). Retirer un
+    #    appariement remet ses ids d'après « en circulation » et peut rendre un
+    #    autre appariement risqué : on boucle jusqu'à stabilité.
+    change = True
+    while change:
+        change = False
+        ids_hors_apparies = {t["id"]
+                             for c, combo in enumerate(plateau_apres)
+                             for t in combo if c not in appariements}
+        for c, i in list(appariements.items()):
+            if any(t["id"] in ids_hors_apparies for t in plateau_avant[i]):
+                del appariements[c]
+                change = True
+
+    # 3) Relabellisation des appariements survivants.
+    for c, i in appariements.items():
+        dispo = list(plateau_avant[i])
+        for k, t in enumerate(plateau_apres[c]):
+            cle = _signature_tuile(t)
+            for pos, cand in enumerate(dispo):
+                if _signature_tuile(cand) == cle:
+                    plateau_apres[c][k] = dict(t, id=cand["id"])
+                    dispo.pop(pos)
+                    break
+
+    return plateau_apres
 
 
 # --------------------------------------------------------------- vocabulaire
@@ -618,6 +705,7 @@ def decrire_coup_ia(plateau_avant: list, plateau_apres: list,
     minimal construit à partir des seules tuiles posées."""
     plateau_avant = plateau_avant or []
     plateau_apres = plateau_apres or []
+    plateau_apres = _relabeler_tuiles_indiscernables(plateau_avant, plateau_apres)
     try:
         return _decrire_coup_ia(plateau_avant, plateau_apres, nom)
     except Exception:
@@ -712,6 +800,79 @@ def _decrire_coup_ia(plateau_avant: list, plateau_apres: list,
     }
 
 
+# ---------------------------------------------------- mesure (taille du coup)
+
+def _taille_mot(nb_combinaisons: int) -> str:
+    """Mot d'ampleur d'un coup selon le nombre de combinaisons touchées, mêmes
+    seuils que ``persistance/coups_rates.py`` (issue #198, repris par #207) :
+    « petit » (1-2), « moyen » (3-5), « grand » (6 et plus). Réécrit ici pour
+    ne pas faire dépendre le moteur de la couche persistance."""
+    if nb_combinaisons <= 2:
+        return "petit"
+    if nb_combinaisons <= 5:
+        return "moyen"
+    return "grand"
+
+
+def _nb_tuiles_plateau_deplacees(plateau_avant: list, plateau_apres: list) -> int:
+    """Nombre de tuiles DÉJÀ posées avant le coup qui rejoignent une
+    combinaison différente — même définition que ``trouverTuilesDeplacees``
+    côté ``jeu.js`` (issue #149) : pour chaque combinaison d'avant, ses tuiles
+    sont regroupées par combinaison d'arrivée ; le groupe d'arrivée majoritaire
+    est sa « continuation », les autres tuiles sont comptées déplacées (une
+    extension/scission qui raccourcit une combinaison sans la vider reste donc
+    sa propre continuation). Sert à décider l'affichage du bouton « Pas à pas »
+    et à annoncer l'ampleur du coup, en cohérence avec l'animation du plateau."""
+    combo_apres_par_id = {t["id"]: j for j, combo in enumerate(plateau_apres)
+                          for t in combo}
+    deplacees = set()
+    for combo in plateau_avant:
+        par_cible = {}
+        for t in combo:
+            j = combo_apres_par_id.get(t["id"])
+            if j is None:
+                continue
+            par_cible.setdefault(j, []).append(t["id"])
+        if len(par_cible) <= 1:
+            continue
+        continuation = max(par_cible, key=lambda j: len(par_cible[j]))
+        for j, ids in par_cible.items():
+            if j != continuation:
+                deplacees.update(ids)
+    return len(deplacees)
+
+
+def mesurer_coup_ia(plateau_avant: list, plateau_apres: list) -> dict:
+    """Mesure d'ampleur d'un coup de l'IA, affichée en tête du pas-à-pas et
+    utilisée pour décider de l'affichage du bouton « Pas à pas » (issue #207).
+
+    Retourne {"nb_tuiles_posees", "nb_tuiles_plateau_deplacees",
+    "nb_combinaisons_modifiees", "nb_combinaisons_creees", "taille"}.
+
+    ``nb_combinaisons_modifiees`` compte les combinaisons du plateau
+    DÉFAITES ou MODIFIÉES (pas les combinaisons purement créées depuis la
+    main) — c'est le nombre annoncé « N combinaisons modifiées » et le
+    critère (≥ 2) d'affichage du bouton « Pas à pas ». ``taille`` est le mot
+    d'ampleur calculé sur les combinaisons TOUCHÉES (défaites + créées +
+    modifiées), mêmes seuils que ``coups_rates.py`` (« petit » 1-2, « moyen »
+    3-5, « grand » 6+). Ne lève jamais d'exception sur un coup valide."""
+    plateau_avant = plateau_avant or []
+    plateau_apres = plateau_apres or []
+    plateau_apres = _relabeler_tuiles_indiscernables(plateau_avant, plateau_apres)
+    resume = decrire_coup_ia(plateau_avant, plateau_apres)
+    nb_modifiees = (resume["nb_combinaisons_defaites"]
+                    + resume["nb_combinaisons_modifiees"])
+    nb_touchees = nb_modifiees + resume["nb_combinaisons_creees"]
+    return {
+        "nb_tuiles_posees": len(resume["tuiles_posees"]),
+        "nb_tuiles_plateau_deplacees": _nb_tuiles_plateau_deplacees(
+            plateau_avant, plateau_apres),
+        "nb_combinaisons_modifiees": nb_modifiees,
+        "nb_combinaisons_creees": resume["nb_combinaisons_creees"],
+        "taille": _taille_mot(nb_touchees),
+    }
+
+
 # ---------------------------------------------------- étapes du pas-à-pas
 
 def _snapshot_plateau(working: dict) -> list:
@@ -728,17 +889,24 @@ def _snapshot_cadre(cadre: dict) -> list:
             for info in cadre.values()]
 
 
-def etapes_coup_ia(plateau_avant: list, plateau_apres: list) -> list:
+def etapes_coup_ia(plateau_avant: list, plateau_apres: list,
+                   condense: bool = True) -> list:
     """Découpe un coup de l'IA en une suite d'états cohérents pour le rejeu
     pas-à-pas : à chaque étape, chaque tuile n'est qu'à un seul endroit à la
     fois (sur le plateau, instantané ``plateau``, ou dans le cadre « tuiles à
     placer », instantané ``cadre``). La suite commence par un écran
     « Départ » (plateau d'avant, cadre rempli des tuiles de la main), suivi
     si besoin d'un écran de synthèse « Les jokers », puis d'une étape par
-    changement visible (une seule combinaison modifiée/créée/vidée à la
-    fois). La toute dernière étape correspond exactement à ``plateau_apres``,
-    avec un cadre vide. Le bouton « Pas à pas » du front-end ne s'affiche que
-    si au moins 2 étapes sont renvoyées.
+    changement visible. La toute dernière étape correspond exactement à
+    ``plateau_apres``, avec un cadre vide.
+
+    ``condense`` (défaut, issue #207) regroupe les gestes par combinaison :
+    une étape par combinaison CRÉÉE ou COMPLÉTÉE, les tuiles libérées d'une
+    combinaison défaite transitant par le cadre sans étape dédiée (les
+    combinaisons rétrécies apparaissent « provisoires »). Le découpage détaillé
+    historique (une étape par mouvement de tuile, issue #191) reste accessible
+    avec ``condense=False`` (bouton « Détailler » du front-end). Pour un coup
+    court, les deux découpages coïncident.
 
     Chaque étape est un dict {"titre": str, "texte": str, "plateau": [...],
     "cadre": [{"tuile": dict, "origine": "main"|"plateau"}, ...],
@@ -749,8 +917,14 @@ def etapes_coup_ia(plateau_avant: list, plateau_apres: list) -> list:
     simplifiée à deux étapes (départ puis arrivée)."""
     plateau_avant = plateau_avant or []
     plateau_apres = plateau_apres or []
+    # Pas de relabellisation ici (contrairement à ``decrire_coup_ia``) : le
+    # découpage en étapes neutralise déjà les échanges de tuiles identiques
+    # (``_annuler_par_aspect`` dans une combinaison, repli pour un cycle entre
+    # combinaisons) et la relabellisation, en fusionnant des combinaisons de
+    # même contenu, peut au contraire casser le suivi causal d'un très gros
+    # coup (issue #207).
     try:
-        return _etapes_coup_ia(plateau_avant, plateau_apres)
+        return _etapes_coup_ia(plateau_avant, plateau_apres, condense=condense)
     except Exception:
         return _etapes_coup_ia_repli(plateau_avant, plateau_apres)
 
@@ -779,7 +953,8 @@ def _etapes_coup_ia_repli(plateau_avant: list, plateau_apres: list) -> list:
     return [depart, arrivee]
 
 
-def _etapes_coup_ia(plateau_avant: list, plateau_apres: list) -> list:
+def _etapes_coup_ia(plateau_avant: list, plateau_apres: list,
+                    condense: bool = True) -> list:
     r = _construire_operations(plateau_avant, plateau_apres)
     ops = r["ops"]
     if not ops and not r["tuiles_posees"]:
@@ -885,6 +1060,14 @@ def _etapes_coup_ia(plateau_avant: list, plateau_apres: list) -> list:
             verbe = "sort" if len(op["tuiles"]) == 1 else "sortent"
             texte = (f"{_maj(_lister_tuiles_def(op['tuiles']))} {verbe} "
                       f"{_contracter('de', donneur)}.")
+            # Mode condensé (issue #207) : les tuiles libérées d'une combinaison
+            # défaite transitent par le cadre SANS étape dédiée — on garde la
+            # mise à jour working/cadre ci-dessus (suivi causal exact), mais la
+            # combinaison qui se reforme (« create »/« update ») portera à elle
+            # seule une étape. La combinaison d'origine rétrécie reste visible
+            # comme « provisoire » jusqu'à ce que sa dernière tuile parte.
+            if condense:
+                invisible = True
 
         elif op["kind"] == "update":
             slot = f"a{op['avant_idx']}"
@@ -913,6 +1096,13 @@ def _etapes_coup_ia(plateau_avant: list, plateau_apres: list) -> list:
 
         if not invisible:
             etapes.append(etat_courant("", texte, ids_touchees))
+
+    # Mode condensé : garantir que la toute dernière étape est bien le plateau
+    # d'après exact, cadre vide (issue #207). En pratique le dernier « create »
+    # produit déjà cet état ; ce filet le rend robuste et `_sans_etapes_sans_
+    # effet` supprime ce doublon s'il n'apporte rien.
+    if condense and len(etapes) > 1:
+        etapes.append(etat_courant("", "Après le coup.", []))
 
     return _sans_etapes_sans_effet(etapes)
 
