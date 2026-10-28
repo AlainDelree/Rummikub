@@ -1,0 +1,78 @@
+########## APRÈS (#206 : Expert = modèle exact HiGHS) ##########
+======================================================================
+COMPARAISON : Avancé (camp A) vs Expert (camp B)
+Matchs de 1 manche(s) — 20 donne(s) x 2 (miroir) = 40 match(s) demandé(s), 40 match(s) décidé(s)
+----------------------------------------------------------------------
+  RÉSULTATS PAR MATCH (vainqueur = plus haut score cumulé) :
+  Avancé (camp A) : 1/40 victoires — taux 2.5 % ± 4.8 pt (IC 95 %) ; score cumulé moyen -30.8
+  Expert (camp B) : 39/40 victoires — taux 97.5 % ± 4.8 pt (IC 95 %) ; score cumulé moyen 30.8
+  Écart par rapport à 50/50 significatif au seuil de confiance 95 %.
+----------------------------------------------------------------------
+  RÉSULTATS PAR MANCHE (40 manche(s) jouée(s)) :
+  Fins de manche : 40 par chevalet vidé, 0 par pioche épuisée (bloqué), 0 match(s) arrêté(s) par le garde-fou (max tours).
+  Durée moyenne d'une manche décidée : 68.4 tour(s).
+  Perdant de manche : en moyenne 4.5 tuile(s) restante(s), 31.3 point(s) de pénalité.
+  Anomalies de conservation des tuiles (#187, attendu 0) : 0
+----------------------------------------------------------------------
+  Temps de calcul par tour (décision IA), par niveau :
+    Avancé          : moyenne 1.1 ms, max 22.3 ms, sur 1359 tour(s)
+    Expert          : moyenne 176.6 ms, max 2140.1 ms, sur 1378 tour(s)
+  Replis d'Expert sur Avancé, toute cause : 795/1378 tour(s) (57.7 %)
+    — dont faute de résultat dans le budget (#190, seule cause visée par l'accélération) : 0/1378 tour(s) (0.0 %)
+    — dont coup légitimement impossible (aucun rapport avec la vitesse) : 795/1378 tour(s) (57.7 %)
+  Perturbation du plateau par coup d'Expert (#199, preferer_simple activé) : en moyenne 1.95 tuile(s) déplacée(s) et 1.84 combinaison(s) modifiée(s), sur 583 coup(s) posé(s) par Expert.
+======================================================================
+Temps total de la campagne : 245.8s.
+
+########## AVANT (Expert = recherche arborescente, --sans-exact) ##########
+[#206] Modèle exact DÉSACTIVÉ (Expert = recherche arborescente).
+======================================================================
+COMPARAISON : Avancé (camp A) vs Expert (camp B)
+Matchs de 1 manche(s) — 20 donne(s) x 2 (miroir) = 40 match(s) demandé(s), 40 match(s) décidé(s)
+----------------------------------------------------------------------
+  RÉSULTATS PAR MATCH (vainqueur = plus haut score cumulé) :
+  Avancé (camp A) : 2/40 victoires — taux 5.0 % ± 6.8 pt (IC 95 %) ; score cumulé moyen -29.7
+  Expert (camp B) : 38/40 victoires — taux 95.0 % ± 6.8 pt (IC 95 %) ; score cumulé moyen 29.7
+  Écart par rapport à 50/50 significatif au seuil de confiance 95 %.
+----------------------------------------------------------------------
+  RÉSULTATS PAR MANCHE (40 manche(s) jouée(s)) :
+  Fins de manche : 40 par chevalet vidé, 0 par pioche épuisée (bloqué), 0 match(s) arrêté(s) par le garde-fou (max tours).
+  Durée moyenne d'une manche décidée : 69.9 tour(s).
+  Perdant de manche : en moyenne 4.8 tuile(s) restante(s), 31.4 point(s) de pénalité.
+  Anomalies de conservation des tuiles (#187, attendu 0) : 0
+----------------------------------------------------------------------
+  Temps de calcul par tour (décision IA), par niveau :
+    Avancé          : moyenne 1.2 ms, max 27.6 ms, sur 1389 tour(s)
+    Expert          : moyenne 283.6 ms, max 1677.2 ms, sur 1407 tour(s)
+  Replis d'Expert sur Avancé, toute cause : 818/1407 tour(s) (58.1 %)
+    — dont faute de résultat dans le budget (#190, seule cause visée par l'accélération) : 6/1407 tour(s) (0.4 %)
+    — dont coup légitimement impossible (aucun rapport avec la vitesse) : 812/1407 tour(s) (57.7 %)
+  Perturbation du plateau par coup d'Expert (#199, preferer_simple activé) : en moyenne 2.26 tuile(s) déplacée(s) et 2.03 combinaison(s) modifiée(s), sur 601 coup(s) posé(s) par Expert.
+======================================================================
+Temps total de la campagne : 401.9s.
+
+########## comparer_solveur_exact.py (ancienne recherche vs bibliothèque) ##########
+=== Comparaison sur 10 cas de référence (notre solveur 1.5 s / 10.0 s vs exact) ===
+cas                                             min  exact   1.5s   10s  écart  durée_exact
+-------------------------------------------------------------------------------------------
+cas_expert_bruno_tour57.json                      3      4      3     3     +1      72.3 ms  <- rate 1 à 1.5s
+cas_expert_budget_tour81.json                     —      3      3     3     +0     169.6 ms
+cas_expert_coup_simple_david_tour31.json          1      1      1     1     +0      19.3 ms
+cas_expert_humain_261026172338_tour66.json        7      7      6     7     +1     141.0 ms  <- rate 1 à 1.5s
+cas_expert_humain_261026174101_tour81.json        3      3      3     3     +0     148.7 ms
+cas_expert_humain_261026213723_tour65.json        3      3      3     3     +0     141.2 ms
+cas_expert_ia_261026172338_tour37.json            6      6      6     6     +0      26.0 ms
+cas_expert_ia_261026172338_tour59.json            7      7      6     7     +1      73.7 ms  <- rate 1 à 1.5s
+cas_expert_ia_261026172338_tour61.json            4      4      1     4     +3      60.2 ms  <- rate 3 à 1.5s
+reference_victoire_manquee_ines_tour85.json       2      2      1     1     +1      82.6 ms  <- rate 1 à 1.5s
+-------------------------------------------------------------------------------------------
+
+=== Synthèse ===
+  Cas où notre solveur rate des tuiles à 1.5 s : 5 / 10
+  Écart (exact − notre solveur à 1.5 s) : moyen 0.70, maximal 3
+  Temps total du solveur exact : 934.5 ms (93.5 ms/cas en moyenne)
+  Backend exact : HIGHS
+  Toutes les combinaisons proposées sont valides (valider_combinaison) : True
+  Conservation des tuiles du plateau sur tous les cas : True
+
+FINI_MESURES

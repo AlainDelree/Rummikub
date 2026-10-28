@@ -12,6 +12,23 @@ import os
 
 RACINE = SPECPATH  # répertoire contenant ce fichier .spec (injecté par PyInstaller)
 
+# Modèle exact d'Expert (issue #206) : highspy (HiGHS, extension native pybind11)
+# + numpy. PyInstaller détecte en général numpy via ses hooks ; highspy, étant
+# une extension compilée, est plus sûr à collecter explicitement (sous-modules
+# + bibliothèques dynamiques _core*.pyd/.so). Si les paquets ne sont PAS
+# installés dans l'environnement de build, on n'embarque rien : le jeu se
+# replie alors au runtime sur la recherche arborescente (solveur.py), sans
+# planter — voir ``moteur/solveur_exact.py`` et ``moteur/ia.py``.
+_hidden_exact = []
+_binaries_exact = []
+try:
+    from PyInstaller.utils.hooks import collect_dynamic_libs, collect_submodules
+    _hidden_exact = ["numpy"] + collect_submodules("highspy")
+    _binaries_exact = collect_dynamic_libs("highspy")
+except Exception:
+    _hidden_exact = []
+    _binaries_exact = []
+
 
 def collect_tree(src_dir, dest_dir):
     """Liste [(chemin_source, dossier_destination), ...] pour tout un arbre.
@@ -51,13 +68,19 @@ if os.path.exists(_fichier_version):
 
 datas = collect_tree("src/rummikub/ui/web", "rummikub/ui/web")
 
+# Fichier de licences tierces (highspy MIT, numpy BSD — issue #206), distribué
+# à la racine de dist/Rummikub/ comme l'exigent ces licences permissives.
+_licences = os.path.join(RACINE, "THIRD_PARTY_LICENSES.txt")
+if os.path.exists(_licences):
+    datas.append((_licences, "."))
+
 
 a = Analysis(
     ["main.py"],
     pathex=[os.path.join(RACINE, "src")],
-    binaries=[],
+    binaries=_binaries_exact,
     datas=datas,
-    hiddenimports=[],
+    hiddenimports=_hidden_exact,
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],

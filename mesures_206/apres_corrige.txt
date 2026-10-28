@@ -1,0 +1,24 @@
+======================================================================
+COMPARAISON : Avancé (camp A) vs Expert (camp B)
+Matchs de 1 manche(s) — 20 donne(s) x 2 (miroir) = 40 match(s) demandé(s), 40 match(s) décidé(s)
+----------------------------------------------------------------------
+  RÉSULTATS PAR MATCH (vainqueur = plus haut score cumulé) :
+  Avancé (camp A) : 1/40 victoires — taux 2.5 % ± 4.8 pt (IC 95 %) ; score cumulé moyen -30.8
+  Expert (camp B) : 39/40 victoires — taux 97.5 % ± 4.8 pt (IC 95 %) ; score cumulé moyen 30.8
+  Écart par rapport à 50/50 significatif au seuil de confiance 95 %.
+----------------------------------------------------------------------
+  RÉSULTATS PAR MANCHE (40 manche(s) jouée(s)) :
+  Fins de manche : 40 par chevalet vidé, 0 par pioche épuisée (bloqué), 0 match(s) arrêté(s) par le garde-fou (max tours).
+  Durée moyenne d'une manche décidée : 68.4 tour(s).
+  Perdant de manche : en moyenne 4.5 tuile(s) restante(s), 31.3 point(s) de pénalité.
+  Anomalies de conservation des tuiles (#187, attendu 0) : 0
+----------------------------------------------------------------------
+  Temps de calcul par tour (décision IA), par niveau :
+    Avancé          : moyenne 1.1 ms, max 22.3 ms, sur 1359 tour(s)
+    Expert          : moyenne 75.4 ms, max 1521.7 ms, sur 1378 tour(s)
+  Replis d'Expert sur Avancé, toute cause : 0/1378 tour(s) (0.0 %)
+    — dont faute de résultat dans le budget (#190, seule cause visée par l'accélération) : 0/1378 tour(s) (0.0 %)
+    — dont coup légitimement impossible (aucun rapport avec la vitesse) : 0/1378 tour(s) (0.0 %)
+  Perturbation du plateau par coup d'Expert (#199, preferer_simple activé) : en moyenne 1.95 tuile(s) déplacée(s) et 1.84 combinaison(s) modifiée(s), sur 583 coup(s) posé(s) par Expert.
+======================================================================
+Temps total de la campagne : 106.4s.

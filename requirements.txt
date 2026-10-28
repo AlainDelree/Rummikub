@@ -1,6 +1,14 @@
 pywebview
 pyinstaller
 pytest
+# Modèle exact du niveau Expert (issue #206) : programmation linéaire en nombres
+# entiers résolue par HiGHS, appelé directement via highspy (+ numpy), SANS
+# cvxpy ni scipy (≈3× plus léger — voir le rapport de #204). Licences : highspy
+# MIT, numpy BSD-3 (avis reproduits dans THIRD_PARTY_LICENSES.txt, à distribuer
+# avec le jeu). Roues disponibles pour Python 3.12 sous Windows. En leur absence,
+# Expert se replie automatiquement sur sa recherche arborescente (solveur.py).
+highspy>=1.7,<2
+numpy>=1.26,<3
 # pythonnet est une dépendance transitive de pywebview (backend WinForms sous Windows).
 # La version 2.5.2 n'a pas de roue pour Python 3.15 et sa compilation source casse.
 # On épingle donc la série 3.x. La borne rc1 est nécessaire car pip exclut les

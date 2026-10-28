@@ -1031,30 +1031,36 @@ def _verifier_coup_valide_sans_perte(etat, idx, coup):
     assert ids_apres == ids_avant, "des tuiles ont disparu (ou sont apparues)"
 
 
-def test_solveur_plateau_charge_trouve_au_moins_trois_tuiles_avec_gros_budget():
+def test_solveur_plateau_charge_trouve_au_moins_trois_tuiles_avec_gros_budget(
+        facteur_machine):
     """Avec un budget confortable (10 s, largement au-dessus du temps
     mesuré en développement — voir rapport #190), le solveur doit retrouver
     au moins le coup de 3 tuiles identifié manuellement sur ce plateau
-    (11 noir, 11 noir, 7 rouge), sans jamais perdre de tuile du plateau."""
+    (11 noir, 11 noir, 7 rouge), sans jamais perdre de tuile du plateau.
+
+    Budget mis à l'échelle de la vitesse machine (``facteur_machine``, #206)
+    pour rester fiable sur une machine lente — voir ``tests/conftest.py``."""
     etat, idx = _charger_cas_tour81()
-    coup = resoudre_coup(etat, idx, budget_temps=10.0)
+    coup = resoudre_coup(etat, idx, budget_temps=10.0 * facteur_machine)
     assert coup is not None
     assert coup["action"] == "jouer"
     assert len(coup["ids_tuiles"]) >= 3
     _verifier_coup_valide_sans_perte(etat, idx, coup)
 
 
-def test_solveur_plateau_charge_trouve_un_coup_avec_budget_de_production():
+def test_solveur_plateau_charge_trouve_un_coup_avec_budget_de_production(
+        facteur_machine):
     """Avec le budget de production d'Expert (voir ``BUDGET_TEMPS_EXPERT``
     dans ``moteur/ia.py``), le solveur doit désormais trouver un coup sur ce
     plateau (avant #190, il ne trouvait RIEN et Expert se repliait sur
-    Avancé, qui ne pose qu'une tuile). Tolérance de temps large (×6) pour
+    Avancé, qui ne pose qu'une tuile). Tolérance de temps large (×6, puis
+    mise à l'échelle de la vitesse machine ``facteur_machine`` #206) pour
     ne pas échouer par hasard sur une machine de CI nettement plus lente
     que celle utilisée pour mesurer la cible de production — ce n'est PAS
     un relâchement de l'objectif de vitesse, seulement une marge anti-
     flakiness sur une machine inconnue."""
     etat, idx = _charger_cas_tour81()
-    budget_test = BUDGET_TEMPS_EXPERT * 6
+    budget_test = BUDGET_TEMPS_EXPERT * 6 * facteur_machine
     coup = resoudre_coup(etat, idx, budget_temps=budget_test)
     assert coup is not None, (
         f"aucun coup trouvé même avec {budget_test} s (× 6 le budget de "
@@ -1084,32 +1090,34 @@ def _charger_cas_bruno_tour57():
     return data["etat"], data["idx"], data["attendu_min_tuiles"]
 
 
-def test_solveur_cascade_joker_trouve_trois_tuiles_avec_gros_budget():
+def test_solveur_cascade_joker_trouve_trois_tuiles_avec_gros_budget(
+        facteur_machine):
     """Avec un budget confortable (10 s), le solveur doit trouver le coup à
     3 tuiles de ce cas de référence (rouge_11_b, jaune_8_a, jaune_13_a),
     sans jamais perdre de tuile du plateau — qu'il le trouve vite (nouvelle
     stratégie, #194) ou lentement n'est pas ce que ce test vérifie (voir
     ``test_solveur_cascade_joker_trouve_un_coup_avec_budget_de_production``
-    ci-dessous pour la vitesse)."""
+    ci-dessous pour la vitesse). Budget mis à l'échelle (#206)."""
     etat, idx, attendu = _charger_cas_bruno_tour57()
-    coup = resoudre_coup(etat, idx, budget_temps=10.0)
+    coup = resoudre_coup(etat, idx, budget_temps=10.0 * facteur_machine)
     assert coup is not None
     assert coup["action"] == "jouer"
     assert len(coup["ids_tuiles"]) >= attendu
     _verifier_coup_valide_sans_perte(etat, idx, coup)
 
 
-def test_solveur_cascade_joker_trouve_un_coup_avec_budget_de_production():
+def test_solveur_cascade_joker_trouve_un_coup_avec_budget_de_production(
+        facteur_machine):
     """Avec le budget de production d'Expert, le solveur doit désormais
     trouver le coup à 3 tuiles de ce cas (avant #194 : rien à 1,5 s, 2
-    tuiles seulement à 6 s). Tolérance de temps large (×6, comme pour le
-    cas #190 ci-dessus) pour ne pas échouer par hasard sur une machine de
-    CI nettement plus lente que celle utilisée pour mesurer la cible de
-    production (le solveur trouve ce coup en ~0,15 s en développement avec
-    la nouvelle stratégie, #194 — bien avant l'expiration même du seul
-    budget de production à 1,5 s)."""
+    tuiles seulement à 6 s). Tolérance de temps large (×6, puis mise à
+    l'échelle ``facteur_machine`` #206) pour ne pas échouer par hasard sur
+    une machine de CI nettement plus lente que celle utilisée pour mesurer
+    la cible de production (le solveur trouve ce coup en ~0,15 s en
+    développement avec la nouvelle stratégie, #194 — bien avant l'expiration
+    même du seul budget de production à 1,5 s)."""
     etat, idx, attendu = _charger_cas_bruno_tour57()
-    budget_test = BUDGET_TEMPS_EXPERT * 6
+    budget_test = BUDGET_TEMPS_EXPERT * 6 * facteur_machine
     coup = resoudre_coup(etat, idx, budget_temps=budget_test)
     assert coup is not None, (
         f"aucun coup trouvé même avec {budget_test} s (× 6 le budget de "
@@ -1132,19 +1140,21 @@ def test_solveur_cascade_joker_trouve_un_coup_avec_budget_de_production():
 # poser une seule tuile).
 # --------------------------------------------------------------------------- #
 
-def test_solveur_coup_simple_trouve_et_retient_le_coup_sans_perturbation():
+def test_solveur_coup_simple_trouve_et_retient_le_coup_sans_perturbation(
+        facteur_machine):
     """Sur le cas réel de David (tour 31), le solveur doit non seulement
     trouver au moins la tuile attendue, mais la poser en touchant au plus
     une seule combinaison du plateau (idéalement le groupe de 1, étendu
     sans qu'aucune tuile ne soit déplacée) — pas en fragmentant/recréant
-    plusieurs combinaisons pour le même résultat."""
+    plusieurs combinaisons pour le même résultat. Budget mis à l'échelle de
+    la vitesse machine (#206)."""
     with open(_DONNEES / "cas_expert_coup_simple_david_tour31.json",
               encoding="utf-8") as f:
         data = json.load(f)
     etat, idx = data["etat"], data["idx"]
     assert data["coup_simple_existe"]
 
-    coup = resoudre_coup(etat, idx, budget_temps=BUDGET_TEMPS_EXPERT)
+    coup = resoudre_coup(etat, idx, budget_temps=BUDGET_TEMPS_EXPERT * facteur_machine)
     assert coup is not None
     assert coup["action"] == "jouer"
     assert len(coup["ids_tuiles"]) >= data["attendu_min_tuiles"]
@@ -1223,20 +1233,23 @@ def test_solveur_departage_petit_plateau_fabrique_prefere_la_solution_simple():
     "cas_expert_ia_261026172338_tour59.json",
 ])
 def test_preferer_simple_ne_pose_jamais_moins_de_tuiles_au_budget_de_production(
-        nom_fichier):
-    """Au budget de production (celui réellement utilisé en jeu), le
-    nouveau réglage ne doit jamais trouver moins de tuiles que l'ancien
-    comportement. ``cas_expert_ia_261026172338_tour61.json`` est exclu de
-    cette liste et testé séparément ci-dessous, à budget plus large : ce cas
-    est nativement à la limite du budget de production même AVANT #199 (le
-    solveur n'y trouve souvent rien dans les 1,5s, avec ou sans le nouveau
-    critère — un écart d'une fraction de seconde suffit à faire basculer le
-    résultat d'un côté ou de l'autre), le comparer à budget de production
-    serait un test structurellement instable, pas une mesure de régression."""
+        nom_fichier, facteur_machine):
+    """Au budget de production (celui réellement utilisé en jeu, mis à
+    l'échelle de la vitesse machine ``facteur_machine`` #206 pour la
+    stabilité), le nouveau réglage ne doit jamais trouver moins de tuiles
+    que l'ancien comportement. ``cas_expert_ia_261026172338_tour61.json``
+    est exclu de cette liste et testé séparément ci-dessous, à budget plus
+    large : ce cas est nativement à la limite du budget de production même
+    AVANT #199 (le solveur n'y trouve souvent rien dans les 1,5s, avec ou
+    sans le nouveau critère — un écart d'une fraction de seconde suffit à
+    faire basculer le résultat d'un côté ou de l'autre), le comparer à
+    budget de production serait un test structurellement instable, pas une
+    mesure de régression."""
 
     def _nb_tuiles(preferer_simple):
         try:
-            coup = resoudre_coup(etat, idx, budget_temps=BUDGET_TEMPS_EXPERT,
+            coup = resoudre_coup(etat, idx,
+                                 budget_temps=BUDGET_TEMPS_EXPERT * facteur_machine,
                                  preferer_simple=preferer_simple)
         except BudgetDepasse:
             return 0
@@ -1251,14 +1264,15 @@ def test_preferer_simple_ne_pose_jamais_moins_de_tuiles_au_budget_de_production(
         f"comportement (régression)")
 
 
-def test_preferer_simple_atteint_le_meme_plafond_sur_le_cas_le_plus_dur():
+def test_preferer_simple_atteint_le_meme_plafond_sur_le_cas_le_plus_dur(
+        facteur_machine):
     """``cas_expert_ia_261026172338_tour61.json`` (cascade de jokers à
     travers tout le plateau, déjà documenté #194 comme à la limite du
-    budget de production) : à budget LARGE (12s, assez pour que les deux
-    réglages convergent de façon stable vers leur plafond respectif —
-    contrairement au budget de production, voir le test ci-dessus), le
-    nouveau critère doit atteindre le même plafond que l'ancien
-    comportement, pas moins."""
+    budget de production) : à budget LARGE (12s, mis à l'échelle de la
+    vitesse machine #206 ; assez pour que les deux réglages convergent de
+    façon stable vers leur plafond respectif — contrairement au budget de
+    production, voir le test ci-dessus), le nouveau critère doit atteindre
+    le même plafond que l'ancien comportement, pas moins."""
     with open(_DONNEES / "cas_expert_ia_261026172338_tour61.json",
               encoding="utf-8") as f:
         data = json.load(f)
@@ -1266,7 +1280,7 @@ def test_preferer_simple_atteint_le_meme_plafond_sur_le_cas_le_plus_dur():
 
     def _nb_tuiles(preferer_simple):
         try:
-            coup = resoudre_coup(etat, idx, budget_temps=12.0,
+            coup = resoudre_coup(etat, idx, budget_temps=12.0 * facteur_machine,
                                  preferer_simple=preferer_simple)
         except BudgetDepasse:
             return 0

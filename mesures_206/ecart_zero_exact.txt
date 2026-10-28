@@ -1,0 +1,16 @@
+Modèle exact maison d_Expert (#206) — cas de référence, budget production 1,5 s
+cas                                            attendu  exact  écart    durée
+------------------------------------------------------------------------------
+cas_expert_bruno_tour57.json                        4      4     +0    324 ms
+cas_expert_budget_tour81.json                       3      3     +0    810 ms
+cas_expert_coup_simple_david_tour31.json            1      1     +0     57 ms
+cas_expert_humain_261026172338_tour66.json          7      7     +0    916 ms
+cas_expert_humain_261026174101_tour81.json          3      3     +0    790 ms
+cas_expert_humain_261026213723_tour65.json          3      3     +0    190 ms
+cas_expert_ia_261026172338_tour37.json              6      6     +0     22 ms
+cas_expert_ia_261026172338_tour59.json              7      7     +0    232 ms
+cas_expert_ia_261026172338_tour61.json              4      4     +0    164 ms
+reference_victoire_manquee_ines_tour85.json         2      2     +0    560 ms
+------------------------------------------------------------------------------
+Écarts non nuls avec l_optimum exact : 0 / 10 (attendu 0)
+Durée: moyenne 406 ms, max 916 ms (budget 1500 ms)

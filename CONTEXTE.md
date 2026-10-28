@@ -404,7 +404,14 @@ milieu de suite, #181) ; elle n'est plus limitée aux seuls bouts de suite,
 mais reste étrangère aux jokers (dont la libération, bout ou milieu, passe
 par `_liberations_possibles`).
 
-## 8bis. Solveur de réarrangement global du plateau — niveau Expert (#186)
+## 8bis. Solveur de réarrangement global du plateau — niveau Expert (#186, #206)
+
+> **Depuis #206, Expert joue avec un MODÈLE EXACT** (programmation linéaire
+> en nombres entiers, `moteur/solveur_exact.py`, voir §8ter ci-dessous). La
+> recherche arborescente décrite dans cette section (`moteur/solveur.py`)
+> reste en place comme **repli** (import de `highspy`/`numpy` impossible,
+> budget dépassé sans solution, ou erreur) et n'est PAS modifiée. Elle reste
+> donc le comportement de secours exact décrit ici.
 
 Depuis #186, Expert ne joue plus la chaîne de tactiques ci-dessus : il
 appelle `moteur/solveur.py::resoudre_coup(etat, idx, budget_temps)`, qui
@@ -664,6 +671,64 @@ plus grand nombre possible de tuiles du chevalet, jokers compris.
     ~1.5 s dans les deux cas) ; replis sur Avancé par dépassement de budget
     légèrement MOINDRES avec le critère (0.6 % contre 1.5 % des tours
     d'Expert) — aucune dégradation observée.
+
+### 8ter. Modèle EXACT d'Expert — programmation linéaire en nombres entiers (issue #206, suite de #204)
+
+Depuis #206, Expert joue avec un **modèle exact** (`moteur/solveur_exact.py`)
+qui trouve TOUJOURS le coup posant le plus grand nombre de tuiles, y compris
+les victoires immédiates et les recombinaisons multi-zones que la recherche
+arborescente de §8bis ratait (vérifié par le solveur exact de #204 : Bruno
+tour 57 — 4 tuiles au lieu de 3, en coupant une suite rouge ; Ines tour 85 —
+victoire immédiate de 2 tuiles manquée). La recherche de §8bis reste le
+**repli** (voir plus bas), inchangée.
+
+- **Méthode** : programmation linéaire en nombres entiers (den Hertog &
+  Hulshof, *The Computer Journal*, 2006), résolue par **HiGHS** via `highspy`
+  (licence MIT) + `numpy` (BSD) — **sans** `cvxpy` ni `scipy` (la « voie (b) »
+  du rapport de #204, ≈3× plus légère : ~+55 Mo et ~+65 ms au démarrage, au
+  lieu de ~+150-200 Mo et ~+0,8 s). On énumère une fois pour toutes tous les
+  ensembles valides possibles (suites de longueur 3 à 5, groupes de 3-4,
+  jokers en remplacement ; ~1170 ensembles — les suites plus longues sont
+  recomposées par le modèle à partir des courtes, borne reprise de la
+  bibliothèque de #204). Une variable entière `x_s ∈ {0,1,2}` par ensemble ;
+  pour chaque type de tuile `i`, contrainte de conservation
+  `t_i ≤ Σ a_{s,i} x_s ≤ t_i + r_i` (toutes les tuiles du plateau restent
+  posées, on n'utilise pas plus de tuiles qu'on n'en a).
+- **Critères de départage** (lexicographiques, par passes successives figeant
+  l'optimum entier de la précédente ; le nombre de tuiles posées reste
+  TOUJOURS le premier critère) : (1) tuiles posées, (2) perturbation minimale
+  du plateau (#199 : tuiles déplacées puis combinaisons modifiées, via des
+  variables d'affectation `cover`), (3) points posés, (4) économie de jokers
+  de la main. Le cas de David tour 31 reste joué en un seul geste (extension
+  d'un groupe, 0 tuile déplacée).
+- **Mise initiale pas faite** : le plateau est GELÉ (reconduit à l'identique),
+  les ensembles ne sont formés que depuis la main, avec la contrainte
+  `Σ points_s x_s ≥ mise_initiale_min`. Contrairement à la bibliothèque de
+  #204 (qui réarrange le plateau au second temps), le modèle maison respecte
+  la règle ; un test le vérifie.
+- **Reproductibilité & budget** : HiGHS en `threads=1`, `random_seed=0`,
+  sortie muette, limite de temps ferme = budget de production d'Expert
+  (`BUDGET_TEMPS_EXPERT`, 1,5 s). Toute combinaison renvoyée est remise dans
+  l'ordre (suites, jokers aux bons endroits) puis **revalidée par
+  `valider_combinaison`**, et la conservation des tuiles du plateau est
+  contrôlée (comme l'adaptateur de #204) — un résultat qui échouerait n'est
+  jamais joué.
+- **Repli, sans jamais bloquer le jeu ni lever** : `jouer_niveau_expert`
+  tente le modèle exact ; en cas d'absence de `highspy`/`numpy`
+  (`SolveurExactIndisponible`), de budget dépassé sans solution
+  (`BudgetExactDepasse`) ou d'erreur, il se replie sur la recherche de §8bis
+  (`solveur.py`, conservée telle quelle), puis sur Avancé. `UTILISER_SOLVEUR_
+  EXACT` (dans `ia.py`) ou `jouer_niveau_expert(..., utiliser_exact=False)`
+  fige Expert sur l'ancienne recherche (campagne « avant / après »,
+  `scripts/comparer_niveaux_ia.py --sans-exact`).
+- **Chiffres (#206)** : sur les 10 cas de référence, le modèle exact atteint
+  `attendu_exact_tuiles` sur **10/10** (écart nul avec l'optimum), en **406 ms
+  en moyenne, 916 ms au plus** (budget 1,5 s). Campagne Avancé vs Expert
+  (20 donnes × 2 miroir, graine 206) : voir le rapport de clôture #206 pour
+  les chiffres avant/après (taux de victoire, replis, temps par tour,
+  perturbation, démarrage). Tests : `tests/test_solveur_exact_maison.py`
+  (optimum sur tous les cas, accord avec `verif_solveur` et avec la
+  bibliothèque de #204 si installée, mise initiale, départage, replis).
 
 ### 8bis-bis. Coups de grande envergure et bug de mesure côté humain (issue #200, suite de #194)
 
@@ -1775,3 +1840,24 @@ scindant la suite rouge 6–10) et **Ines tour 85** (1 vs 2). Le solveur exact
 trouve donc le maximum **nettement plus vite** que le nôtre — c'est le chiffre
 qui décidera s'il faut un jour remplacer le solveur d'Expert (voie b du
 rapport : `highspy` direct, embarquable et MIT).
+
+### Suite #206 : la « voie (b) » est désormais DANS le jeu
+
+L'issue #206 a **remplacé la recherche d'Expert par un modèle exact maison**
+(la voie (b) : `highspy` + `numpy` en direct, sans `cvxpy` ni `scipy`), décrit
+en **§8ter**. Conséquences pour cette section :
+
+- `highspy` (MIT) et `numpy` (BSD) sont maintenant dans `requirements.txt` et
+  embarqués par le build Windows (avis de copyright dans
+  `THIRD_PARTY_LICENSES.txt`, distribué avec le jeu). Le modèle exact du jeu
+  vit dans **`src/rummikub/moteur/solveur_exact.py`** (paquet livré), distinct
+  de l'adaptateur de vérification ci-dessous.
+- La bibliothèque **`rummikub-solver` reste, elle, une dépendance de
+  DÉVELOPPEMENT seulement** (jamais embarquée) : `scripts/solveur_exact.py`,
+  `scripts/comparer_solveur_exact.py` et `scripts/analyser_coups_rates.py
+  --juge-exact` continuent de servir d'**oracle de vérification indépendant**
+  du modèle maison. `tests/test_solveur_exact_maison.py` compare d'ailleurs le
+  modèle maison à cette bibliothèque quand elle est installée (sinon sauté).
+- Le juge d'analyse des coups ratés (§11) peut désormais utiliser soit la
+  bibliothèque (dev), soit le modèle maison exact du jeu — tous deux
+  renvoient l'optimum.

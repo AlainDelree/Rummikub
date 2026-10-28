@@ -542,6 +542,12 @@ def main(argv: list[str]) -> int:
                              "pour comparer les deux versions par "
                              "simulation (relancer la même commande avec "
                              "et sans ce drapeau, même --seed).")
+    parser.add_argument("--sans-exact", action="store_true",
+                        help="Fige Expert sur son ANCIENNE recherche "
+                             "arborescente (moteur/solveur.py) au lieu du "
+                             "modèle exact HiGHS (#206) — pour la campagne "
+                             "« avant / après » (relancer la même commande "
+                             "avec et sans ce drapeau, même --seed).")
     parser.add_argument("-v", "--verbose", action="store_true",
                         help="Journalise chaque partie jouée.")
     args = parser.parse_args(argv[1:])
@@ -556,6 +562,13 @@ def main(argv: list[str]) -> int:
 
     if args.manches < 1:
         parser.error("--manches doit être au moins 1")
+
+    if args.sans_exact:
+        # Rejoue le comportement d'avant #206 : Expert n'utilise que la
+        # recherche arborescente (modèle exact HiGHS désactivé globalement).
+        from rummikub.moteur import ia as _ia
+        _ia.UTILISER_SOLVEUR_EXACT = False
+        print("[#206] Modèle exact DÉSACTIVÉ (Expert = recherche arborescente).")
 
     debut = time.monotonic()
     resume = comparer(args.niveau_a, args.niveau_b, args.donnes, args.seed,

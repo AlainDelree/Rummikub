@@ -32,6 +32,9 @@ from rummikub.moteur.partie import (
 from rummikub.moteur.solveur import (
     resoudre_coup, BudgetDepasse, PREFERER_SIMPLICITE,
 )
+from rummikub.moteur.solveur_exact import (
+    resoudre_exact, SolveurExactIndisponible, BudgetExactDepasse,
+)
 
 
 # --------------------------------------------------------------------------- #
@@ -799,62 +802,110 @@ def jouer_niveau_avance(etat, idx):
     return _piocher_ou_passer(etat)
 
 
-BUDGET_TEMPS_EXPERT = 1.5  # secondes ; voir solveur.resoudre_coup (#186).
+BUDGET_TEMPS_EXPERT = 1.5  # secondes ; voir solveur_exact / solveur (#206/#186).
+
+# Réglage #206 : Expert joue avec le MODÈLE EXACT (programmation linéaire en
+# nombres entiers, ``moteur/solveur_exact.py``), qui pose toujours le plus
+# grand nombre de tuiles (y compris les victoires immédiates). ``False`` fige
+# Expert sur l'ancienne recherche arborescente (``moteur/solveur.py``), utile
+# pour comparer les deux versions par simulation (campagne « avant / après »,
+# ``scripts/comparer_niveaux_ia.py --sans-exact``). Lu à l'appel.
+UTILISER_SOLVEUR_EXACT = True
+
+
+def _coup_recherche(etat, idx, budget_temps, preferer_simple):
+    """Recherche arborescente conservée comme repli (``solveur.resoudre_coup``,
+    #186). Retourne ``(coup | None, timeout_bool)`` ; ``timeout_bool`` est vrai
+    si le budget a été dépassé sans qu'aucune branche n'aboutisse."""
+    try:
+        return resoudre_coup(etat, idx, budget_temps=budget_temps,
+                             preferer_simple=preferer_simple), False
+    except BudgetDepasse:
+        return None, True
+
+
+def _coup_exact(etat, idx, budget_temps, preferer_simple):
+    """Modèle exact (#206). Ne lève JAMAIS. Retourne ``(statut, charge)`` :
+
+    * ``("coup", coup)`` — un coup optimal a été trouvé ;
+    * ``("aucun", None)`` — optimum PROUVÉ : aucune tuile posable (ou mise
+      initiale inatteignable). Inutile de lancer la recherche de repli
+      (incomplète) après un modèle COMPLET : Expert passe directement à Avancé
+      pour décider pioche/passe ;
+    * ``("echec", cause_timeout)`` — le modèle n'a pas pu conclure (dépendances
+      absentes, budget dépassé sans solution, résultat non valide, erreur) :
+      l'appelant se replie sur la recherche arborescente. ``cause_timeout``
+      vaut ``True`` pour un dépassement de budget, ``False`` sinon."""
+    try:
+        res = resoudre_exact(etat, idx, budget_temps=budget_temps,
+                             preferer_simple=preferer_simple)
+    except BudgetExactDepasse:
+        return "echec", True
+    except SolveurExactIndisponible:
+        return "echec", False
+    except Exception:  # pragma: no cover - filet, ne doit jamais bloquer le jeu
+        return "echec", False
+    if not res.valide_globalement:
+        # Ne devrait jamais arriver (validation + conservation contrôlées) :
+        # par prudence, on se replie sur la recherche plutôt que de jouer un
+        # coup douteux.
+        return "echec", False
+    if res.nb_tuiles == 0 or not res.ids_tuiles:
+        return "aucun", None
+    return "coup", {"action": "jouer", "ids_tuiles": res.ids_tuiles,
+                    "nouveau_plateau": res.nouveau_plateau}
 
 
 def jouer_niveau_expert(etat, idx, budget_temps=None, on_repli=None,
-                        preferer_simple=None):
-    """Réarrangement global du plateau (solveur, #186) : toutes les
-    combinaisons du plateau peuvent être redécoupées librement (aucune de
-    leurs tuiles n'est jamais retirée du plateau) pour poser le plus grand
-    nombre de tuiles du chevalet. Remplace l'ancienne chaîne de tactiques
-    locales d'Avancé (échange/détachement/scission de joker...), qui ne
-    modifiaient jamais plus d'une ou deux combinaisons à la fois.
+                        preferer_simple=None, utiliser_exact=None):
+    """Niveau Expert : joue le coup qui pose le plus grand nombre de tuiles du
+    chevalet, en conservant toutes les tuiles du plateau (#206).
 
-    Repli sur le comportement d'Avancé dans deux cas bien distincts (voir
-    ``on_repli`` ci-dessous) : (1) le solveur dépasse son budget de temps
-    par tour SANS avoir trouvé le moindre réarrangement nulle part dans
-    l'arbre (:class:`BudgetDepasse` — recherche trop coûteuse pour ce
-    plateau dans le temps alloué) ; (2) le solveur conclut, dans son
-    budget, qu'AUCUN réarrangement ne pose la moindre tuile du chevalet
-    (coup légitimement impossible — Avancé ne fera généralement pas mieux,
-    mais le tenter reste un filet de sécurité sans coût perceptible). Ces
-    deux cas ont des causes et des remèdes très différents : le premier est
-    un problème de vitesse (ce que #190 cherche à réduire), le second ne
-    l'est pas (aucune vitesse supplémentaire n'y changerait rien). Depuis
-    #190, le solveur est « progressif » (voir ``moteur/solveur.py``) : le
-    repli du premier type devient rare sur un plateau chargé, là où il
-    était auparavant quasi systématique au-delà du budget de production.
-    ``on_repli``, si fourni, est appelé avec un seul argument booléen
-    (``timeout`` : ``True`` si c'est le cas (1), ``False`` si c'est le cas
-    (2)) juste avant ce repli — uniquement pour la mesure (voir
+    Depuis #206, le coup est calculé par un MODÈLE EXACT (programmation
+    linéaire en nombres entiers résolue par HiGHS, ``moteur/solveur_exact.py``),
+    qui trouve TOUJOURS le maximum du tour — y compris les victoires immédiates
+    et les recombinaisons multi-zones que la recherche arborescente d'avant
+    (``moteur/solveur.py``) ratait (Bruno tour 57, Ines tour 85 ; voir le
+    rapport de #204). À nombre de tuiles égal, il départage par perturbation
+    minimale du plateau (#199), puis points posés, puis économie de jokers.
+
+    **Repli, sans jamais lever ni bloquer le jeu** : si ``highspy``/``numpy``
+    est absent, si le budget de temps est dépassé sans solution, ou en cas
+    d'erreur, Expert se replie sur la recherche arborescente conservée
+    (``solveur.py``), puis sur Avancé. ``on_repli(timeout)``, si fourni, est
+    appelé une fois lorsque le modèle exact ne produit pas le coup (``timeout``
+    vrai si c'est un dépassement de budget) — uniquement pour la mesure (voir
     ``scripts/comparer_niveaux_ia.py``), jamais utilisé en jeu normal.
 
-    N'a plus la règle historique « pioche au lieu de poser si un adversaire
-    a ≤ 3 tuiles » : la campagne de #184 n'a montré aucun avantage mesurable
-    à la prudence, et poser davantage de tuiles est presque toujours
-    préférable (voir rapport de clôture #186).
-
-    ``preferer_simple`` (#199, voir ``solveur.PREFERER_SIMPLICITE`` et
-    ``solveur.resoudre_coup``) : à nombre de tuiles posées égal, préférer
-    le coup qui perturbe le moins le plateau. ``None`` (défaut) lit le
-    réglage global au lieu de le figer au chargement du module — même
-    principe que ``budget_temps`` ci-dessous, pour rester ajustable dans
-    une campagne de simulation (``scripts/comparer_niveaux_ia.py``).
-    """
+    ``utiliser_exact`` (``None`` → lit ``UTILISER_SOLVEUR_EXACT``) à ``False``
+    rejoue l'ancien comportement (recherche seule) pour la comparaison
+    « avant / après ». ``preferer_simple`` et ``budget_temps`` sont transmis
+    aux deux moteurs (lus à l'appel pour rester ajustables en simulation)."""
     if budget_temps is None:
-        budget_temps = BUDGET_TEMPS_EXPERT  # lu à l'appel (pas figé au
-        # chargement du module) pour rester ajustable, ex. dans une
-        # campagne de simulation (scripts/comparer_niveaux_ia.py).
+        budget_temps = BUDGET_TEMPS_EXPERT
     if preferer_simple is None:
         preferer_simple = PREFERER_SIMPLICITE
-    try:
-        coup = resoudre_coup(etat, idx, budget_temps=budget_temps,
-                             preferer_simple=preferer_simple)
-        timeout = False
-    except BudgetDepasse:
-        coup = None
-        timeout = True
+    if utiliser_exact is None:
+        utiliser_exact = UTILISER_SOLVEUR_EXACT
+
+    if utiliser_exact:
+        statut, charge = _coup_exact(etat, idx, budget_temps, preferer_simple)
+        if statut == "coup":
+            return charge
+        if statut == "aucun":
+            # Optimum prouvé sans coup : pas de recherche redondante, Avancé
+            # tranche directement entre pioche et passe.
+            return jouer_niveau_avance(etat, idx)
+        # statut == "echec" : repli sur la recherche arborescente, puis Avancé.
+        if on_repli is not None:
+            on_repli(charge)  # charge = cause_timeout
+        coup, _timeout = _coup_recherche(etat, idx, budget_temps, preferer_simple)
+        if coup:
+            return coup
+        return jouer_niveau_avance(etat, idx)
+
+    # Mode « avant » (sans modèle exact) : recherche seule, puis Avancé.
+    coup, timeout = _coup_recherche(etat, idx, budget_temps, preferer_simple)
     if coup:
         return coup
     if on_repli is not None:

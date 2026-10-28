@@ -16,5 +16,9 @@ data/erreurs_description/
 # Venv de développement pour le solveur exact de vérification (issue #204) —
 # dépendance de dev seulement, jamais versionnée ni embarquée (voir CONTEXTE.md §14).
 .venv-solveur-exact/
+# Venv de développement/test du modèle exact maison (issue #206) : highspy +
+# numpy, jamais versionné (les dépendances sont dans requirements.txt).
+.venv-exact/
+.venv-*/
 .venv/
 venv/
