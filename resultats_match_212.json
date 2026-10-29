@@ -1,0 +1,5494 @@
+{
+  "resultat": {
+    "parties": [
+      {
+        "tours": 61,
+        "bloquee": false,
+        "gagnant_role": "notre",
+        "egalite": false,
+        "perdant_tuiles_restantes": 3,
+        "conservation_erreurs": [],
+        "ecarts_optimalite": [],
+        "par_role": {
+          "notre": {
+            "tours": 31,
+            "tuiles_posees": 32,
+            "poses": 13,
+            "duree_totale": 2.3951478779986246,
+            "duree_max": 0.2875096759998996,
+            "mise_contrainte": 0,
+            "tuiles_finales": 0
+          },
+          "biblio": {
+            "tours": 30,
+            "tuiles_posees": 27,
+            "poses": 14,
+            "duree_totale": 0.897810016999756,
+            "duree_max": 0.06733332599969799,
+            "mise_contrainte": 1,
+            "tuiles_finales": 3
+          }
+        },
+        "perdant_role": "biblio",
+        "donne": 0,
+        "sens": "A",
+        "seed": 20212
+      },
+      {
+        "tours": 54,
+        "bloquee": false,
+        "gagnant_role": "notre",
+        "egalite": false,
+        "perdant_tuiles_restantes": 3,
+        "conservation_erreurs": [],
+        "ecarts_optimalite": [],
+        "par_role": {
+          "notre": {
+            "tours": 27,
+            "tuiles_posees": 29,
+            "poses": 12,
+            "duree_totale": 3.007949743000154,
+            "duree_max": 0.3417918820000523,
+            "mise_contrainte": 0,
+            "tuiles_finales": 0
+          },
+          "biblio": {
+            "tours": 27,
+            "tuiles_posees": 27,
+            "poses": 11,
+            "duree_totale": 0.9172652359993663,
+            "duree_max": 0.060760314999697584,
+            "mise_contrainte": 4,
+            "tuiles_finales": 3
+          }
+        },
+        "perdant_role": "biblio",
+        "donne": 0,
+        "sens": "B",
+        "seed": 20212
+      },
+      {
+        "tours": 53,
+        "bloquee": false,
+        "gagnant_role": "notre",
+        "egalite": false,
+        "perdant_tuiles_restantes": 2,
+        "conservation_erreurs": [],
+        "ecarts_optimalite": [],
+        "par_role": {
+          "notre": {
+            "tours": 27,
+            "tuiles_posees": 29,
+            "poses": 12,
+            "duree_totale": 2.6092036089999056,
+            "duree_max": 0.399621501999718,
+            "mise_contrainte": 0,
+            "tuiles_finales": 0
+          },
+          "biblio": {
+            "tours": 26,
+            "tuiles_posees": 28,
+            "poses": 10,
+            "duree_totale": 0.7947915690001537,
+            "duree_max": 0.06685502300024382,
+            "mise_contrainte": 1,
+            "tuiles_finales": 2
+          }
+        },
+        "perdant_role": "biblio",
+        "donne": 1,
+        "sens": "A",
+        "seed": 20213
+      },
+      {
+        "tours": 52,
+        "bloquee": false,
+        "gagnant_role": "notre",
+        "egalite": false,
+        "perdant_tuiles_restantes": 1,
+        "conservation_erreurs": [],
+        "ecarts_optimalite": [],
+        "par_role": {
+          "notre": {
+            "tours": 26,
+            "tuiles_posees": 30,
+            "poses": 10,
+            "duree_totale": 2.732697574001122,
+            "duree_max": 0.5006511820001833,
+            "mise_contrainte": 0,
+            "tuiles_finales": 0
+          },
+          "biblio": {
+            "tours": 26,
+            "tuiles_posees": 28,
+            "poses": 11,
+            "duree_totale": 0.8300793290000001,
+            "duree_max": 0.07007983600033185,
+            "mise_contrainte": 2,
+            "tuiles_finales": 1
+          }
+        },
+        "perdant_role": "biblio",
+        "donne": 1,
+        "sens": "B",
+        "seed": 20213
+      },
+      {
+        "tours": 78,
+        "bloquee": false,
+        "gagnant_role": "biblio",
+        "egalite": false,
+        "perdant_tuiles_restantes": 2,
+        "conservation_erreurs": [],
+        "ecarts_optimalite": [],
+        "par_role": {
+          "notre": {
+            "tours": 39,
+            "tuiles_posees": 35,
+            "poses": 16,
+            "duree_totale": 0.6686379780007883,
+            "duree_max": 0.043361991999972815,
+            "mise_contrainte": 0,
+            "tuiles_finales": 2
+          },
+          "biblio": {
+            "tours": 39,
+            "tuiles_posees": 36,
+            "poses": 17,
+            "duree_totale": 1.095548941000743,
+            "duree_max": 0.07968162299994219,
+            "mise_contrainte": 3,
+            "tuiles_finales": 0
+          }
+        },
+        "perdant_role": "notre",
+        "donne": 2,
+        "sens": "A",
+        "seed": 20214
+      },
+      {
+        "tours": 78,
+        "bloquee": false,
+        "gagnant_role": "notre",
+        "egalite": false,
+        "perdant_tuiles_restantes": 2,
+        "conservation_erreurs": [],
+        "ecarts_optimalite": [],
+        "par_role": {
+          "notre": {
+            "tours": 39,
+            "tuiles_posees": 36,
+            "poses": 17,
+            "duree_totale": 0.728524610000477,
+            "duree_max": 0.046207061000131944,
+            "mise_contrainte": 0,
+            "tuiles_finales": 0
+          },
+          "biblio": {
+            "tours": 39,
+            "tuiles_posees": 35,
+            "poses": 16,
+            "duree_totale": 1.3386039999986679,
+            "duree_max": 0.06784142000014981,
+            "mise_contrainte": 10,
+            "tuiles_finales": 2
+          }
+        },
+        "perdant_role": "biblio",
+        "donne": 2,
+        "sens": "B",
+        "seed": 20214
+      },
+      {
+        "tours": 57,
+        "bloquee": false,
+        "gagnant_role": "notre",
+        "egalite": false,
+        "perdant_tuiles_restantes": 3,
+        "conservation_erreurs": [],
+        "ecarts_optimalite": [],
+        "par_role": {
+          "notre": {
+            "tours": 29,
+            "tuiles_posees": 33,
+            "poses": 10,
+            "duree_totale": 3.7023570330020448,
+            "duree_max": 1.0821190349997778,
+            "mise_contrainte": 0,
+            "tuiles_finales": 0
+          },
+          "biblio": {
+            "tours": 28,
+            "tuiles_posees": 28,
+            "poses": 11,
+            "duree_totale": 1.0586773290001474,
+            "duree_max": 0.1513716290000957,
+            "mise_contrainte": 2,
+            "tuiles_finales": 3
+          }
+        },
+        "perdant_role": "biblio",
+        "donne": 3,
+        "sens": "A",
+        "seed": 20215
+      },
+      {
+        "tours": 71,
+        "bloquee": false,
+        "gagnant_role": "biblio",
+        "egalite": false,
+        "perdant_tuiles_restantes": 1,
+        "conservation_erreurs": [],
+        "ecarts_optimalite": [],
+        "par_role": {
+          "notre": {
+            "tours": 35,
+            "tuiles_posees": 33,
+            "poses": 15,
+            "duree_totale": 9.47074491399917,
+            "duree_max": 1.12188889700019,
+            "mise_contrainte": 0,
+            "tuiles_finales": 1
+          },
+          "biblio": {
+            "tours": 36,
+            "tuiles_posees": 36,
+            "poses": 14,
+            "duree_totale": 2.234378817999641,
+            "duree_max": 0.11964730099998633,
+            "mise_contrainte": 12,
+            "tuiles_finales": 0
+          }
+        },
+        "perdant_role": "notre",
+        "donne": 3,
+        "sens": "B",
+        "seed": 20215
+      },
+      {
+        "tours": 78,
+        "bloquee": false,
+        "gagnant_role": "biblio",
+        "egalite": false,
+        "perdant_tuiles_restantes": 1,
+        "conservation_erreurs": [],
+        "ecarts_optimalite": [],
+        "par_role": {
+          "notre": {
+            "tours": 39,
+            "tuiles_posees": 34,
+            "poses": 18,
+            "duree_totale": 3.8541887460000908,
+            "duree_max": 0.46491710299960687,
+            "mise_contrainte": 0,
+            "tuiles_finales": 1
+          },
+          "biblio": {
+            "tours": 39,
+            "tuiles_posees": 36,
+            "poses": 17,
+            "duree_totale": 1.3788304740000967,
+            "duree_max": 0.07330856499993388,
+            "mise_contrainte": 1,
+            "tuiles_finales": 0
+          }
+        },
+        "perdant_role": "notre",
+        "donne": 4,
+        "sens": "A",
+        "seed": 20216
+      },
+      {
+        "tours": 74,
+        "bloquee": false,
+        "gagnant_role": "notre",
+        "egalite": false,
+        "perdant_tuiles_restantes": 2,
+        "conservation_erreurs": [],
+        "ecarts_optimalite": [],
+        "par_role": {
+          "notre": {
+            "tours": 37,
+            "tuiles_posees": 36,
+            "poses": 15,
+            "duree_totale": 3.3045371879989034,
+            "duree_max": 0.4529520319997573,
+            "mise_contrainte": 0,
+            "tuiles_finales": 0
+          },
+          "biblio": {
+            "tours": 37,
+            "tuiles_posees": 33,
+            "poses": 16,
+            "duree_totale": 1.308792439998797,
+            "duree_max": 0.07262230299966177,
+            "mise_contrainte": 1,
+            "tuiles_finales": 2
+          }
+        },
+        "perdant_role": "biblio",
+        "donne": 4,
+        "sens": "B",
+        "seed": 20216
+      },
+      {
+        "tours": 61,
+        "bloquee": false,
+        "gagnant_role": "notre",
+        "egalite": false,
+        "perdant_tuiles_restantes": 1,
+        "conservation_erreurs": [],
+        "ecarts_optimalite": [],
+        "par_role": {
+          "notre": {
+            "tours": 31,
+            "tuiles_posees": 31,
+            "poses": 14,
+            "duree_totale": 2.0524174260008294,
+            "duree_max": 0.21946326799979943,
+            "mise_contrainte": 0,
+            "tuiles_finales": 0
+          },
+          "biblio": {
+            "tours": 30,
+            "tuiles_posees": 32,
+            "poses": 11,
+            "duree_totale": 1.016051668000273,
+            "duree_max": 0.08615812900006858,
+            "mise_contrainte": 1,
+            "tuiles_finales": 1
+          }
+        },
+        "perdant_role": "biblio",
+        "donne": 5,
+        "sens": "A",
+        "seed": 20217
+      },
+      {
+        "tours": 61,
+        "bloquee": false,
+        "gagnant_role": "biblio",
+        "egalite": false,
+        "perdant_tuiles_restantes": 1,
+        "conservation_erreurs": [],
+        "ecarts_optimalite": [],
+        "par_role": {
+          "notre": {
+            "tours": 30,
+            "tuiles_posees": 32,
+            "poses": 11,
+            "duree_totale": 3.435227435998968,
+            "duree_max": 0.40970380499993553,
+            "mise_contrainte": 0,
+            "tuiles_finales": 1
+          },
+          "biblio": {
+            "tours": 31,
+            "tuiles_posees": 31,
+            "poses": 14,
+            "duree_totale": 1.0285618400002932,
+            "duree_max": 0.0936582329995872,
+            "mise_contrainte": 1,
+            "tuiles_finales": 0
+          }
+        },
+        "perdant_role": "notre",
+        "donne": 5,
+        "sens": "B",
+        "seed": 20217
+      },
+      {
+        "tours": 78,
+        "bloquee": false,
+        "gagnant_role": "biblio",
+        "egalite": false,
+        "perdant_tuiles_restantes": 1,
+        "conservation_erreurs": [],
+        "ecarts_optimalite": [],
+        "par_role": {
+          "notre": {
+            "tours": 39,
+            "tuiles_posees": 36,
+            "poses": 16,
+            "duree_totale": 4.062714066999888,
+            "duree_max": 0.4823035929998696,
+            "mise_contrainte": 0,
+            "tuiles_finales": 1
+          },
+          "biblio": {
+            "tours": 39,
+            "tuiles_posees": 37,
+            "poses": 16,
+            "duree_totale": 1.4534712629997557,
+            "duree_max": 0.06759700700013127,
+            "mise_contrainte": 1,
+            "tuiles_finales": 0
+          }
+        },
+        "perdant_role": "notre",
+        "donne": 6,
+        "sens": "A",
+        "seed": 20218
+      },
+      {
+        "tours": 79,
+        "bloquee": false,
+        "gagnant_role": "biblio",
+        "egalite": false,
+        "perdant_tuiles_restantes": 1,
+        "conservation_erreurs": [],
+        "ecarts_optimalite": [],
+        "par_role": {
+          "notre": {
+            "tours": 39,
+            "tuiles_posees": 34,
+            "poses": 18,
+            "duree_totale": 3.2502649660004863,
+            "duree_max": 0.5214815160002217,
+            "mise_contrainte": 0,
+            "tuiles_finales": 1
+          },
+          "biblio": {
+            "tours": 40,
+            "tuiles_posees": 38,
+            "poses": 16,
+            "duree_totale": 1.3881199939978615,
+            "duree_max": 0.0939732499996353,
+            "mise_contrainte": 1,
+            "tuiles_finales": 0
+          }
+        },
+        "perdant_role": "notre",
+        "donne": 6,
+        "sens": "B",
+        "seed": 20218
+      },
+      {
+        "tours": 78,
+        "bloquee": false,
+        "gagnant_role": "biblio",
+        "egalite": false,
+        "perdant_tuiles_restantes": 1,
+        "conservation_erreurs": [],
+        "ecarts_optimalite": [],
+        "par_role": {
+          "notre": {
+            "tours": 39,
+            "tuiles_posees": 36,
+            "poses": 16,
+            "duree_totale": 4.907061062000594,
+            "duree_max": 0.7258862940002473,
+            "mise_contrainte": 0,
+            "tuiles_finales": 1
+          },
+          "biblio": {
+            "tours": 39,
+            "tuiles_posees": 36,
+            "poses": 17,
+            "duree_totale": 1.5807447890006188,
+            "duree_max": 0.08695426399981443,
+            "mise_contrainte": 1,
+            "tuiles_finales": 0
+          }
+        },
+        "perdant_role": "notre",
+        "donne": 7,
+        "sens": "A",
+        "seed": 20219
+      },
+      {
+        "tours": 74,
+        "bloquee": false,
+        "gagnant_role": "notre",
+        "egalite": false,
+        "perdant_tuiles_restantes": 1,
+        "conservation_erreurs": [],
+        "ecarts_optimalite": [],
+        "par_role": {
+          "notre": {
+            "tours": 37,
+            "tuiles_posees": 35,
+            "poses": 16,
+            "duree_totale": 4.177274809998835,
+            "duree_max": 0.4631654619997789,
+            "mise_contrainte": 0,
+            "tuiles_finales": 0
+          },
+          "biblio": {
+            "tours": 37,
+            "tuiles_posees": 35,
+            "poses": 15,
+            "duree_totale": 1.4584963490001428,
+            "duree_max": 0.07615510300001915,
+            "mise_contrainte": 2,
+            "tuiles_finales": 1
+          }
+        },
+        "perdant_role": "biblio",
+        "donne": 7,
+        "sens": "B",
+        "seed": 20219
+      },
+      {
+        "tours": 84,
+        "bloquee": false,
+        "gagnant_role": "biblio",
+        "egalite": false,
+        "perdant_tuiles_restantes": 2,
+        "conservation_erreurs": [],
+        "ecarts_optimalite": [],
+        "par_role": {
+          "notre": {
+            "tours": 42,
+            "tuiles_posees": 35,
+            "poses": 19,
+            "duree_totale": 1.3329539220021616,
+            "duree_max": 0.07118858800004091,
+            "mise_contrainte": 0,
+            "tuiles_finales": 2
+          },
+          "biblio": {
+            "tours": 42,
+            "tuiles_posees": 38,
+            "poses": 18,
+            "duree_totale": 1.6879375359990263,
+            "duree_max": 0.10649687800014362,
+            "mise_contrainte": 7,
+            "tuiles_finales": 0
+          }
+        },
+        "perdant_role": "notre",
+        "donne": 8,
+        "sens": "A",
+        "seed": 20220
+      },
+      {
+        "tours": 84,
+        "bloquee": false,
+        "gagnant_role": "notre",
+        "egalite": false,
+        "perdant_tuiles_restantes": 2,
+        "conservation_erreurs": [],
+        "ecarts_optimalite": [],
+        "par_role": {
+          "notre": {
+            "tours": 42,
+            "tuiles_posees": 38,
+            "poses": 18,
+            "duree_totale": 1.4255391129981945,
+            "duree_max": 0.07907243999989078,
+            "mise_contrainte": 0,
+            "tuiles_finales": 0
+          },
+          "biblio": {
+            "tours": 42,
+            "tuiles_posees": 35,
+            "poses": 19,
+            "duree_totale": 1.3212559530002181,
+            "duree_max": 0.06628812300004938,
+            "mise_contrainte": 1,
+            "tuiles_finales": 2
+          }
+        },
+        "perdant_role": "biblio",
+        "donne": 8,
+        "sens": "B",
+        "seed": 20220
+      },
+      {
+        "tours": 61,
+        "bloquee": false,
+        "gagnant_role": "notre",
+        "egalite": false,
+        "perdant_tuiles_restantes": 2,
+        "conservation_erreurs": [],
+        "ecarts_optimalite": [],
+        "par_role": {
+          "notre": {
+            "tours": 31,
+            "tuiles_posees": 32,
+            "poses": 13,
+            "duree_totale": 2.4927998439993644,
+            "duree_max": 0.9966227969998727,
+            "mise_contrainte": 0,
+            "tuiles_finales": 0
+          },
+          "biblio": {
+            "tours": 30,
+            "tuiles_posees": 29,
+            "poses": 13,
+            "duree_totale": 1.0992927390002478,
+            "duree_max": 0.07970000800014532,
+            "mise_contrainte": 4,
+            "tuiles_finales": 2
+          }
+        },
+        "perdant_role": "biblio",
+        "donne": 9,
+        "sens": "A",
+        "seed": 20221
+      },
+      {
+        "tours": 63,
+        "bloquee": false,
+        "gagnant_role": "biblio",
+        "egalite": false,
+        "perdant_tuiles_restantes": 2,
+        "conservation_erreurs": [],
+        "ecarts_optimalite": [],
+        "par_role": {
+          "notre": {
+            "tours": 31,
+            "tuiles_posees": 29,
+            "poses": 14,
+            "duree_totale": 1.9287734070012448,
+            "duree_max": 0.48205126199991355,
+            "mise_contrainte": 0,
+            "tuiles_finales": 2
+          },
+          "biblio": {
+            "tours": 32,
+            "tuiles_posees": 32,
+            "poses": 14,
+            "duree_totale": 1.6600633720004225,
+            "duree_max": 0.16497163699978046,
+            "mise_contrainte": 9,
+            "tuiles_finales": 0
+          }
+        },
+        "perdant_role": "notre",
+        "donne": 9,
+        "sens": "B",
+        "seed": 20221
+      },
+      {
+        "tours": 72,
+        "bloquee": false,
+        "gagnant_role": "biblio",
+        "egalite": false,
+        "perdant_tuiles_restantes": 1,
+        "conservation_erreurs": [],
+        "ecarts_optimalite": [],
+        "par_role": {
+          "notre": {
+            "tours": 36,
+            "tuiles_posees": 34,
+            "poses": 15,
+            "duree_totale": 3.48798498799988,
+            "duree_max": 0.41100227199967776,
+            "mise_contrainte": 0,
+            "tuiles_finales": 1
+          },
+          "biblio": {
+            "tours": 36,
+            "tuiles_posees": 34,
+            "poses": 16,
+            "duree_totale": 1.511088838998603,
+            "duree_max": 0.12702141499994468,
+            "mise_contrainte": 1,
+            "tuiles_finales": 0
+          }
+        },
+        "perdant_role": "notre",
+        "donne": 10,
+        "sens": "A",
+        "seed": 20222
+      },
+      {
+        "tours": 69,
+        "bloquee": false,
+        "gagnant_role": "biblio",
+        "egalite": false,
+        "perdant_tuiles_restantes": 3,
+        "conservation_erreurs": [],
+        "ecarts_optimalite": [],
+        "par_role": {
+          "notre": {
+            "tours": 34,
+            "tuiles_posees": 30,
+            "poses": 15,
+            "duree_totale": 4.341910385999654,
+            "duree_max": 0.4474114289996578,
+            "mise_contrainte": 0,
+            "tuiles_finales": 3
+          },
+          "biblio": {
+            "tours": 35,
+            "tuiles_posees": 34,
+            "poses": 15,
+            "duree_totale": 1.5215718470021784,
+            "duree_max": 0.10716781799965247,
+            "mise_contrainte": 1,
+            "tuiles_finales": 0
+          }
+        },
+        "perdant_role": "notre",
+        "donne": 10,
+        "sens": "B",
+        "seed": 20222
+      },
+      {
+        "tours": 74,
+        "bloquee": false,
+        "gagnant_role": "biblio",
+        "egalite": false,
+        "perdant_tuiles_restantes": 2,
+        "conservation_erreurs": [],
+        "ecarts_optimalite": [],
+        "par_role": {
+          "notre": {
+            "tours": 37,
+            "tuiles_posees": 34,
+            "poses": 15,
+            "duree_totale": 4.125830317000691,
+            "duree_max": 0.6040661420001925,
+            "mise_contrainte": 0,
+            "tuiles_finales": 2
+          },
+          "biblio": {
+            "tours": 37,
+            "tuiles_posees": 34,
+            "poses": 17,
+            "duree_totale": 1.5541147860058118,
+            "duree_max": 0.08751793099963834,
+            "mise_contrainte": 1,
+            "tuiles_finales": 0
+          }
+        },
+        "perdant_role": "notre",
+        "donne": 11,
+        "sens": "A",
+        "seed": 20223
+      },
+      {
+        "tours": 74,
+        "bloquee": false,
+        "gagnant_role": "notre",
+        "egalite": false,
+        "perdant_tuiles_restantes": 1,
+        "conservation_erreurs": [],
+        "ecarts_optimalite": [],
+        "par_role": {
+          "notre": {
+            "tours": 37,
+            "tuiles_posees": 34,
+            "poses": 17,
+            "duree_totale": 3.6263679689991477,
+            "duree_max": 0.46000809500037576,
+            "mise_contrainte": 0,
+            "tuiles_finales": 0
+          },
+          "biblio": {
+            "tours": 37,
+            "tuiles_posees": 34,
+            "poses": 16,
+            "duree_totale": 1.4143472830019164,
+            "duree_max": 0.07728980299998511,
+            "mise_contrainte": 4,
+            "tuiles_finales": 1
+          }
+        },
+        "perdant_role": "biblio",
+        "donne": 11,
+        "sens": "B",
+        "seed": 20223
+      },
+      {
+        "tours": 83,
+        "bloquee": false,
+        "gagnant_role": "notre",
+        "egalite": false,
+        "perdant_tuiles_restantes": 3,
+        "conservation_erreurs": [],
+        "ecarts_optimalite": [],
+        "par_role": {
+          "notre": {
+            "tours": 42,
+            "tuiles_posees": 39,
+            "poses": 17,
+            "duree_totale": 6.162557749000371,
+            "duree_max": 0.3893539930004408,
+            "mise_contrainte": 0,
+            "tuiles_finales": 0
+          },
+          "biblio": {
+            "tours": 41,
+            "tuiles_posees": 34,
+            "poses": 18,
+            "duree_totale": 1.8135413970003356,
+            "duree_max": 0.07736810700043861,
+            "mise_contrainte": 4,
+            "tuiles_finales": 3
+          }
+        },
+        "perdant_role": "biblio",
+        "donne": 12,
+        "sens": "A",
+        "seed": 20224
+      },
+      {
+        "tours": 53,
+        "bloquee": false,
+        "gagnant_role": "biblio",
+        "egalite": false,
+        "perdant_tuiles_restantes": 4,
+        "conservation_erreurs": [],
+        "ecarts_optimalite": [],
+        "par_role": {
+          "notre": {
+            "tours": 26,
+            "tuiles_posees": 27,
+            "poses": 9,
+            "duree_totale": 0.969637470001544,
+            "duree_max": 0.12328309299937246,
+            "mise_contrainte": 0,
+            "tuiles_finales": 4
+          },
+          "biblio": {
+            "tours": 27,
+            "tuiles_posees": 32,
+            "poses": 9,
+            "duree_totale": 1.4503039490000447,
+            "duree_max": 0.10274983899944345,
+            "mise_contrainte": 12,
+            "tuiles_finales": 0
+          }
+        },
+        "perdant_role": "notre",
+        "donne": 12,
+        "sens": "B",
+        "seed": 20224
+      },
+      {
+        "tours": 41,
+        "bloquee": false,
+        "gagnant_role": "notre",
+        "egalite": false,
+        "perdant_tuiles_restantes": 1,
+        "conservation_erreurs": [],
+        "ecarts_optimalite": [],
+        "par_role": {
+          "notre": {
+            "tours": 21,
+            "tuiles_posees": 25,
+            "poses": 10,
+            "duree_totale": 1.0157770309997431,
+            "duree_max": 0.18300202200043714,
+            "mise_contrainte": 0,
+            "tuiles_finales": 0
+          },
+          "biblio": {
+            "tours": 20,
+            "tuiles_posees": 23,
+            "poses": 10,
+            "duree_totale": 0.6641022530011469,
+            "duree_max": 0.08333710099941527,
+            "mise_contrainte": 2,
+            "tuiles_finales": 1
+          }
+        },
+        "perdant_role": "biblio",
+        "donne": 13,
+        "sens": "A",
+        "seed": 20225
+      },
+      {
+        "tours": 40,
+        "bloquee": false,
+        "gagnant_role": "notre",
+        "egalite": false,
+        "perdant_tuiles_restantes": 1,
+        "conservation_erreurs": [],
+        "ecarts_optimalite": [],
+        "par_role": {
+          "notre": {
+            "tours": 20,
+            "tuiles_posees": 25,
+            "poses": 9,
+            "duree_totale": 1.1515973269988535,
+            "duree_max": 0.2392459200000303,
+            "mise_contrainte": 0,
+            "tuiles_finales": 0
+          },
+          "biblio": {
+            "tours": 20,
+            "tuiles_posees": 24,
+            "poses": 9,
+            "duree_totale": 0.5651504780007599,
+            "duree_max": 0.049792184000580164,
+            "mise_contrainte": 1,
+            "tuiles_finales": 1
+          }
+        },
+        "perdant_role": "biblio",
+        "donne": 13,
+        "sens": "B",
+        "seed": 20225
+      },
+      {
+        "tours": 36,
+        "bloquee": false,
+        "gagnant_role": "biblio",
+        "egalite": false,
+        "perdant_tuiles_restantes": 4,
+        "conservation_erreurs": [],
+        "ecarts_optimalite": [],
+        "par_role": {
+          "notre": {
+            "tours": 18,
+            "tuiles_posees": 21,
+            "poses": 7,
+            "duree_totale": 0.588376695000079,
+            "duree_max": 0.08686574300008942,
+            "mise_contrainte": 0,
+            "tuiles_finales": 4
+          },
+          "biblio": {
+            "tours": 18,
+            "tuiles_posees": 25,
+            "poses": 7,
+            "duree_totale": 0.6492168880040481,
+            "duree_max": 0.07927818100051809,
+            "mise_contrainte": 3,
+            "tuiles_finales": 0
+          }
+        },
+        "perdant_role": "notre",
+        "donne": 14,
+        "sens": "A",
+        "seed": 20226
+      },
+      {
+        "tours": 58,
+        "bloquee": false,
+        "gagnant_role": "notre",
+        "egalite": false,
+        "perdant_tuiles_restantes": 4,
+        "conservation_erreurs": [],
+        "ecarts_optimalite": [],
+        "par_role": {
+          "notre": {
+            "tours": 29,
+            "tuiles_posees": 30,
+            "poses": 13,
+            "duree_totale": 3.5557681099980982,
+            "duree_max": 0.6956817929994941,
+            "mise_contrainte": 0,
+            "tuiles_finales": 0
+          },
+          "biblio": {
+            "tours": 29,
+            "tuiles_posees": 27,
+            "poses": 12,
+            "duree_totale": 1.0888614159975987,
+            "duree_max": 0.08596209000006638,
+            "mise_contrainte": 1,
+            "tuiles_finales": 4
+          }
+        },
+        "perdant_role": "biblio",
+        "donne": 14,
+        "sens": "B",
+        "seed": 20226
+      },
+      {
+        "tours": 58,
+        "bloquee": false,
+        "gagnant_role": "biblio",
+        "egalite": false,
+        "perdant_tuiles_restantes": 3,
+        "conservation_erreurs": [],
+        "ecarts_optimalite": [],
+        "par_role": {
+          "notre": {
+            "tours": 29,
+            "tuiles_posees": 29,
+            "poses": 11,
+            "duree_totale": 1.182734005000384,
+            "duree_max": 0.1437122300003466,
+            "mise_contrainte": 0,
+            "tuiles_finales": 3
+          },
+          "biblio": {
+            "tours": 29,
+            "tuiles_posees": 31,
+            "poses": 12,
+            "duree_totale": 0.8220655569984956,
+            "duree_max": 0.055492178999884345,
+            "mise_contrainte": 1,
+            "tuiles_finales": 0
+          }
+        },
+        "perdant_role": "notre",
+        "donne": 15,
+        "sens": "A",
+        "seed": 20227
+      },
+      {
+        "tours": 76,
+        "bloquee": false,
+        "gagnant_role": "notre",
+        "egalite": false,
+        "perdant_tuiles_restantes": 2,
+        "conservation_erreurs": [],
+        "ecarts_optimalite": [],
+        "par_role": {
+          "notre": {
+            "tours": 38,
+            "tuiles_posees": 35,
+            "poses": 17,
+            "duree_totale": 4.5782066529973235,
+            "duree_max": 0.5012978790000489,
+            "mise_contrainte": 0,
+            "tuiles_finales": 0
+          },
+          "biblio": {
+            "tours": 38,
+            "tuiles_posees": 34,
+            "poses": 16,
+            "duree_totale": 1.3094463040015398,
+            "duree_max": 0.05939656099963031,
+            "mise_contrainte": 1,
+            "tuiles_finales": 2
+          }
+        },
+        "perdant_role": "biblio",
+        "donne": 15,
+        "sens": "B",
+        "seed": 20227
+      },
+      {
+        "tours": 53,
+        "bloquee": false,
+        "gagnant_role": "notre",
+        "egalite": false,
+        "perdant_tuiles_restantes": 2,
+        "conservation_erreurs": [],
+        "ecarts_optimalite": [],
+        "par_role": {
+          "notre": {
+            "tours": 27,
+            "tuiles_posees": 30,
+            "poses": 11,
+            "duree_totale": 3.253597634000471,
+            "duree_max": 0.3816135740007667,
+            "mise_contrainte": 0,
+            "tuiles_finales": 0
+          },
+          "biblio": {
+            "tours": 26,
+            "tuiles_posees": 29,
+            "poses": 9,
+            "duree_totale": 1.3497528399993826,
+            "duree_max": 0.08050780299981852,
+            "mise_contrainte": 7,
+            "tuiles_finales": 2
+          }
+        },
+        "perdant_role": "biblio",
+        "donne": 16,
+        "sens": "A",
+        "seed": 20228
+      },
+      {
+        "tours": 69,
+        "bloquee": false,
+        "gagnant_role": "biblio",
+        "egalite": false,
+        "perdant_tuiles_restantes": 3,
+        "conservation_erreurs": [],
+        "ecarts_optimalite": [],
+        "par_role": {
+          "notre": {
+            "tours": 34,
+            "tuiles_posees": 32,
+            "poses": 13,
+            "duree_totale": 7.258224140000493,
+            "duree_max": 0.8017901570001413,
+            "mise_contrainte": 0,
+            "tuiles_finales": 3
+          },
+          "biblio": {
+            "tours": 35,
+            "tuiles_posees": 36,
+            "poses": 13,
+            "duree_totale": 1.7742606220017478,
+            "duree_max": 0.2047548040000038,
+            "mise_contrainte": 1,
+            "tuiles_finales": 0
+          }
+        },
+        "perdant_role": "notre",
+        "donne": 16,
+        "sens": "B",
+        "seed": 20228
+      },
+      {
+        "tours": 53,
+        "bloquee": false,
+        "gagnant_role": "notre",
+        "egalite": false,
+        "perdant_tuiles_restantes": 3,
+        "conservation_erreurs": [],
+        "ecarts_optimalite": [],
+        "par_role": {
+          "notre": {
+            "tours": 27,
+            "tuiles_posees": 29,
+            "poses": 12,
+            "duree_totale": 0.22554775400021754,
+            "duree_max": 0.032357195999793475,
+            "mise_contrainte": 0,
+            "tuiles_finales": 0
+          },
+          "biblio": {
+            "tours": 26,
+            "tuiles_posees": 30,
+            "poses": 7,
+            "duree_totale": 0.957305906997135,
+            "duree_max": 0.06519734299945412,
+            "mise_contrainte": 11,
+            "tuiles_finales": 3
+          }
+        },
+        "perdant_role": "biblio",
+        "donne": 17,
+        "sens": "A",
+        "seed": 20229
+      },
+      {
+        "tours": 69,
+        "bloquee": false,
+        "gagnant_role": "biblio",
+        "egalite": false,
+        "perdant_tuiles_restantes": 2,
+        "conservation_erreurs": [],
+        "ecarts_optimalite": [],
+        "par_role": {
+          "notre": {
+            "tours": 34,
+            "tuiles_posees": 33,
+            "poses": 13,
+            "duree_totale": 0.4863724969991381,
+            "duree_max": 0.04049553500044567,
+            "mise_contrainte": 0,
+            "tuiles_finales": 2
+          },
+          "biblio": {
+            "tours": 35,
+            "tuiles_posees": 33,
+            "poses": 16,
+            "duree_totale": 0.7941150830001789,
+            "duree_max": 0.063697171000058,
+            "mise_contrainte": 2,
+            "tuiles_finales": 0
+          }
+        },
+        "perdant_role": "notre",
+        "donne": 17,
+        "sens": "B",
+        "seed": 20229
+      },
+      {
+        "tours": 62,
+        "bloquee": false,
+        "gagnant_role": "biblio",
+        "egalite": false,
+        "perdant_tuiles_restantes": 1,
+        "conservation_erreurs": [],
+        "ecarts_optimalite": [],
+        "par_role": {
+          "notre": {
+            "tours": 31,
+            "tuiles_posees": 31,
+            "poses": 13,
+            "duree_totale": 1.3516004629991585,
+            "duree_max": 0.12166036300004635,
+            "mise_contrainte": 0,
+            "tuiles_finales": 1
+          },
+          "biblio": {
+            "tours": 31,
+            "tuiles_posees": 29,
+            "poses": 16,
+            "duree_totale": 0.8663942230032262,
+            "duree_max": 0.06627835200015397,
+            "mise_contrainte": 3,
+            "tuiles_finales": 0
+          }
+        },
+        "perdant_role": "notre",
+        "donne": 18,
+        "sens": "A",
+        "seed": 20230
+      },
+      {
+        "tours": 64,
+        "bloquee": false,
+        "gagnant_role": "notre",
+        "egalite": false,
+        "perdant_tuiles_restantes": 2,
+        "conservation_erreurs": [],
+        "ecarts_optimalite": [],
+        "par_role": {
+          "notre": {
+            "tours": 32,
+            "tuiles_posees": 30,
+            "poses": 16,
+            "duree_totale": 1.771487134000381,
+            "duree_max": 0.33146321599997464,
+            "mise_contrainte": 0,
+            "tuiles_finales": 0
+          },
+          "biblio": {
+            "tours": 32,
+            "tuiles_posees": 30,
+            "poses": 14,
+            "duree_totale": 0.9474356510027064,
+            "duree_max": 0.05695414899946627,
+            "mise_contrainte": 1,
+            "tuiles_finales": 2
+          }
+        },
+        "perdant_role": "biblio",
+        "donne": 18,
+        "sens": "B",
+        "seed": 20230
+      },
+      {
+        "tours": 77,
+        "bloquee": false,
+        "gagnant_role": "notre",
+        "egalite": false,
+        "perdant_tuiles_restantes": 5,
+        "conservation_erreurs": [],
+        "ecarts_optimalite": [],
+        "par_role": {
+          "notre": {
+            "tours": 39,
+            "tuiles_posees": 36,
+            "poses": 17,
+            "duree_totale": 0.7221096319972276,
+            "duree_max": 0.06258650499967189,
+            "mise_contrainte": 0,
+            "tuiles_finales": 0
+          },
+          "biblio": {
+            "tours": 38,
+            "tuiles_posees": 33,
+            "poses": 14,
+            "duree_totale": 0.9986342870015505,
+            "duree_max": 0.03520386400032294,
+            "mise_contrainte": 1,
+            "tuiles_finales": 5
+          }
+        },
+        "perdant_role": "biblio",
+        "donne": 19,
+        "sens": "A",
+        "seed": 20231
+      },
+      {
+        "tours": 77,
+        "bloquee": false,
+        "gagnant_role": "biblio",
+        "egalite": false,
+        "perdant_tuiles_restantes": 5,
+        "conservation_erreurs": [],
+        "ecarts_optimalite": [],
+        "par_role": {
+          "notre": {
+            "tours": 38,
+            "tuiles_posees": 33,
+            "poses": 14,
+            "duree_totale": 0.6845149749970005,
+            "duree_max": 0.06355616499968164,
+            "mise_contrainte": 0,
+            "tuiles_finales": 5
+          },
+          "biblio": {
+            "tours": 39,
+            "tuiles_posees": 36,
+            "poses": 17,
+            "duree_totale": 1.0856616989985923,
+            "duree_max": 0.038913055999728385,
+            "mise_contrainte": 1,
+            "tuiles_finales": 0
+          }
+        },
+        "perdant_role": "notre",
+        "donne": 19,
+        "sens": "B",
+        "seed": 20231
+      },
+      {
+        "tours": 79,
+        "bloquee": false,
+        "gagnant_role": "notre",
+        "egalite": false,
+        "perdant_tuiles_restantes": 1,
+        "conservation_erreurs": [],
+        "ecarts_optimalite": [],
+        "par_role": {
+          "notre": {
+            "tours": 40,
+            "tuiles_posees": 36,
+            "poses": 18,
+            "duree_totale": 0.9585016409964737,
+            "duree_max": 0.08936251799968886,
+            "mise_contrainte": 0,
+            "tuiles_finales": 0
+          },
+          "biblio": {
+            "tours": 39,
+            "tuiles_posees": 36,
+            "poses": 16,
+            "duree_totale": 1.5894473130001643,
+            "duree_max": 0.09249958199961839,
+            "mise_contrainte": 9,
+            "tuiles_finales": 1
+          }
+        },
+        "perdant_role": "biblio",
+        "donne": 20,
+        "sens": "A",
+        "seed": 20232
+      },
+      {
+        "tours": 73,
+        "bloquee": false,
+        "gagnant_role": "biblio",
+        "egalite": false,
+        "perdant_tuiles_restantes": 1,
+        "conservation_erreurs": [],
+        "ecarts_optimalite": [
+          {
+            "tour": 64,
+            "siege_actif": 1,
+            "role_actif": "notre",
+            "nb_notre": 1,
+            "nb_biblio": 0
+          }
+        ],
+        "par_role": {
+          "notre": {
+            "tours": 36,
+            "tuiles_posees": 33,
+            "poses": 16,
+            "duree_totale": 0.7473906629993508,
+            "duree_max": 0.06215345799955685,
+            "mise_contrainte": 0,
+            "tuiles_finales": 1
+          },
+          "biblio": {
+            "tours": 37,
+            "tuiles_posees": 35,
+            "poses": 16,
+            "duree_totale": 1.0571695009984978,
+            "duree_max": 0.05415884599915444,
+            "mise_contrainte": 1,
+            "tuiles_finales": 0
+          }
+        },
+        "perdant_role": "notre",
+        "donne": 20,
+        "sens": "B",
+        "seed": 20232
+      },
+      {
+        "tours": 57,
+        "bloquee": false,
+        "gagnant_role": "notre",
+        "egalite": false,
+        "perdant_tuiles_restantes": 4,
+        "conservation_erreurs": [],
+        "ecarts_optimalite": [],
+        "par_role": {
+          "notre": {
+            "tours": 29,
+            "tuiles_posees": 31,
+            "poses": 12,
+            "duree_totale": 1.119145252002454,
+            "duree_max": 0.1940937870003836,
+            "mise_contrainte": 0,
+            "tuiles_finales": 0
+          },
+          "biblio": {
+            "tours": 28,
+            "tuiles_posees": 29,
+            "poses": 9,
+            "duree_totale": 1.3248367889991641,
+            "duree_max": 0.08421485099916026,
+            "mise_contrainte": 10,
+            "tuiles_finales": 4
+          }
+        },
+        "perdant_role": "biblio",
+        "donne": 21,
+        "sens": "A",
+        "seed": 20233
+      },
+      {
+        "tours": 61,
+        "bloquee": false,
+        "gagnant_role": "biblio",
+        "egalite": false,
+        "perdant_tuiles_restantes": 3,
+        "conservation_erreurs": [],
+        "ecarts_optimalite": [],
+        "par_role": {
+          "notre": {
+            "tours": 30,
+            "tuiles_posees": 30,
+            "poses": 11,
+            "duree_totale": 1.9501016820022414,
+            "duree_max": 0.2730797859994709,
+            "mise_contrainte": 0,
+            "tuiles_finales": 3
+          },
+          "biblio": {
+            "tours": 31,
+            "tuiles_posees": 33,
+            "poses": 12,
+            "duree_totale": 0.9634609149979951,
+            "duree_max": 0.05961784099963552,
+            "mise_contrainte": 1,
+            "tuiles_finales": 0
+          }
+        },
+        "perdant_role": "notre",
+        "donne": 21,
+        "sens": "B",
+        "seed": 20233
+      },
+      {
+        "tours": 72,
+        "bloquee": false,
+        "gagnant_role": "biblio",
+        "egalite": false,
+        "perdant_tuiles_restantes": 1,
+        "conservation_erreurs": [],
+        "ecarts_optimalite": [],
+        "par_role": {
+          "notre": {
+            "tours": 36,
+            "tuiles_posees": 37,
+            "poses": 12,
+            "duree_totale": 3.7372913089975555,
+            "duree_max": 0.5093688520000796,
+            "mise_contrainte": 0,
+            "tuiles_finales": 1
+          },
+          "biblio": {
+            "tours": 36,
+            "tuiles_posees": 34,
+            "poses": 16,
+            "duree_totale": 1.2929779129972303,
+            "duree_max": 0.07964319199982128,
+            "mise_contrainte": 1,
+            "tuiles_finales": 0
+          }
+        },
+        "perdant_role": "notre",
+        "donne": 22,
+        "sens": "A",
+        "seed": 20234
+      },
+      {
+        "tours": 72,
+        "bloquee": false,
+        "gagnant_role": "notre",
+        "egalite": false,
+        "perdant_tuiles_restantes": 1,
+        "conservation_erreurs": [],
+        "ecarts_optimalite": [],
+        "par_role": {
+          "notre": {
+            "tours": 36,
+            "tuiles_posees": 34,
+            "poses": 16,
+            "duree_totale": 3.4891508780010554,
+            "duree_max": 0.43334194199997,
+            "mise_contrainte": 0,
+            "tuiles_finales": 0
+          },
+          "biblio": {
+            "tours": 36,
+            "tuiles_posees": 37,
+            "poses": 12,
+            "duree_totale": 1.3914020310012347,
+            "duree_max": 0.06472086499979923,
+            "mise_contrainte": 10,
+            "tuiles_finales": 1
+          }
+        },
+        "perdant_role": "biblio",
+        "donne": 22,
+        "sens": "B",
+        "seed": 20234
+      },
+      {
+        "tours": 60,
+        "bloquee": false,
+        "gagnant_role": "biblio",
+        "egalite": false,
+        "perdant_tuiles_restantes": 2,
+        "conservation_erreurs": [],
+        "ecarts_optimalite": [],
+        "par_role": {
+          "notre": {
+            "tours": 30,
+            "tuiles_posees": 30,
+            "poses": 12,
+            "duree_totale": 4.035872919997928,
+            "duree_max": 0.4904793020004945,
+            "mise_contrainte": 0,
+            "tuiles_finales": 2
+          },
+          "biblio": {
+            "tours": 30,
+            "tuiles_posees": 33,
+            "poses": 11,
+            "duree_totale": 1.6162657650002075,
+            "duree_max": 0.06982985300055589,
+            "mise_contrainte": 11,
+            "tuiles_finales": 0
+          }
+        },
+        "perdant_role": "notre",
+        "donne": 23,
+        "sens": "A",
+        "seed": 20235
+      },
+      {
+        "tours": 58,
+        "bloquee": false,
+        "gagnant_role": "notre",
+        "egalite": false,
+        "perdant_tuiles_restantes": 2,
+        "conservation_erreurs": [],
+        "ecarts_optimalite": [],
+        "par_role": {
+          "notre": {
+            "tours": 29,
+            "tuiles_posees": 33,
+            "poses": 10,
+            "duree_totale": 3.5518720089985436,
+            "duree_max": 0.34332673700009764,
+            "mise_contrainte": 0,
+            "tuiles_finales": 0
+          },
+          "biblio": {
+            "tours": 29,
+            "tuiles_posees": 30,
+            "poses": 11,
+            "duree_totale": 1.4174026809996576,
+            "duree_max": 0.11259231799976988,
+            "mise_contrainte": 1,
+            "tuiles_finales": 2
+          }
+        },
+        "perdant_role": "biblio",
+        "donne": 23,
+        "sens": "B",
+        "seed": 20235
+      },
+      {
+        "tours": 64,
+        "bloquee": false,
+        "gagnant_role": "biblio",
+        "egalite": false,
+        "perdant_tuiles_restantes": 2,
+        "conservation_erreurs": [],
+        "ecarts_optimalite": [],
+        "par_role": {
+          "notre": {
+            "tours": 32,
+            "tuiles_posees": 30,
+            "poses": 14,
+            "duree_totale": 1.609067617000619,
+            "duree_max": 0.20634735099974932,
+            "mise_contrainte": 0,
+            "tuiles_finales": 2
+          },
+          "biblio": {
+            "tours": 32,
+            "tuiles_posees": 34,
+            "poses": 12,
+            "duree_totale": 0.8121344580013101,
+            "duree_max": 0.046262869000202045,
+            "mise_contrainte": 1,
+            "tuiles_finales": 0
+          }
+        },
+        "perdant_role": "notre",
+        "donne": 24,
+        "sens": "A",
+        "seed": 20236
+      },
+      {
+        "tours": 60,
+        "bloquee": false,
+        "gagnant_role": "notre",
+        "egalite": false,
+        "perdant_tuiles_restantes": 2,
+        "conservation_erreurs": [],
+        "ecarts_optimalite": [],
+        "par_role": {
+          "notre": {
+            "tours": 30,
+            "tuiles_posees": 31,
+            "poses": 13,
+            "duree_totale": 1.299122751996947,
+            "duree_max": 0.20125664999977744,
+            "mise_contrainte": 0,
+            "tuiles_finales": 0
+          },
+          "biblio": {
+            "tours": 30,
+            "tuiles_posees": 29,
+            "poses": 13,
+            "duree_totale": 0.7455533949996607,
+            "duree_max": 0.09008108600028208,
+            "mise_contrainte": 2,
+            "tuiles_finales": 2
+          }
+        },
+        "perdant_role": "biblio",
+        "donne": 24,
+        "sens": "B",
+        "seed": 20236
+      },
+      {
+        "tours": 78,
+        "bloquee": false,
+        "gagnant_role": "biblio",
+        "egalite": false,
+        "perdant_tuiles_restantes": 1,
+        "conservation_erreurs": [],
+        "ecarts_optimalite": [],
+        "par_role": {
+          "notre": {
+            "tours": 39,
+            "tuiles_posees": 37,
+            "poses": 15,
+            "duree_totale": 3.8911258259986425,
+            "duree_max": 0.6270595389996743,
+            "mise_contrainte": 0,
+            "tuiles_finales": 1
+          },
+          "biblio": {
+            "tours": 39,
+            "tuiles_posees": 40,
+            "poses": 13,
+            "duree_totale": 1.2185930000032386,
+            "duree_max": 0.08853644100054225,
+            "mise_contrainte": 2,
+            "tuiles_finales": 0
+          }
+        },
+        "perdant_role": "notre",
+        "donne": 25,
+        "sens": "A",
+        "seed": 20237
+      },
+      {
+        "tours": 80,
+        "bloquee": false,
+        "gagnant_role": "notre",
+        "egalite": false,
+        "perdant_tuiles_restantes": 1,
+        "conservation_erreurs": [],
+        "ecarts_optimalite": [],
+        "par_role": {
+          "notre": {
+            "tours": 40,
+            "tuiles_posees": 39,
+            "poses": 15,
+            "duree_totale": 5.526934898998661,
+            "duree_max": 0.7219136530002288,
+            "mise_contrainte": 0,
+            "tuiles_finales": 0
+          },
+          "biblio": {
+            "tours": 40,
+            "tuiles_posees": 38,
+            "poses": 15,
+            "duree_totale": 2.1571611139988818,
+            "duree_max": 0.0965034309992916,
+            "mise_contrainte": 10,
+            "tuiles_finales": 1
+          }
+        },
+        "perdant_role": "biblio",
+        "donne": 25,
+        "sens": "B",
+        "seed": 20237
+      },
+      {
+        "tours": 82,
+        "bloquee": false,
+        "gagnant_role": "biblio",
+        "egalite": false,
+        "perdant_tuiles_restantes": 2,
+        "conservation_erreurs": [],
+        "ecarts_optimalite": [],
+        "par_role": {
+          "notre": {
+            "tours": 41,
+            "tuiles_posees": 34,
+            "poses": 19,
+            "duree_totale": 0.9052356729980602,
+            "duree_max": 0.0561562729999423,
+            "mise_contrainte": 0,
+            "tuiles_finales": 2
+          },
+          "biblio": {
+            "tours": 41,
+            "tuiles_posees": 36,
+            "poses": 19,
+            "duree_totale": 1.3493197840016364,
+            "duree_max": 0.10346477400071308,
+            "mise_contrainte": 3,
+            "tuiles_finales": 0
+          }
+        },
+        "perdant_role": "notre",
+        "donne": 26,
+        "sens": "A",
+        "seed": 20238
+      },
+      {
+        "tours": 82,
+        "bloquee": false,
+        "gagnant_role": "notre",
+        "egalite": false,
+        "perdant_tuiles_restantes": 1,
+        "conservation_erreurs": [],
+        "ecarts_optimalite": [],
+        "par_role": {
+          "notre": {
+            "tours": 41,
+            "tuiles_posees": 36,
+            "poses": 19,
+            "duree_totale": 2.1549308549965644,
+            "duree_max": 0.6585633419999795,
+            "mise_contrainte": 0,
+            "tuiles_finales": 0
+          },
+          "biblio": {
+            "tours": 41,
+            "tuiles_posees": 35,
+            "poses": 19,
+            "duree_totale": 1.3162486790015464,
+            "duree_max": 0.12347061600030429,
+            "mise_contrainte": 3,
+            "tuiles_finales": 1
+          }
+        },
+        "perdant_role": "biblio",
+        "donne": 26,
+        "sens": "B",
+        "seed": 20238
+      },
+      {
+        "tours": 79,
+        "bloquee": false,
+        "gagnant_role": "notre",
+        "egalite": false,
+        "perdant_tuiles_restantes": 2,
+        "conservation_erreurs": [],
+        "ecarts_optimalite": [],
+        "par_role": {
+          "notre": {
+            "tours": 40,
+            "tuiles_posees": 38,
+            "poses": 16,
+            "duree_totale": 0.9683583639980498,
+            "duree_max": 0.07014494399936666,
+            "mise_contrainte": 0,
+            "tuiles_finales": 0
+          },
+          "biblio": {
+            "tours": 39,
+            "tuiles_posees": 35,
+            "poses": 16,
+            "duree_totale": 1.0780943470008424,
+            "duree_max": 0.07802937300039048,
+            "mise_contrainte": 2,
+            "tuiles_finales": 2
+          }
+        },
+        "perdant_role": "biblio",
+        "donne": 27,
+        "sens": "A",
+        "seed": 20239
+      },
+      {
+        "tours": 91,
+        "bloquee": false,
+        "gagnant_role": "biblio",
+        "egalite": false,
+        "perdant_tuiles_restantes": 4,
+        "conservation_erreurs": [],
+        "ecarts_optimalite": [],
+        "par_role": {
+          "notre": {
+            "tours": 45,
+            "tuiles_posees": 36,
+            "poses": 19,
+            "duree_totale": 1.1737849500013908,
+            "duree_max": 0.07301492300030077,
+            "mise_contrainte": 0,
+            "tuiles_finales": 4
+          },
+          "biblio": {
+            "tours": 46,
+            "tuiles_posees": 39,
+            "poses": 21,
+            "duree_totale": 1.32157827500032,
+            "duree_max": 0.03708063799967931,
+            "mise_contrainte": 1,
+            "tuiles_finales": 0
+          }
+        },
+        "perdant_role": "notre",
+        "donne": 27,
+        "sens": "B",
+        "seed": 20239
+      },
+      {
+        "tours": 53,
+        "bloquee": false,
+        "gagnant_role": "notre",
+        "egalite": false,
+        "perdant_tuiles_restantes": 4,
+        "conservation_erreurs": [],
+        "ecarts_optimalite": [],
+        "par_role": {
+          "notre": {
+            "tours": 27,
+            "tuiles_posees": 31,
+            "poses": 10,
+            "duree_totale": 0.29279766000126983,
+            "duree_max": 0.026641792000191344,
+            "mise_contrainte": 0,
+            "tuiles_finales": 0
+          },
+          "biblio": {
+            "tours": 26,
+            "tuiles_posees": 27,
+            "poses": 9,
+            "duree_totale": 0.9439542330010227,
+            "duree_max": 0.08637576300043293,
+            "mise_contrainte": 6,
+            "tuiles_finales": 4
+          }
+        },
+        "perdant_role": "biblio",
+        "donne": 28,
+        "sens": "A",
+        "seed": 20240
+      },
+      {
+        "tours": 53,
+        "bloquee": false,
+        "gagnant_role": "biblio",
+        "egalite": false,
+        "perdant_tuiles_restantes": 4,
+        "conservation_erreurs": [],
+        "ecarts_optimalite": [],
+        "par_role": {
+          "notre": {
+            "tours": 26,
+            "tuiles_posees": 27,
+            "poses": 9,
+            "duree_totale": 0.2868888010016235,
+            "duree_max": 0.02758994600026199,
+            "mise_contrainte": 0,
+            "tuiles_finales": 4
+          },
+          "biblio": {
+            "tours": 27,
+            "tuiles_posees": 31,
+            "poses": 10,
+            "duree_totale": 0.6995299679992968,
+            "duree_max": 0.07837111900062155,
+            "mise_contrainte": 2,
+            "tuiles_finales": 0
+          }
+        },
+        "perdant_role": "notre",
+        "donne": 28,
+        "sens": "B",
+        "seed": 20240
+      },
+      {
+        "tours": 47,
+        "bloquee": false,
+        "gagnant_role": "notre",
+        "egalite": false,
+        "perdant_tuiles_restantes": 7,
+        "conservation_erreurs": [],
+        "ecarts_optimalite": [],
+        "par_role": {
+          "notre": {
+            "tours": 24,
+            "tuiles_posees": 28,
+            "poses": 10,
+            "duree_totale": 0.7456216770005994,
+            "duree_max": 0.23148049500014167,
+            "mise_contrainte": 0,
+            "tuiles_finales": 0
+          },
+          "biblio": {
+            "tours": 23,
+            "tuiles_posees": 22,
+            "poses": 8,
+            "duree_totale": 0.8054308660002789,
+            "duree_max": 0.07936900799995783,
+            "mise_contrainte": 2,
+            "tuiles_finales": 7
+          }
+        },
+        "perdant_role": "biblio",
+        "donne": 29,
+        "sens": "A",
+        "seed": 20241
+      },
+      {
+        "tours": 95,
+        "bloquee": false,
+        "gagnant_role": "biblio",
+        "egalite": false,
+        "perdant_tuiles_restantes": 3,
+        "conservation_erreurs": [],
+        "ecarts_optimalite": [],
+        "par_role": {
+          "notre": {
+            "tours": 47,
+            "tuiles_posees": 39,
+            "poses": 19,
+            "duree_totale": 4.972813508004947,
+            "duree_max": 0.6518414510001094,
+            "mise_contrainte": 0,
+            "tuiles_finales": 3
+          },
+          "biblio": {
+            "tours": 48,
+            "tuiles_posees": 41,
+            "poses": 21,
+            "duree_totale": 2.3248340450036267,
+            "duree_max": 0.1037316739993912,
+            "mise_contrainte": 8,
+            "tuiles_finales": 0
+          }
+        },
+        "perdant_role": "notre",
+        "donne": 29,
+        "sens": "B",
+        "seed": 20241
+      },
+      {
+        "tours": 75,
+        "bloquee": false,
+        "gagnant_role": "notre",
+        "egalite": false,
+        "perdant_tuiles_restantes": 4,
+        "conservation_erreurs": [],
+        "ecarts_optimalite": [],
+        "par_role": {
+          "notre": {
+            "tours": 38,
+            "tuiles_posees": 37,
+            "poses": 15,
+            "duree_totale": 3.1647064990002036,
+            "duree_max": 0.33900295100011135,
+            "mise_contrainte": 0,
+            "tuiles_finales": 0
+          },
+          "biblio": {
+            "tours": 37,
+            "tuiles_posees": 31,
+            "poses": 16,
+            "duree_totale": 1.1563786779997827,
+            "duree_max": 0.06356583100023272,
+            "mise_contrainte": 1,
+            "tuiles_finales": 4
+          }
+        },
+        "perdant_role": "biblio",
+        "donne": 30,
+        "sens": "A",
+        "seed": 20242
+      },
+      {
+        "tours": 77,
+        "bloquee": false,
+        "gagnant_role": "biblio",
+        "egalite": false,
+        "perdant_tuiles_restantes": 2,
+        "conservation_erreurs": [],
+        "ecarts_optimalite": [],
+        "par_role": {
+          "notre": {
+            "tours": 38,
+            "tuiles_posees": 33,
+            "poses": 17,
+            "duree_totale": 3.110331274998316,
+            "duree_max": 0.38870483499977126,
+            "mise_contrainte": 0,
+            "tuiles_finales": 2
+          },
+          "biblio": {
+            "tours": 39,
+            "tuiles_posees": 38,
+            "poses": 15,
+            "duree_totale": 1.4079108250007266,
+            "duree_max": 0.06571324700053083,
+            "mise_contrainte": 5,
+            "tuiles_finales": 0
+          }
+        },
+        "perdant_role": "notre",
+        "donne": 30,
+        "sens": "B",
+        "seed": 20242
+      },
+      {
+        "tours": 51,
+        "bloquee": false,
+        "gagnant_role": "notre",
+        "egalite": false,
+        "perdant_tuiles_restantes": 1,
+        "conservation_erreurs": [],
+        "ecarts_optimalite": [],
+        "par_role": {
+          "notre": {
+            "tours": 26,
+            "tuiles_posees": 29,
+            "poses": 11,
+            "duree_totale": 1.9887424259968611,
+            "duree_max": 0.37442310100050236,
+            "mise_contrainte": 0,
+            "tuiles_finales": 0
+          },
+          "biblio": {
+            "tours": 25,
+            "tuiles_posees": 29,
+            "poses": 9,
+            "duree_totale": 0.7902605649996985,
+            "duree_max": 0.06417964299998857,
+            "mise_contrainte": 1,
+            "tuiles_finales": 1
+          }
+        },
+        "perdant_role": "biblio",
+        "donne": 31,
+        "sens": "A",
+        "seed": 20243
+      },
+      {
+        "tours": 49,
+        "bloquee": false,
+        "gagnant_role": "biblio",
+        "egalite": false,
+        "perdant_tuiles_restantes": 3,
+        "conservation_erreurs": [],
+        "ecarts_optimalite": [],
+        "par_role": {
+          "notre": {
+            "tours": 24,
+            "tuiles_posees": 26,
+            "poses": 9,
+            "duree_totale": 1.700560276998658,
+            "duree_max": 0.35434864699982427,
+            "mise_contrainte": 0,
+            "tuiles_finales": 3
+          },
+          "biblio": {
+            "tours": 25,
+            "tuiles_posees": 30,
+            "poses": 9,
+            "duree_totale": 0.8969187999973656,
+            "duree_max": 0.06959896499938623,
+            "mise_contrainte": 6,
+            "tuiles_finales": 0
+          }
+        },
+        "perdant_role": "notre",
+        "donne": 31,
+        "sens": "B",
+        "seed": 20243
+      },
+      {
+        "tours": 57,
+        "bloquee": false,
+        "gagnant_role": "notre",
+        "egalite": false,
+        "perdant_tuiles_restantes": 4,
+        "conservation_erreurs": [],
+        "ecarts_optimalite": [],
+        "par_role": {
+          "notre": {
+            "tours": 29,
+            "tuiles_posees": 30,
+            "poses": 13,
+            "duree_totale": 2.3121518879979703,
+            "duree_max": 0.19176293799955602,
+            "mise_contrainte": 0,
+            "tuiles_finales": 0
+          },
+          "biblio": {
+            "tours": 28,
+            "tuiles_posees": 26,
+            "poses": 12,
+            "duree_totale": 0.9557417439991696,
+            "duree_max": 0.06966790800015588,
+            "mise_contrainte": 3,
+            "tuiles_finales": 4
+          }
+        },
+        "perdant_role": "biblio",
+        "donne": 32,
+        "sens": "A",
+        "seed": 20244
+      },
+      {
+        "tours": 57,
+        "bloquee": false,
+        "gagnant_role": "biblio",
+        "egalite": false,
+        "perdant_tuiles_restantes": 4,
+        "conservation_erreurs": [],
+        "ecarts_optimalite": [],
+        "par_role": {
+          "notre": {
+            "tours": 28,
+            "tuiles_posees": 26,
+            "poses": 12,
+            "duree_totale": 2.279188976001933,
+            "duree_max": 0.22027551900009712,
+            "mise_contrainte": 0,
+            "tuiles_finales": 4
+          },
+          "biblio": {
+            "tours": 29,
+            "tuiles_posees": 30,
+            "poses": 13,
+            "duree_totale": 0.7981075260040598,
+            "duree_max": 0.049176664999322384,
+            "mise_contrainte": 1,
+            "tuiles_finales": 0
+          }
+        },
+        "perdant_role": "notre",
+        "donne": 32,
+        "sens": "B",
+        "seed": 20244
+      },
+      {
+        "tours": 70,
+        "bloquee": false,
+        "gagnant_role": "biblio",
+        "egalite": false,
+        "perdant_tuiles_restantes": 2,
+        "conservation_erreurs": [],
+        "ecarts_optimalite": [],
+        "par_role": {
+          "notre": {
+            "tours": 35,
+            "tuiles_posees": 33,
+            "poses": 14,
+            "duree_totale": 1.5853490239996972,
+            "duree_max": 0.36513218300024164,
+            "mise_contrainte": 0,
+            "tuiles_finales": 2
+          },
+          "biblio": {
+            "tours": 35,
+            "tuiles_posees": 34,
+            "poses": 15,
+            "duree_totale": 1.255903618002776,
+            "duree_max": 0.08932362699943042,
+            "mise_contrainte": 4,
+            "tuiles_finales": 0
+          }
+        },
+        "perdant_role": "notre",
+        "donne": 33,
+        "sens": "A",
+        "seed": 20245
+      },
+      {
+        "tours": 68,
+        "bloquee": false,
+        "gagnant_role": "notre",
+        "egalite": false,
+        "perdant_tuiles_restantes": 1,
+        "conservation_erreurs": [],
+        "ecarts_optimalite": [],
+        "par_role": {
+          "notre": {
+            "tours": 34,
+            "tuiles_posees": 34,
+            "poses": 14,
+            "duree_totale": 2.136221910999666,
+            "duree_max": 0.2603432599998996,
+            "mise_contrainte": 0,
+            "tuiles_finales": 0
+          },
+          "biblio": {
+            "tours": 34,
+            "tuiles_posees": 34,
+            "poses": 13,
+            "duree_totale": 1.046761241997956,
+            "duree_max": 0.08572568700037664,
+            "mise_contrainte": 2,
+            "tuiles_finales": 1
+          }
+        },
+        "perdant_role": "biblio",
+        "donne": 33,
+        "sens": "B",
+        "seed": 20245
+      },
+      {
+        "tours": 60,
+        "bloquee": false,
+        "gagnant_role": "biblio",
+        "egalite": false,
+        "perdant_tuiles_restantes": 3,
+        "conservation_erreurs": [],
+        "ecarts_optimalite": [],
+        "par_role": {
+          "notre": {
+            "tours": 30,
+            "tuiles_posees": 28,
+            "poses": 13,
+            "duree_totale": 1.617519041000378,
+            "duree_max": 0.16095151100034855,
+            "mise_contrainte": 0,
+            "tuiles_finales": 3
+          },
+          "biblio": {
+            "tours": 30,
+            "tuiles_posees": 31,
+            "poses": 13,
+            "duree_totale": 0.922255376000976,
+            "duree_max": 0.05459364699981961,
+            "mise_contrainte": 1,
+            "tuiles_finales": 0
+          }
+        },
+        "perdant_role": "notre",
+        "donne": 34,
+        "sens": "A",
+        "seed": 20246
+      },
+      {
+        "tours": 64,
+        "bloquee": false,
+        "gagnant_role": "notre",
+        "egalite": false,
+        "perdant_tuiles_restantes": 1,
+        "conservation_erreurs": [],
+        "ecarts_optimalite": [],
+        "par_role": {
+          "notre": {
+            "tours": 32,
+            "tuiles_posees": 31,
+            "poses": 15,
+            "duree_totale": 3.622829117999572,
+            "duree_max": 0.32716969800003426,
+            "mise_contrainte": 0,
+            "tuiles_finales": 0
+          },
+          "biblio": {
+            "tours": 32,
+            "tuiles_posees": 31,
+            "poses": 14,
+            "duree_totale": 1.2328055930020128,
+            "duree_max": 0.06918242099982308,
+            "mise_contrainte": 1,
+            "tuiles_finales": 1
+          }
+        },
+        "perdant_role": "biblio",
+        "donne": 34,
+        "sens": "B",
+        "seed": 20246
+      },
+      {
+        "tours": 47,
+        "bloquee": false,
+        "gagnant_role": "notre",
+        "egalite": false,
+        "perdant_tuiles_restantes": 3,
+        "conservation_erreurs": [],
+        "ecarts_optimalite": [],
+        "par_role": {
+          "notre": {
+            "tours": 24,
+            "tuiles_posees": 28,
+            "poses": 10,
+            "duree_totale": 2.1563747969967153,
+            "duree_max": 0.5304061979995822,
+            "mise_contrainte": 0,
+            "tuiles_finales": 0
+          },
+          "biblio": {
+            "tours": 23,
+            "tuiles_posees": 24,
+            "poses": 10,
+            "duree_totale": 0.6909599120008352,
+            "duree_max": 0.06496836899987102,
+            "mise_contrainte": 1,
+            "tuiles_finales": 3
+          }
+        },
+        "perdant_role": "biblio",
+        "donne": 35,
+        "sens": "A",
+        "seed": 20247
+      },
+      {
+        "tours": 73,
+        "bloquee": false,
+        "gagnant_role": "biblio",
+        "egalite": false,
+        "perdant_tuiles_restantes": 2,
+        "conservation_erreurs": [],
+        "ecarts_optimalite": [],
+        "par_role": {
+          "notre": {
+            "tours": 36,
+            "tuiles_posees": 33,
+            "poses": 15,
+            "duree_totale": 8.845833830997435,
+            "duree_max": 0.8913897679994989,
+            "mise_contrainte": 0,
+            "tuiles_finales": 2
+          },
+          "biblio": {
+            "tours": 37,
+            "tuiles_posees": 33,
+            "poses": 18,
+            "duree_totale": 1.7194326369999544,
+            "duree_max": 0.12423137399946427,
+            "mise_contrainte": 1,
+            "tuiles_finales": 0
+          }
+        },
+        "perdant_role": "notre",
+        "donne": 35,
+        "sens": "B",
+        "seed": 20247
+      },
+      {
+        "tours": 79,
+        "bloquee": false,
+        "gagnant_role": "notre",
+        "egalite": false,
+        "perdant_tuiles_restantes": 1,
+        "conservation_erreurs": [],
+        "ecarts_optimalite": [],
+        "par_role": {
+          "notre": {
+            "tours": 40,
+            "tuiles_posees": 35,
+            "poses": 19,
+            "duree_totale": 9.260312890998648,
+            "duree_max": 1.2585193430004438,
+            "mise_contrainte": 0,
+            "tuiles_finales": 0
+          },
+          "biblio": {
+            "tours": 39,
+            "tuiles_posees": 34,
+            "poses": 18,
+            "duree_totale": 1.8343401869988156,
+            "duree_max": 0.1687669820003066,
+            "mise_contrainte": 1,
+            "tuiles_finales": 1
+          }
+        },
+        "perdant_role": "biblio",
+        "donne": 36,
+        "sens": "A",
+        "seed": 20248
+      },
+      {
+        "tours": 72,
+        "bloquee": false,
+        "gagnant_role": "notre",
+        "egalite": false,
+        "perdant_tuiles_restantes": 2,
+        "conservation_erreurs": [],
+        "ecarts_optimalite": [],
+        "par_role": {
+          "notre": {
+            "tours": 36,
+            "tuiles_posees": 33,
+            "poses": 17,
+            "duree_totale": 4.822017546001007,
+            "duree_max": 1.231744921000427,
+            "mise_contrainte": 0,
+            "tuiles_finales": 0
+          },
+          "biblio": {
+            "tours": 36,
+            "tuiles_posees": 33,
+            "poses": 15,
+            "duree_totale": 1.0254819900001166,
+            "duree_max": 0.09850446300060867,
+            "mise_contrainte": 1,
+            "tuiles_finales": 2
+          }
+        },
+        "perdant_role": "biblio",
+        "donne": 36,
+        "sens": "B",
+        "seed": 20248
+      },
+      {
+        "tours": 50,
+        "bloquee": false,
+        "gagnant_role": "biblio",
+        "egalite": false,
+        "perdant_tuiles_restantes": 6,
+        "conservation_erreurs": [],
+        "ecarts_optimalite": [],
+        "par_role": {
+          "notre": {
+            "tours": 25,
+            "tuiles_posees": 26,
+            "poses": 7,
+            "duree_totale": 0.242284800001471,
+            "duree_max": 0.024666643000273325,
+            "mise_contrainte": 0,
+            "tuiles_finales": 6
+          },
+          "biblio": {
+            "tours": 25,
+            "tuiles_posees": 30,
+            "poses": 9,
+            "duree_totale": 0.615985983000428,
+            "duree_max": 0.06436545499946078,
+            "mise_contrainte": 2,
+            "tuiles_finales": 0
+          }
+        },
+        "perdant_role": "notre",
+        "donne": 37,
+        "sens": "A",
+        "seed": 20249
+      },
+      {
+        "tours": 50,
+        "bloquee": false,
+        "gagnant_role": "notre",
+        "egalite": false,
+        "perdant_tuiles_restantes": 6,
+        "conservation_erreurs": [],
+        "ecarts_optimalite": [],
+        "par_role": {
+          "notre": {
+            "tours": 25,
+            "tuiles_posees": 30,
+            "poses": 9,
+            "duree_totale": 0.23971786300171516,
+            "duree_max": 0.0407111940003233,
+            "mise_contrainte": 0,
+            "tuiles_finales": 0
+          },
+          "biblio": {
+            "tours": 25,
+            "tuiles_posees": 26,
+            "poses": 7,
+            "duree_totale": 0.5381813800013333,
+            "duree_max": 0.02970641899992188,
+            "mise_contrainte": 1,
+            "tuiles_finales": 6
+          }
+        },
+        "perdant_role": "biblio",
+        "donne": 37,
+        "sens": "B",
+        "seed": 20249
+      },
+      {
+        "tours": 87,
+        "bloquee": false,
+        "gagnant_role": "notre",
+        "egalite": false,
+        "perdant_tuiles_restantes": 2,
+        "conservation_erreurs": [],
+        "ecarts_optimalite": [],
+        "par_role": {
+          "notre": {
+            "tours": 44,
+            "tuiles_posees": 39,
+            "poses": 19,
+            "duree_totale": 6.957527747003041,
+            "duree_max": 0.6800999930001126,
+            "mise_contrainte": 0,
+            "tuiles_finales": 0
+          },
+          "biblio": {
+            "tours": 43,
+            "tuiles_posees": 37,
+            "poses": 18,
+            "duree_totale": 1.8796882750020814,
+            "duree_max": 0.10065483800008224,
+            "mise_contrainte": 1,
+            "tuiles_finales": 2
+          }
+        },
+        "perdant_role": "biblio",
+        "donne": 38,
+        "sens": "A",
+        "seed": 20250
+      },
+      {
+        "tours": 87,
+        "bloquee": false,
+        "gagnant_role": "biblio",
+        "egalite": false,
+        "perdant_tuiles_restantes": 1,
+        "conservation_erreurs": [],
+        "ecarts_optimalite": [],
+        "par_role": {
+          "notre": {
+            "tours": 43,
+            "tuiles_posees": 38,
+            "poses": 18,
+            "duree_totale": 6.469523931999902,
+            "duree_max": 0.6670443760003764,
+            "mise_contrainte": 0,
+            "tuiles_finales": 1
+          },
+          "biblio": {
+            "tours": 44,
+            "tuiles_posees": 39,
+            "poses": 19,
+            "duree_totale": 2.1887512780022007,
+            "duree_max": 0.19299812400004157,
+            "mise_contrainte": 2,
+            "tuiles_finales": 0
+          }
+        },
+        "perdant_role": "notre",
+        "donne": 38,
+        "sens": "B",
+        "seed": 20250
+      },
+      {
+        "tours": 62,
+        "bloquee": false,
+        "gagnant_role": "biblio",
+        "egalite": false,
+        "perdant_tuiles_restantes": 5,
+        "conservation_erreurs": [],
+        "ecarts_optimalite": [],
+        "par_role": {
+          "notre": {
+            "tours": 31,
+            "tuiles_posees": 31,
+            "poses": 9,
+            "duree_totale": 4.401909300001535,
+            "duree_max": 0.4167417580001711,
+            "mise_contrainte": 0,
+            "tuiles_finales": 5
+          },
+          "biblio": {
+            "tours": 31,
+            "tuiles_posees": 33,
+            "poses": 12,
+            "duree_totale": 1.7409959520018674,
+            "duree_max": 0.09776329299984354,
+            "mise_contrainte": 7,
+            "tuiles_finales": 0
+          }
+        },
+        "perdant_role": "notre",
+        "donne": 39,
+        "sens": "A",
+        "seed": 20251
+      },
+      {
+        "tours": 66,
+        "bloquee": false,
+        "gagnant_role": "notre",
+        "egalite": false,
+        "perdant_tuiles_restantes": 4,
+        "conservation_erreurs": [],
+        "ecarts_optimalite": [],
+        "par_role": {
+          "notre": {
+            "tours": 33,
+            "tuiles_posees": 33,
+            "poses": 14,
+            "duree_totale": 7.952876274998744,
+            "duree_max": 0.7786083969995161,
+            "mise_contrainte": 0,
+            "tuiles_finales": 0
+          },
+          "biblio": {
+            "tours": 33,
+            "tuiles_posees": 32,
+            "poses": 11,
+            "duree_totale": 1.877110841997819,
+            "duree_max": 0.12244623199967464,
+            "mise_contrainte": 5,
+            "tuiles_finales": 4
+          }
+        },
+        "perdant_role": "biblio",
+        "donne": 39,
+        "sens": "B",
+        "seed": 20251
+      },
+      {
+        "tours": 67,
+        "bloquee": false,
+        "gagnant_role": "notre",
+        "egalite": false,
+        "perdant_tuiles_restantes": 1,
+        "conservation_erreurs": [],
+        "ecarts_optimalite": [],
+        "par_role": {
+          "notre": {
+            "tours": 34,
+            "tuiles_posees": 35,
+            "poses": 13,
+            "duree_totale": 4.897384661003343,
+            "duree_max": 1.219549458000074,
+            "mise_contrainte": 0,
+            "tuiles_finales": 0
+          },
+          "biblio": {
+            "tours": 33,
+            "tuiles_posees": 35,
+            "poses": 11,
+            "duree_totale": 1.8922485960010818,
+            "duree_max": 0.16714909300026193,
+            "mise_contrainte": 10,
+            "tuiles_finales": 1
+          }
+        },
+        "perdant_role": "biblio",
+        "donne": 40,
+        "sens": "A",
+        "seed": 20252
+      },
+      {
+        "tours": 73,
+        "bloquee": false,
+        "gagnant_role": "biblio",
+        "egalite": false,
+        "perdant_tuiles_restantes": 1,
+        "conservation_erreurs": [],
+        "ecarts_optimalite": [],
+        "par_role": {
+          "notre": {
+            "tours": 36,
+            "tuiles_posees": 36,
+            "poses": 13,
+            "duree_totale": 5.498049097001058,
+            "duree_max": 0.9729739129998052,
+            "mise_contrainte": 0,
+            "tuiles_finales": 1
+          },
+          "biblio": {
+            "tours": 37,
+            "tuiles_posees": 36,
+            "poses": 15,
+            "duree_totale": 1.9022361710012774,
+            "duree_max": 0.17146556400075497,
+            "mise_contrainte": 9,
+            "tuiles_finales": 0
+          }
+        },
+        "perdant_role": "notre",
+        "donne": 40,
+        "sens": "B",
+        "seed": 20252
+      },
+      {
+        "tours": 47,
+        "bloquee": false,
+        "gagnant_role": "notre",
+        "egalite": false,
+        "perdant_tuiles_restantes": 4,
+        "conservation_erreurs": [],
+        "ecarts_optimalite": [],
+        "par_role": {
+          "notre": {
+            "tours": 24,
+            "tuiles_posees": 27,
+            "poses": 11,
+            "duree_totale": 1.096592833001523,
+            "duree_max": 0.1961955320002744,
+            "mise_contrainte": 0,
+            "tuiles_finales": 0
+          },
+          "biblio": {
+            "tours": 23,
+            "tuiles_posees": 26,
+            "poses": 7,
+            "duree_totale": 1.073887296999601,
+            "duree_max": 0.07048099300027388,
+            "mise_contrainte": 12,
+            "tuiles_finales": 4
+          }
+        },
+        "perdant_role": "biblio",
+        "donne": 41,
+        "sens": "A",
+        "seed": 20253
+      },
+      {
+        "tours": 56,
+        "bloquee": false,
+        "gagnant_role": "notre",
+        "egalite": false,
+        "perdant_tuiles_restantes": 2,
+        "conservation_erreurs": [],
+        "ecarts_optimalite": [],
+        "par_role": {
+          "notre": {
+            "tours": 28,
+            "tuiles_posees": 32,
+            "poses": 10,
+            "duree_totale": 2.6351405589985006,
+            "duree_max": 0.4040729050002483,
+            "mise_contrainte": 0,
+            "tuiles_finales": 0
+          },
+          "biblio": {
+            "tours": 28,
+            "tuiles_posees": 27,
+            "poses": 13,
+            "duree_totale": 0.8980025839991868,
+            "duree_max": 0.07220554200011975,
+            "mise_contrainte": 1,
+            "tuiles_finales": 2
+          }
+        },
+        "perdant_role": "biblio",
+        "donne": 41,
+        "sens": "B",
+        "seed": 20253
+      },
+      {
+        "tours": 79,
+        "bloquee": false,
+        "gagnant_role": "notre",
+        "egalite": false,
+        "perdant_tuiles_restantes": 1,
+        "conservation_erreurs": [],
+        "ecarts_optimalite": [],
+        "par_role": {
+          "notre": {
+            "tours": 40,
+            "tuiles_posees": 36,
+            "poses": 18,
+            "duree_totale": 9.258940092999183,
+            "duree_max": 1.5268870899999456,
+            "mise_contrainte": 0,
+            "tuiles_finales": 0
+          },
+          "biblio": {
+            "tours": 39,
+            "tuiles_posees": 34,
+            "poses": 18,
+            "duree_totale": 2.3793014689999836,
+            "duree_max": 0.38695380900026066,
+            "mise_contrainte": 4,
+            "tuiles_finales": 1
+          }
+        },
+        "perdant_role": "biblio",
+        "donne": 42,
+        "sens": "A",
+        "seed": 20254
+      },
+      {
+        "tours": 81,
+        "bloquee": false,
+        "gagnant_role": "biblio",
+        "egalite": false,
+        "perdant_tuiles_restantes": 1,
+        "conservation_erreurs": [],
+        "ecarts_optimalite": [],
+        "par_role": {
+          "notre": {
+            "tours": 40,
+            "tuiles_posees": 35,
+            "poses": 18,
+            "duree_totale": 11.090729183999429,
+            "duree_max": 1.4851807900004133,
+            "mise_contrainte": 0,
+            "tuiles_finales": 1
+          },
+          "biblio": {
+            "tours": 41,
+            "tuiles_posees": 37,
+            "poses": 18,
+            "duree_totale": 2.4738011530007498,
+            "duree_max": 0.2594620260006195,
+            "mise_contrainte": 1,
+            "tuiles_finales": 0
+          }
+        },
+        "perdant_role": "notre",
+        "donne": 42,
+        "sens": "B",
+        "seed": 20254
+      },
+      {
+        "tours": 42,
+        "bloquee": false,
+        "gagnant_role": "biblio",
+        "egalite": false,
+        "perdant_tuiles_restantes": 2,
+        "conservation_erreurs": [],
+        "ecarts_optimalite": [],
+        "par_role": {
+          "notre": {
+            "tours": 21,
+            "tuiles_posees": 25,
+            "poses": 8,
+            "duree_totale": 0.8059768179982711,
+            "duree_max": 0.1451429200005805,
+            "mise_contrainte": 0,
+            "tuiles_finales": 2
+          },
+          "biblio": {
+            "tours": 21,
+            "tuiles_posees": 26,
+            "poses": 9,
+            "duree_totale": 0.5555960619958569,
+            "duree_max": 0.055301157999565476,
+            "mise_contrainte": 1,
+            "tuiles_finales": 0
+          }
+        },
+        "perdant_role": "notre",
+        "donne": 43,
+        "sens": "A",
+        "seed": 20255
+      },
+      {
+        "tours": 40,
+        "bloquee": false,
+        "gagnant_role": "notre",
+        "egalite": false,
+        "perdant_tuiles_restantes": 2,
+        "conservation_erreurs": [],
+        "ecarts_optimalite": [],
+        "par_role": {
+          "notre": {
+            "tours": 20,
+            "tuiles_posees": 27,
+            "poses": 7,
+            "duree_totale": 0.8158234289976463,
+            "duree_max": 0.1798221380004179,
+            "mise_contrainte": 0,
+            "tuiles_finales": 0
+          },
+          "biblio": {
+            "tours": 20,
+            "tuiles_posees": 24,
+            "poses": 8,
+            "duree_totale": 0.6695444369988763,
+            "duree_max": 0.0712182870001925,
+            "mise_contrainte": 5,
+            "tuiles_finales": 2
+          }
+        },
+        "perdant_role": "biblio",
+        "donne": 43,
+        "sens": "B",
+        "seed": 20255
+      },
+      {
+        "tours": 61,
+        "bloquee": false,
+        "gagnant_role": "notre",
+        "egalite": false,
+        "perdant_tuiles_restantes": 3,
+        "conservation_erreurs": [],
+        "ecarts_optimalite": [],
+        "par_role": {
+          "notre": {
+            "tours": 31,
+            "tuiles_posees": 31,
+            "poses": 14,
+            "duree_totale": 2.3448976689996925,
+            "duree_max": 0.2785911360006139,
+            "mise_contrainte": 0,
+            "tuiles_finales": 0
+          },
+          "biblio": {
+            "tours": 30,
+            "tuiles_posees": 28,
+            "poses": 13,
+            "duree_totale": 0.7103369909982575,
+            "duree_max": 0.03660209000008763,
+            "mise_contrainte": 1,
+            "tuiles_finales": 3
+          }
+        },
+        "perdant_role": "biblio",
+        "donne": 44,
+        "sens": "A",
+        "seed": 20256
+      },
+      {
+        "tours": 64,
+        "bloquee": false,
+        "gagnant_role": "notre",
+        "egalite": false,
+        "perdant_tuiles_restantes": 2,
+        "conservation_erreurs": [],
+        "ecarts_optimalite": [],
+        "par_role": {
+          "notre": {
+            "tours": 32,
+            "tuiles_posees": 31,
+            "poses": 15,
+            "duree_totale": 3.0062165979970814,
+            "duree_max": 0.6082918530000825,
+            "mise_contrainte": 0,
+            "tuiles_finales": 0
+          },
+          "biblio": {
+            "tours": 32,
+            "tuiles_posees": 30,
+            "poses": 14,
+            "duree_totale": 0.9457147190014439,
+            "duree_max": 0.08019660199988721,
+            "mise_contrainte": 1,
+            "tuiles_finales": 2
+          }
+        },
+        "perdant_role": "biblio",
+        "donne": 44,
+        "sens": "B",
+        "seed": 20256
+      },
+      {
+        "tours": 63,
+        "bloquee": false,
+        "gagnant_role": "notre",
+        "egalite": false,
+        "perdant_tuiles_restantes": 1,
+        "conservation_erreurs": [],
+        "ecarts_optimalite": [],
+        "par_role": {
+          "notre": {
+            "tours": 32,
+            "tuiles_posees": 32,
+            "poses": 14,
+            "duree_totale": 2.2748117400005867,
+            "duree_max": 0.34136031000070943,
+            "mise_contrainte": 0,
+            "tuiles_finales": 0
+          },
+          "biblio": {
+            "tours": 31,
+            "tuiles_posees": 31,
+            "poses": 13,
+            "duree_totale": 0.9595562909998989,
+            "duree_max": 0.06983735700032412,
+            "mise_contrainte": 2,
+            "tuiles_finales": 1
+          }
+        },
+        "perdant_role": "biblio",
+        "donne": 45,
+        "sens": "A",
+        "seed": 20257
+      },
+      {
+        "tours": 66,
+        "bloquee": false,
+        "gagnant_role": "notre",
+        "egalite": false,
+        "perdant_tuiles_restantes": 4,
+        "conservation_erreurs": [],
+        "ecarts_optimalite": [],
+        "par_role": {
+          "notre": {
+            "tours": 33,
+            "tuiles_posees": 31,
+            "poses": 16,
+            "duree_totale": 3.542382234996694,
+            "duree_max": 0.34713244600061444,
+            "mise_contrainte": 0,
+            "tuiles_finales": 0
+          },
+          "biblio": {
+            "tours": 33,
+            "tuiles_posees": 29,
+            "poses": 14,
+            "duree_totale": 1.5712270240028374,
+            "duree_max": 0.09198586799993791,
+            "mise_contrainte": 4,
+            "tuiles_finales": 4
+          }
+        },
+        "perdant_role": "biblio",
+        "donne": 45,
+        "sens": "B",
+        "seed": 20257
+      },
+      {
+        "tours": 74,
+        "bloquee": false,
+        "gagnant_role": "biblio",
+        "egalite": false,
+        "perdant_tuiles_restantes": 2,
+        "conservation_erreurs": [],
+        "ecarts_optimalite": [],
+        "par_role": {
+          "notre": {
+            "tours": 37,
+            "tuiles_posees": 35,
+            "poses": 14,
+            "duree_totale": 0.5593692799975543,
+            "duree_max": 0.0397524229992996,
+            "mise_contrainte": 0,
+            "tuiles_finales": 2
+          },
+          "biblio": {
+            "tours": 37,
+            "tuiles_posees": 36,
+            "poses": 15,
+            "duree_totale": 0.9686876189989562,
+            "duree_max": 0.045995516999937536,
+            "mise_contrainte": 1,
+            "tuiles_finales": 0
+          }
+        },
+        "perdant_role": "notre",
+        "donne": 46,
+        "sens": "A",
+        "seed": 20258
+      },
+      {
+        "tours": 78,
+        "bloquee": false,
+        "gagnant_role": "notre",
+        "egalite": false,
+        "perdant_tuiles_restantes": 3,
+        "conservation_erreurs": [],
+        "ecarts_optimalite": [],
+        "par_role": {
+          "notre": {
+            "tours": 39,
+            "tuiles_posees": 37,
+            "poses": 16,
+            "duree_totale": 0.6226404249991901,
+            "duree_max": 0.047056860999873606,
+            "mise_contrainte": 0,
+            "tuiles_finales": 0
+          },
+          "biblio": {
+            "tours": 39,
+            "tuiles_posees": 35,
+            "poses": 15,
+            "duree_totale": 0.9875192360022993,
+            "duree_max": 0.035752030000367085,
+            "mise_contrainte": 1,
+            "tuiles_finales": 3
+          }
+        },
+        "perdant_role": "biblio",
+        "donne": 46,
+        "sens": "B",
+        "seed": 20258
+      },
+      {
+        "tours": 86,
+        "bloquee": false,
+        "gagnant_role": "biblio",
+        "egalite": false,
+        "perdant_tuiles_restantes": 1,
+        "conservation_erreurs": [],
+        "ecarts_optimalite": [],
+        "par_role": {
+          "notre": {
+            "tours": 43,
+            "tuiles_posees": 39,
+            "poses": 17,
+            "duree_totale": 18.274178081001992,
+            "duree_max": 1.5185370400004103,
+            "mise_contrainte": 0,
+            "tuiles_finales": 1
+          },
+          "biblio": {
+            "tours": 43,
+            "tuiles_posees": 39,
+            "poses": 18,
+            "duree_totale": 3.5177193659992554,
+            "duree_max": 0.3007348119999733,
+            "mise_contrainte": 1,
+            "tuiles_finales": 0
+          }
+        },
+        "perdant_role": "notre",
+        "donne": 47,
+        "sens": "A",
+        "seed": 20259
+      },
+      {
+        "tours": 86,
+        "bloquee": false,
+        "gagnant_role": "notre",
+        "egalite": false,
+        "perdant_tuiles_restantes": 2,
+        "conservation_erreurs": [],
+        "ecarts_optimalite": [],
+        "par_role": {
+          "notre": {
+            "tours": 43,
+            "tuiles_posees": 38,
+            "poses": 19,
+            "duree_totale": 10.775783686000068,
+            "duree_max": 1.5297127200001341,
+            "mise_contrainte": 0,
+            "tuiles_finales": 0
+          },
+          "biblio": {
+            "tours": 43,
+            "tuiles_posees": 39,
+            "poses": 16,
+            "duree_totale": 2.460069549000764,
+            "duree_max": 0.19810680499995215,
+            "mise_contrainte": 2,
+            "tuiles_finales": 2
+          }
+        },
+        "perdant_role": "biblio",
+        "donne": 47,
+        "sens": "B",
+        "seed": 20259
+      },
+      {
+        "tours": 47,
+        "bloquee": false,
+        "gagnant_role": "notre",
+        "egalite": false,
+        "perdant_tuiles_restantes": 3,
+        "conservation_erreurs": [],
+        "ecarts_optimalite": [],
+        "par_role": {
+          "notre": {
+            "tours": 24,
+            "tuiles_posees": 28,
+            "poses": 10,
+            "duree_totale": 1.8288522019984157,
+            "duree_max": 0.7559684300003937,
+            "mise_contrainte": 0,
+            "tuiles_finales": 0
+          },
+          "biblio": {
+            "tours": 23,
+            "tuiles_posees": 26,
+            "poses": 8,
+            "duree_totale": 1.4715871940024954,
+            "duree_max": 0.11077513100008218,
+            "mise_contrainte": 10,
+            "tuiles_finales": 3
+          }
+        },
+        "perdant_role": "biblio",
+        "donne": 48,
+        "sens": "A",
+        "seed": 20260
+      },
+      {
+        "tours": 47,
+        "bloquee": false,
+        "gagnant_role": "biblio",
+        "egalite": false,
+        "perdant_tuiles_restantes": 3,
+        "conservation_erreurs": [],
+        "ecarts_optimalite": [],
+        "par_role": {
+          "notre": {
+            "tours": 23,
+            "tuiles_posees": 26,
+            "poses": 8,
+            "duree_totale": 1.2084865720025846,
+            "duree_max": 0.3279407540003376,
+            "mise_contrainte": 0,
+            "tuiles_finales": 3
+          },
+          "biblio": {
+            "tours": 24,
+            "tuiles_posees": 28,
+            "poses": 10,
+            "duree_totale": 1.2242139670015604,
+            "duree_max": 0.09400855599960778,
+            "mise_contrainte": 1,
+            "tuiles_finales": 0
+          }
+        },
+        "perdant_role": "notre",
+        "donne": 48,
+        "sens": "B",
+        "seed": 20260
+      },
+      {
+        "tours": 41,
+        "bloquee": false,
+        "gagnant_role": "notre",
+        "egalite": false,
+        "perdant_tuiles_restantes": 2,
+        "conservation_erreurs": [],
+        "ecarts_optimalite": [],
+        "par_role": {
+          "notre": {
+            "tours": 21,
+            "tuiles_posees": 27,
+            "poses": 8,
+            "duree_totale": 0.8952312369983702,
+            "duree_max": 0.2057275839997601,
+            "mise_contrainte": 0,
+            "tuiles_finales": 0
+          },
+          "biblio": {
+            "tours": 20,
+            "tuiles_posees": 24,
+            "poses": 8,
+            "duree_totale": 0.889742400004252,
+            "duree_max": 0.10727923100057524,
+            "mise_contrainte": 4,
+            "tuiles_finales": 2
+          }
+        },
+        "perdant_role": "biblio",
+        "donne": 49,
+        "sens": "A",
+        "seed": 20261
+      },
+      {
+        "tours": 41,
+        "bloquee": false,
+        "gagnant_role": "biblio",
+        "egalite": false,
+        "perdant_tuiles_restantes": 2,
+        "conservation_erreurs": [],
+        "ecarts_optimalite": [],
+        "par_role": {
+          "notre": {
+            "tours": 20,
+            "tuiles_posees": 24,
+            "poses": 8,
+            "duree_totale": 0.9100344399994356,
+            "duree_max": 0.2792810749997443,
+            "mise_contrainte": 0,
+            "tuiles_finales": 2
+          },
+          "biblio": {
+            "tours": 21,
+            "tuiles_posees": 27,
+            "poses": 8,
+            "duree_totale": 0.7001853329984442,
+            "duree_max": 0.05516186499971809,
+            "mise_contrainte": 1,
+            "tuiles_finales": 0
+          }
+        },
+        "perdant_role": "notre",
+        "donne": 49,
+        "sens": "B",
+        "seed": 20261
+      },
+      {
+        "tours": 48,
+        "bloquee": false,
+        "gagnant_role": "biblio",
+        "egalite": false,
+        "perdant_tuiles_restantes": 3,
+        "conservation_erreurs": [],
+        "ecarts_optimalite": [],
+        "par_role": {
+          "notre": {
+            "tours": 24,
+            "tuiles_posees": 26,
+            "poses": 9,
+            "duree_totale": 1.2591452769966054,
+            "duree_max": 0.2331709989994124,
+            "mise_contrainte": 0,
+            "tuiles_finales": 3
+          },
+          "biblio": {
+            "tours": 24,
+            "tuiles_posees": 27,
+            "poses": 11,
+            "duree_totale": 1.094423988998642,
+            "duree_max": 0.0959829079993142,
+            "mise_contrainte": 4,
+            "tuiles_finales": 0
+          }
+        },
+        "perdant_role": "notre",
+        "donne": 50,
+        "sens": "A",
+        "seed": 20262
+      },
+      {
+        "tours": 52,
+        "bloquee": false,
+        "gagnant_role": "notre",
+        "egalite": false,
+        "perdant_tuiles_restantes": 1,
+        "conservation_erreurs": [],
+        "ecarts_optimalite": [],
+        "par_role": {
+          "notre": {
+            "tours": 26,
+            "tuiles_posees": 28,
+            "poses": 12,
+            "duree_totale": 2.0782693760020265,
+            "duree_max": 0.4405897090000508,
+            "mise_contrainte": 0,
+            "tuiles_finales": 0
+          },
+          "biblio": {
+            "tours": 26,
+            "tuiles_posees": 29,
+            "poses": 10,
+            "duree_totale": 1.198647855998388,
+            "duree_max": 0.09441747199980455,
+            "mise_contrainte": 6,
+            "tuiles_finales": 1
+          }
+        },
+        "perdant_role": "biblio",
+        "donne": 50,
+        "sens": "B",
+        "seed": 20262
+      },
+      {
+        "tours": 66,
+        "bloquee": false,
+        "gagnant_role": "biblio",
+        "egalite": false,
+        "perdant_tuiles_restantes": 1,
+        "conservation_erreurs": [],
+        "ecarts_optimalite": [],
+        "par_role": {
+          "notre": {
+            "tours": 33,
+            "tuiles_posees": 29,
+            "poses": 17,
+            "duree_totale": 1.1653469050015701,
+            "duree_max": 0.2597485920005056,
+            "mise_contrainte": 0,
+            "tuiles_finales": 1
+          },
+          "biblio": {
+            "tours": 33,
+            "tuiles_posees": 33,
+            "poses": 14,
+            "duree_totale": 1.4377834419974533,
+            "duree_max": 0.1647167420005644,
+            "mise_contrainte": 5,
+            "tuiles_finales": 0
+          }
+        },
+        "perdant_role": "notre",
+        "donne": 51,
+        "sens": "A",
+        "seed": 20263
+      },
+      {
+        "tours": 66,
+        "bloquee": false,
+        "gagnant_role": "notre",
+        "egalite": false,
+        "perdant_tuiles_restantes": 1,
+        "conservation_erreurs": [],
+        "ecarts_optimalite": [],
+        "par_role": {
+          "notre": {
+            "tours": 33,
+            "tuiles_posees": 33,
+            "poses": 14,
+            "duree_totale": 1.9475134730018908,
+            "duree_max": 0.5495769350000046,
+            "mise_contrainte": 0,
+            "tuiles_finales": 0
+          },
+          "biblio": {
+            "tours": 33,
+            "tuiles_posees": 29,
+            "poses": 17,
+            "duree_totale": 1.0709564619955927,
+            "duree_max": 0.06446369099921867,
+            "mise_contrainte": 1,
+            "tuiles_finales": 1
+          }
+        },
+        "perdant_role": "biblio",
+        "donne": 51,
+        "sens": "B",
+        "seed": 20263
+      },
+      {
+        "tours": 70,
+        "bloquee": false,
+        "gagnant_role": "biblio",
+        "egalite": false,
+        "perdant_tuiles_restantes": 1,
+        "conservation_erreurs": [],
+        "ecarts_optimalite": [],
+        "par_role": {
+          "notre": {
+            "tours": 35,
+            "tuiles_posees": 32,
+            "poses": 16,
+            "duree_totale": 2.8660100160013826,
+            "duree_max": 0.40122470000005706,
+            "mise_contrainte": 0,
+            "tuiles_finales": 1
+          },
+          "biblio": {
+            "tours": 35,
+            "tuiles_posees": 32,
+            "poses": 17,
+            "duree_totale": 1.1725789559986879,
+            "duree_max": 0.06911553400004777,
+            "mise_contrainte": 1,
+            "tuiles_finales": 0
+          }
+        },
+        "perdant_role": "notre",
+        "donne": 52,
+        "sens": "A",
+        "seed": 20264
+      },
+      {
+        "tours": 64,
+        "bloquee": false,
+        "gagnant_role": "notre",
+        "egalite": false,
+        "perdant_tuiles_restantes": 1,
+        "conservation_erreurs": [],
+        "ecarts_optimalite": [],
+        "par_role": {
+          "notre": {
+            "tours": 32,
+            "tuiles_posees": 32,
+            "poses": 14,
+            "duree_totale": 3.0828842990022167,
+            "duree_max": 0.5454807530004473,
+            "mise_contrainte": 0,
+            "tuiles_finales": 0
+          },
+          "biblio": {
+            "tours": 32,
+            "tuiles_posees": 32,
+            "poses": 13,
+            "duree_totale": 1.1756012219993863,
+            "duree_max": 0.0811327600004006,
+            "mise_contrainte": 1,
+            "tuiles_finales": 1
+          }
+        },
+        "perdant_role": "biblio",
+        "donne": 52,
+        "sens": "B",
+        "seed": 20264
+      },
+      {
+        "tours": 75,
+        "bloquee": false,
+        "gagnant_role": "notre",
+        "egalite": false,
+        "perdant_tuiles_restantes": 1,
+        "conservation_erreurs": [],
+        "ecarts_optimalite": [],
+        "par_role": {
+          "notre": {
+            "tours": 38,
+            "tuiles_posees": 34,
+            "poses": 18,
+            "duree_totale": 3.7382172679945143,
+            "duree_max": 0.5641084130002127,
+            "mise_contrainte": 0,
+            "tuiles_finales": 0
+          },
+          "biblio": {
+            "tours": 37,
+            "tuiles_posees": 34,
+            "poses": 16,
+            "duree_totale": 1.2824022630002219,
+            "duree_max": 0.08328392100065685,
+            "mise_contrainte": 4,
+            "tuiles_finales": 1
+          }
+        },
+        "perdant_role": "biblio",
+        "donne": 53,
+        "sens": "A",
+        "seed": 20265
+      },
+      {
+        "tours": 63,
+        "bloquee": false,
+        "gagnant_role": "biblio",
+        "egalite": false,
+        "perdant_tuiles_restantes": 5,
+        "conservation_erreurs": [],
+        "ecarts_optimalite": [],
+        "par_role": {
+          "notre": {
+            "tours": 31,
+            "tuiles_posees": 28,
+            "poses": 12,
+            "duree_totale": 3.8980412679993606,
+            "duree_max": 0.27442991999942024,
+            "mise_contrainte": 0,
+            "tuiles_finales": 5
+          },
+          "biblio": {
+            "tours": 32,
+            "tuiles_posees": 33,
+            "poses": 13,
+            "duree_totale": 1.1480393930014543,
+            "duree_max": 0.06366411599992716,
+            "mise_contrainte": 1,
+            "tuiles_finales": 0
+          }
+        },
+        "perdant_role": "notre",
+        "donne": 53,
+        "sens": "B",
+        "seed": 20265
+      },
+      {
+        "tours": 78,
+        "bloquee": false,
+        "gagnant_role": "biblio",
+        "egalite": false,
+        "perdant_tuiles_restantes": 1,
+        "conservation_erreurs": [],
+        "ecarts_optimalite": [],
+        "par_role": {
+          "notre": {
+            "tours": 39,
+            "tuiles_posees": 35,
+            "poses": 17,
+            "duree_totale": 4.683421730999726,
+            "duree_max": 0.680800623000323,
+            "mise_contrainte": 0,
+            "tuiles_finales": 1
+          },
+          "biblio": {
+            "tours": 39,
+            "tuiles_posees": 36,
+            "poses": 17,
+            "duree_totale": 1.646348152000428,
+            "duree_max": 0.10410382900045079,
+            "mise_contrainte": 1,
+            "tuiles_finales": 0
+          }
+        },
+        "perdant_role": "notre",
+        "donne": 54,
+        "sens": "A",
+        "seed": 20266
+      },
+      {
+        "tours": 70,
+        "bloquee": false,
+        "gagnant_role": "notre",
+        "egalite": false,
+        "perdant_tuiles_restantes": 3,
+        "conservation_erreurs": [],
+        "ecarts_optimalite": [],
+        "par_role": {
+          "notre": {
+            "tours": 35,
+            "tuiles_posees": 36,
+            "poses": 13,
+            "duree_totale": 7.061120872001993,
+            "duree_max": 0.9526510369996686,
+            "mise_contrainte": 0,
+            "tuiles_finales": 0
+          },
+          "biblio": {
+            "tours": 35,
+            "tuiles_posees": 32,
+            "poses": 14,
+            "duree_totale": 2.152974467002423,
+            "duree_max": 0.1628155609996611,
+            "mise_contrainte": 8,
+            "tuiles_finales": 3
+          }
+        },
+        "perdant_role": "biblio",
+        "donne": 54,
+        "sens": "B",
+        "seed": 20266
+      },
+      {
+        "tours": 55,
+        "bloquee": false,
+        "gagnant_role": "notre",
+        "egalite": false,
+        "perdant_tuiles_restantes": 1,
+        "conservation_erreurs": [],
+        "ecarts_optimalite": [],
+        "par_role": {
+          "notre": {
+            "tours": 28,
+            "tuiles_posees": 29,
+            "poses": 13,
+            "duree_totale": 1.3246424630024194,
+            "duree_max": 0.19684557799973845,
+            "mise_contrainte": 0,
+            "tuiles_finales": 0
+          },
+          "biblio": {
+            "tours": 27,
+            "tuiles_posees": 29,
+            "poses": 11,
+            "duree_totale": 1.126904101002765,
+            "duree_max": 0.09736311300002853,
+            "mise_contrainte": 4,
+            "tuiles_finales": 1
+          }
+        },
+        "perdant_role": "biblio",
+        "donne": 55,
+        "sens": "A",
+        "seed": 20267
+      },
+      {
+        "tours": 55,
+        "bloquee": false,
+        "gagnant_role": "biblio",
+        "egalite": false,
+        "perdant_tuiles_restantes": 1,
+        "conservation_erreurs": [],
+        "ecarts_optimalite": [],
+        "par_role": {
+          "notre": {
+            "tours": 27,
+            "tuiles_posees": 29,
+            "poses": 11,
+            "duree_totale": 1.072019761001684,
+            "duree_max": 0.10178457300025912,
+            "mise_contrainte": 0,
+            "tuiles_finales": 1
+          },
+          "biblio": {
+            "tours": 28,
+            "tuiles_posees": 29,
+            "poses": 13,
+            "duree_totale": 1.0647498489997815,
+            "duree_max": 0.135416088999591,
+            "mise_contrainte": 2,
+            "tuiles_finales": 0
+          }
+        },
+        "perdant_role": "notre",
+        "donne": 55,
+        "sens": "B",
+        "seed": 20267
+      },
+      {
+        "tours": 80,
+        "bloquee": false,
+        "gagnant_role": "biblio",
+        "egalite": false,
+        "perdant_tuiles_restantes": 2,
+        "conservation_erreurs": [],
+        "ecarts_optimalite": [],
+        "par_role": {
+          "notre": {
+            "tours": 40,
+            "tuiles_posees": 35,
+            "poses": 17,
+            "duree_totale": 9.186704964005912,
+            "duree_max": 1.1497687860000951,
+            "mise_contrainte": 0,
+            "tuiles_finales": 2
+          },
+          "biblio": {
+            "tours": 40,
+            "tuiles_posees": 35,
+            "poses": 19,
+            "duree_totale": 2.05865806300244,
+            "duree_max": 0.10001956499945663,
+            "mise_contrainte": 1,
+            "tuiles_finales": 0
+          }
+        },
+        "perdant_role": "notre",
+        "donne": 56,
+        "sens": "A",
+        "seed": 20268
+      },
+      {
+        "tours": 78,
+        "bloquee": false,
+        "gagnant_role": "notre",
+        "egalite": false,
+        "perdant_tuiles_restantes": 2,
+        "conservation_erreurs": [],
+        "ecarts_optimalite": [],
+        "par_role": {
+          "notre": {
+            "tours": 39,
+            "tuiles_posees": 35,
+            "poses": 18,
+            "duree_totale": 8.10855663300299,
+            "duree_max": 0.6073089210003673,
+            "mise_contrainte": 0,
+            "tuiles_finales": 0
+          },
+          "biblio": {
+            "tours": 39,
+            "tuiles_posees": 35,
+            "poses": 16,
+            "duree_totale": 2.5954744010005015,
+            "duree_max": 0.14590127600058622,
+            "mise_contrainte": 5,
+            "tuiles_finales": 2
+          }
+        },
+        "perdant_role": "biblio",
+        "donne": 56,
+        "sens": "B",
+        "seed": 20268
+      },
+      {
+        "tours": 51,
+        "bloquee": false,
+        "gagnant_role": "notre",
+        "egalite": false,
+        "perdant_tuiles_restantes": 2,
+        "conservation_erreurs": [],
+        "ecarts_optimalite": [],
+        "par_role": {
+          "notre": {
+            "tours": 26,
+            "tuiles_posees": 31,
+            "poses": 9,
+            "duree_totale": 3.9909856070007663,
+            "duree_max": 0.561607487999936,
+            "mise_contrainte": 0,
+            "tuiles_finales": 0
+          },
+          "biblio": {
+            "tours": 25,
+            "tuiles_posees": 29,
+            "poses": 8,
+            "duree_totale": 0.9825974660025167,
+            "duree_max": 0.14722812800027896,
+            "mise_contrainte": 1,
+            "tuiles_finales": 2
+          }
+        },
+        "perdant_role": "biblio",
+        "donne": 57,
+        "sens": "A",
+        "seed": 20269
+      },
+      {
+        "tours": 28,
+        "bloquee": false,
+        "gagnant_role": "notre",
+        "egalite": false,
+        "perdant_tuiles_restantes": 4,
+        "conservation_erreurs": [],
+        "ecarts_optimalite": [],
+        "par_role": {
+          "notre": {
+            "tours": 14,
+            "tuiles_posees": 23,
+            "poses": 5,
+            "duree_totale": 0.42789438299769245,
+            "duree_max": 0.18177584200020647,
+            "mise_contrainte": 0,
+            "tuiles_finales": 0
+          },
+          "biblio": {
+            "tours": 14,
+            "tuiles_posees": 21,
+            "poses": 3,
+            "duree_totale": 0.7999573950000922,
+            "duree_max": 0.07353013000010833,
+            "mise_contrainte": 11,
+            "tuiles_finales": 4
+          }
+        },
+        "perdant_role": "biblio",
+        "donne": 57,
+        "sens": "B",
+        "seed": 20269
+      },
+      {
+        "tours": 67,
+        "bloquee": false,
+        "gagnant_role": "notre",
+        "egalite": false,
+        "perdant_tuiles_restantes": 3,
+        "conservation_erreurs": [],
+        "ecarts_optimalite": [],
+        "par_role": {
+          "notre": {
+            "tours": 34,
+            "tuiles_posees": 34,
+            "poses": 14,
+            "duree_totale": 2.670714820000285,
+            "duree_max": 0.27012329699937254,
+            "mise_contrainte": 0,
+            "tuiles_finales": 0
+          },
+          "biblio": {
+            "tours": 33,
+            "tuiles_posees": 31,
+            "poses": 13,
+            "duree_totale": 0.9489767490031227,
+            "duree_max": 0.062156977000086044,
+            "mise_contrainte": 1,
+            "tuiles_finales": 3
+          }
+        },
+        "perdant_role": "biblio",
+        "donne": 58,
+        "sens": "A",
+        "seed": 20270
+      },
+      {
+        "tours": 67,
+        "bloquee": false,
+        "gagnant_role": "biblio",
+        "egalite": false,
+        "perdant_tuiles_restantes": 3,
+        "conservation_erreurs": [],
+        "ecarts_optimalite": [],
+        "par_role": {
+          "notre": {
+            "tours": 33,
+            "tuiles_posees": 31,
+            "poses": 13,
+            "duree_totale": 2.327186827003061,
+            "duree_max": 0.2906570039995131,
+            "mise_contrainte": 0,
+            "tuiles_finales": 3
+          },
+          "biblio": {
+            "tours": 34,
+            "tuiles_posees": 34,
+            "poses": 14,
+            "duree_totale": 1.148308112999075,
+            "duree_max": 0.05956843499916431,
+            "mise_contrainte": 1,
+            "tuiles_finales": 0
+          }
+        },
+        "perdant_role": "notre",
+        "donne": 58,
+        "sens": "B",
+        "seed": 20270
+      },
+      {
+        "tours": 47,
+        "bloquee": false,
+        "gagnant_role": "notre",
+        "egalite": false,
+        "perdant_tuiles_restantes": 3,
+        "conservation_erreurs": [],
+        "ecarts_optimalite": [],
+        "par_role": {
+          "notre": {
+            "tours": 24,
+            "tuiles_posees": 28,
+            "poses": 10,
+            "duree_totale": 1.2357612069972674,
+            "duree_max": 0.12357457599955524,
+            "mise_contrainte": 0,
+            "tuiles_finales": 0
+          },
+          "biblio": {
+            "tours": 23,
+            "tuiles_posees": 25,
+            "poses": 9,
+            "duree_totale": 0.5595567659993321,
+            "duree_max": 0.03734044199973141,
+            "mise_contrainte": 1,
+            "tuiles_finales": 3
+          }
+        },
+        "perdant_role": "biblio",
+        "donne": 59,
+        "sens": "A",
+        "seed": 20271
+      },
+      {
+        "tours": 45,
+        "bloquee": false,
+        "gagnant_role": "biblio",
+        "egalite": false,
+        "perdant_tuiles_restantes": 5,
+        "conservation_erreurs": [],
+        "ecarts_optimalite": [],
+        "par_role": {
+          "notre": {
+            "tours": 22,
+            "tuiles_posees": 23,
+            "poses": 8,
+            "duree_totale": 1.2397204899953067,
+            "duree_max": 0.13466305900055886,
+            "mise_contrainte": 0,
+            "tuiles_finales": 5
+          },
+          "biblio": {
+            "tours": 23,
+            "tuiles_posees": 28,
+            "poses": 9,
+            "duree_totale": 0.5866273589990669,
+            "duree_max": 0.05245907500011526,
+            "mise_contrainte": 1,
+            "tuiles_finales": 0
+          }
+        },
+        "perdant_role": "notre",
+        "donne": 59,
+        "sens": "B",
+        "seed": 20271
+      },
+      {
+        "tours": 48,
+        "bloquee": false,
+        "gagnant_role": "biblio",
+        "egalite": false,
+        "perdant_tuiles_restantes": 7,
+        "conservation_erreurs": [],
+        "ecarts_optimalite": [],
+        "par_role": {
+          "notre": {
+            "tours": 24,
+            "tuiles_posees": 22,
+            "poses": 9,
+            "duree_totale": 0.6450095120007973,
+            "duree_max": 0.12193876699984685,
+            "mise_contrainte": 0,
+            "tuiles_finales": 7
+          },
+          "biblio": {
+            "tours": 24,
+            "tuiles_posees": 30,
+            "poses": 8,
+            "duree_totale": 1.1433316100010416,
+            "duree_max": 0.06939609499931976,
+            "mise_contrainte": 13,
+            "tuiles_finales": 0
+          }
+        },
+        "perdant_role": "notre",
+        "donne": 60,
+        "sens": "A",
+        "seed": 20272
+      },
+      {
+        "tours": 66,
+        "bloquee": false,
+        "gagnant_role": "notre",
+        "egalite": false,
+        "perdant_tuiles_restantes": 3,
+        "conservation_erreurs": [],
+        "ecarts_optimalite": [],
+        "par_role": {
+          "notre": {
+            "tours": 33,
+            "tuiles_posees": 35,
+            "poses": 12,
+            "duree_totale": 1.2584932979980294,
+            "duree_max": 0.10250892100066267,
+            "mise_contrainte": 0,
+            "tuiles_finales": 0
+          },
+          "biblio": {
+            "tours": 33,
+            "tuiles_posees": 28,
+            "poses": 16,
+            "duree_totale": 0.8358502860019144,
+            "duree_max": 0.03923169400059123,
+            "mise_contrainte": 1,
+            "tuiles_finales": 3
+          }
+        },
+        "perdant_role": "biblio",
+        "donne": 60,
+        "sens": "B",
+        "seed": 20272
+      },
+      {
+        "tours": 67,
+        "bloquee": false,
+        "gagnant_role": "notre",
+        "egalite": false,
+        "perdant_tuiles_restantes": 4,
+        "conservation_erreurs": [],
+        "ecarts_optimalite": [],
+        "par_role": {
+          "notre": {
+            "tours": 34,
+            "tuiles_posees": 33,
+            "poses": 15,
+            "duree_totale": 0.4994426349967398,
+            "duree_max": 0.05424211500030651,
+            "mise_contrainte": 0,
+            "tuiles_finales": 0
+          },
+          "biblio": {
+            "tours": 33,
+            "tuiles_posees": 29,
+            "poses": 14,
+            "duree_totale": 1.2048169129957387,
+            "duree_max": 0.10763263599983475,
+            "mise_contrainte": 6,
+            "tuiles_finales": 4
+          }
+        },
+        "perdant_role": "biblio",
+        "donne": 61,
+        "sens": "A",
+        "seed": 20273
+      },
+      {
+        "tours": 67,
+        "bloquee": false,
+        "gagnant_role": "biblio",
+        "egalite": false,
+        "perdant_tuiles_restantes": 4,
+        "conservation_erreurs": [],
+        "ecarts_optimalite": [],
+        "par_role": {
+          "notre": {
+            "tours": 33,
+            "tuiles_posees": 29,
+            "poses": 14,
+            "duree_totale": 0.47934815299595357,
+            "duree_max": 0.04854239799988136,
+            "mise_contrainte": 0,
+            "tuiles_finales": 4
+          },
+          "biblio": {
+            "tours": 34,
+            "tuiles_posees": 33,
+            "poses": 15,
+            "duree_totale": 0.895762046998243,
+            "duree_max": 0.03680070900009014,
+            "mise_contrainte": 1,
+            "tuiles_finales": 0
+          }
+        },
+        "perdant_role": "notre",
+        "donne": 61,
+        "sens": "B",
+        "seed": 20273
+      },
+      {
+        "tours": 72,
+        "bloquee": false,
+        "gagnant_role": "biblio",
+        "egalite": false,
+        "perdant_tuiles_restantes": 4,
+        "conservation_erreurs": [],
+        "ecarts_optimalite": [],
+        "par_role": {
+          "notre": {
+            "tours": 36,
+            "tuiles_posees": 34,
+            "poses": 12,
+            "duree_totale": 4.863968583001224,
+            "duree_max": 0.3432276339999589,
+            "mise_contrainte": 0,
+            "tuiles_finales": 4
+          },
+          "biblio": {
+            "tours": 36,
+            "tuiles_posees": 34,
+            "poses": 16,
+            "duree_totale": 1.18351065099705,
+            "duree_max": 0.06836727399968368,
+            "mise_contrainte": 1,
+            "tuiles_finales": 0
+          }
+        },
+        "perdant_role": "notre",
+        "donne": 62,
+        "sens": "A",
+        "seed": 20274
+      },
+      {
+        "tours": 70,
+        "bloquee": false,
+        "gagnant_role": "notre",
+        "egalite": false,
+        "perdant_tuiles_restantes": 6,
+        "conservation_erreurs": [],
+        "ecarts_optimalite": [],
+        "par_role": {
+          "notre": {
+            "tours": 35,
+            "tuiles_posees": 34,
+            "poses": 15,
+            "duree_totale": 3.0788825119998364,
+            "duree_max": 0.2557726969998839,
+            "mise_contrainte": 0,
+            "tuiles_finales": 0
+          },
+          "biblio": {
+            "tours": 35,
+            "tuiles_posees": 31,
+            "poses": 12,
+            "duree_totale": 1.789708246002192,
+            "duree_max": 0.0887709000007817,
+            "mise_contrainte": 8,
+            "tuiles_finales": 6
+          }
+        },
+        "perdant_role": "biblio",
+        "donne": 62,
+        "sens": "B",
+        "seed": 20274
+      },
+      {
+        "tours": 46,
+        "bloquee": false,
+        "gagnant_role": "biblio",
+        "egalite": false,
+        "perdant_tuiles_restantes": 6,
+        "conservation_erreurs": [],
+        "ecarts_optimalite": [],
+        "par_role": {
+          "notre": {
+            "tours": 23,
+            "tuiles_posees": 22,
+            "poses": 9,
+            "duree_totale": 1.9356368339958863,
+            "duree_max": 0.20208781299970724,
+            "mise_contrainte": 0,
+            "tuiles_finales": 6
+          },
+          "biblio": {
+            "tours": 23,
+            "tuiles_posees": 28,
+            "poses": 9,
+            "duree_totale": 0.9342521520002265,
+            "duree_max": 0.07272645800003374,
+            "mise_contrainte": 1,
+            "tuiles_finales": 0
+          }
+        },
+        "perdant_role": "notre",
+        "donne": 63,
+        "sens": "A",
+        "seed": 20275
+      },
+      {
+        "tours": 46,
+        "bloquee": false,
+        "gagnant_role": "notre",
+        "egalite": false,
+        "perdant_tuiles_restantes": 6,
+        "conservation_erreurs": [],
+        "ecarts_optimalite": [],
+        "par_role": {
+          "notre": {
+            "tours": 23,
+            "tuiles_posees": 28,
+            "poses": 9,
+            "duree_totale": 2.3235832140007915,
+            "duree_max": 0.3339972439998746,
+            "mise_contrainte": 0,
+            "tuiles_finales": 0
+          },
+          "biblio": {
+            "tours": 23,
+            "tuiles_posees": 22,
+            "poses": 9,
+            "duree_totale": 1.0117501560016535,
+            "duree_max": 0.09262677799961239,
+            "mise_contrainte": 1,
+            "tuiles_finales": 6
+          }
+        },
+        "perdant_role": "biblio",
+        "donne": 63,
+        "sens": "B",
+        "seed": 20275
+      },
+      {
+        "tours": 43,
+        "bloquee": false,
+        "gagnant_role": "notre",
+        "egalite": false,
+        "perdant_tuiles_restantes": 5,
+        "conservation_erreurs": [],
+        "ecarts_optimalite": [],
+        "par_role": {
+          "notre": {
+            "tours": 22,
+            "tuiles_posees": 24,
+            "poses": 12,
+            "duree_totale": 2.279308146999938,
+            "duree_max": 0.26322888899994723,
+            "mise_contrainte": 0,
+            "tuiles_finales": 0
+          },
+          "biblio": {
+            "tours": 21,
+            "tuiles_posees": 22,
+            "poses": 8,
+            "duree_totale": 1.0531040500000017,
+            "duree_max": 0.09969370999988314,
+            "mise_contrainte": 1,
+            "tuiles_finales": 5
+          }
+        },
+        "perdant_role": "biblio",
+        "donne": 64,
+        "sens": "A",
+        "seed": 20276
+      },
+      {
+        "tours": 34,
+        "bloquee": false,
+        "gagnant_role": "notre",
+        "egalite": false,
+        "perdant_tuiles_restantes": 8,
+        "conservation_erreurs": [],
+        "ecarts_optimalite": [],
+        "par_role": {
+          "notre": {
+            "tours": 17,
+            "tuiles_posees": 22,
+            "poses": 9,
+            "duree_totale": 1.1691559790006067,
+            "duree_max": 0.11407024299933255,
+            "mise_contrainte": 0,
+            "tuiles_finales": 0
+          },
+          "biblio": {
+            "tours": 17,
+            "tuiles_posees": 16,
+            "poses": 7,
+            "duree_totale": 0.582491364996713,
+            "duree_max": 0.04782476099990163,
+            "mise_contrainte": 1,
+            "tuiles_finales": 8
+          }
+        },
+        "perdant_role": "biblio",
+        "donne": 64,
+        "sens": "B",
+        "seed": 20276
+      },
+      {
+        "tours": 69,
+        "bloquee": false,
+        "gagnant_role": "notre",
+        "egalite": false,
+        "perdant_tuiles_restantes": 2,
+        "conservation_erreurs": [],
+        "ecarts_optimalite": [],
+        "par_role": {
+          "notre": {
+            "tours": 35,
+            "tuiles_posees": 35,
+            "poses": 14,
+            "duree_totale": 4.436798001999705,
+            "duree_max": 1.4507881120007369,
+            "mise_contrainte": 0,
+            "tuiles_finales": 0
+          },
+          "biblio": {
+            "tours": 34,
+            "tuiles_posees": 31,
+            "poses": 15,
+            "duree_totale": 1.046771874004662,
+            "duree_max": 0.08271050500025012,
+            "mise_contrainte": 1,
+            "tuiles_finales": 2
+          }
+        },
+        "perdant_role": "biblio",
+        "donne": 65,
+        "sens": "A",
+        "seed": 20277
+      },
+      {
+        "tours": 65,
+        "bloquee": false,
+        "gagnant_role": "biblio",
+        "egalite": false,
+        "perdant_tuiles_restantes": 2,
+        "conservation_erreurs": [],
+        "ecarts_optimalite": [],
+        "par_role": {
+          "notre": {
+            "tours": 32,
+            "tuiles_posees": 30,
+            "poses": 14,
+            "duree_totale": 2.1355165479999414,
+            "duree_max": 0.40162674199928006,
+            "mise_contrainte": 0,
+            "tuiles_finales": 2
+          },
+          "biblio": {
+            "tours": 33,
+            "tuiles_posees": 34,
+            "poses": 13,
+            "duree_totale": 1.566750585000591,
+            "duree_max": 0.11020522799935861,
+            "mise_contrainte": 9,
+            "tuiles_finales": 0
+          }
+        },
+        "perdant_role": "notre",
+        "donne": 65,
+        "sens": "B",
+        "seed": 20277
+      },
+      {
+        "tours": 102,
+        "bloquee": false,
+        "gagnant_role": "biblio",
+        "egalite": false,
+        "perdant_tuiles_restantes": 4,
+        "conservation_erreurs": [],
+        "ecarts_optimalite": [],
+        "par_role": {
+          "notre": {
+            "tours": 51,
+            "tuiles_posees": 39,
+            "poses": 22,
+            "duree_totale": 1.2633739000002606,
+            "duree_max": 0.07118613999955414,
+            "mise_contrainte": 0,
+            "tuiles_finales": 4
+          },
+          "biblio": {
+            "tours": 51,
+            "tuiles_posees": 41,
+            "poses": 24,
+            "duree_totale": 1.3343435819970182,
+            "duree_max": 0.08834334299990587,
+            "mise_contrainte": 1,
+            "tuiles_finales": 0
+          }
+        },
+        "perdant_role": "notre",
+        "donne": 66,
+        "sens": "A",
+        "seed": 20278
+      },
+      {
+        "tours": 91,
+        "bloquee": false,
+        "gagnant_role": "biblio",
+        "egalite": false,
+        "perdant_tuiles_restantes": 3,
+        "conservation_erreurs": [],
+        "ecarts_optimalite": [],
+        "par_role": {
+          "notre": {
+            "tours": 45,
+            "tuiles_posees": 36,
+            "poses": 20,
+            "duree_totale": 1.1077852770040408,
+            "duree_max": 0.06576821900034702,
+            "mise_contrainte": 0,
+            "tuiles_finales": 3
+          },
+          "biblio": {
+            "tours": 46,
+            "tuiles_posees": 39,
+            "poses": 21,
+            "duree_totale": 1.1821791379979913,
+            "duree_max": 0.0407630120007525,
+            "mise_contrainte": 1,
+            "tuiles_finales": 0
+          }
+        },
+        "perdant_role": "notre",
+        "donne": 66,
+        "sens": "B",
+        "seed": 20278
+      },
+      {
+        "tours": 84,
+        "bloquee": false,
+        "gagnant_role": "biblio",
+        "egalite": false,
+        "perdant_tuiles_restantes": 1,
+        "conservation_erreurs": [],
+        "ecarts_optimalite": [],
+        "par_role": {
+          "notre": {
+            "tours": 42,
+            "tuiles_posees": 37,
+            "poses": 18,
+            "duree_totale": 4.4306426799985275,
+            "duree_max": 0.548677781999686,
+            "mise_contrainte": 0,
+            "tuiles_finales": 1
+          },
+          "biblio": {
+            "tours": 42,
+            "tuiles_posees": 38,
+            "poses": 18,
+            "duree_totale": 1.5624717920018156,
+            "duree_max": 0.0898919310002384,
+            "mise_contrainte": 4,
+            "tuiles_finales": 0
+          }
+        },
+        "perdant_role": "notre",
+        "donne": 67,
+        "sens": "A",
+        "seed": 20279
+      },
+      {
+        "tours": 82,
+        "bloquee": false,
+        "gagnant_role": "notre",
+        "egalite": false,
+        "perdant_tuiles_restantes": 2,
+        "conservation_erreurs": [],
+        "ecarts_optimalite": [],
+        "par_role": {
+          "notre": {
+            "tours": 41,
+            "tuiles_posees": 37,
+            "poses": 18,
+            "duree_totale": 3.8085771559981367,
+            "duree_max": 0.535754917000304,
+            "mise_contrainte": 0,
+            "tuiles_finales": 0
+          },
+          "biblio": {
+            "tours": 41,
+            "tuiles_posees": 35,
+            "poses": 18,
+            "duree_totale": 1.2457508950001284,
+            "duree_max": 0.06698519499968825,
+            "mise_contrainte": 2,
+            "tuiles_finales": 2
+          }
+        },
+        "perdant_role": "biblio",
+        "donne": 67,
+        "sens": "B",
+        "seed": 20279
+      },
+      {
+        "tours": 60,
+        "bloquee": false,
+        "gagnant_role": "biblio",
+        "egalite": false,
+        "perdant_tuiles_restantes": 1,
+        "conservation_erreurs": [],
+        "ecarts_optimalite": [],
+        "par_role": {
+          "notre": {
+            "tours": 30,
+            "tuiles_posees": 34,
+            "poses": 9,
+            "duree_totale": 2.2262855880035204,
+            "duree_max": 0.2509362630007672,
+            "mise_contrainte": 0,
+            "tuiles_finales": 1
+          },
+          "biblio": {
+            "tours": 30,
+            "tuiles_posees": 31,
+            "poses": 13,
+            "duree_totale": 1.0188063000005059,
+            "duree_max": 0.06953069700011838,
+            "mise_contrainte": 1,
+            "tuiles_finales": 0
+          }
+        },
+        "perdant_role": "notre",
+        "donne": 68,
+        "sens": "A",
+        "seed": 20280
+      },
+      {
+        "tours": 60,
+        "bloquee": false,
+        "gagnant_role": "notre",
+        "egalite": false,
+        "perdant_tuiles_restantes": 1,
+        "conservation_erreurs": [],
+        "ecarts_optimalite": [],
+        "par_role": {
+          "notre": {
+            "tours": 30,
+            "tuiles_posees": 31,
+            "poses": 13,
+            "duree_totale": 3.052608602001783,
+            "duree_max": 0.3601621970001361,
+            "mise_contrainte": 0,
+            "tuiles_finales": 0
+          },
+          "biblio": {
+            "tours": 30,
+            "tuiles_posees": 34,
+            "poses": 9,
+            "duree_totale": 1.6662118050016943,
+            "duree_max": 0.09563043599973753,
+            "mise_contrainte": 10,
+            "tuiles_finales": 1
+          }
+        },
+        "perdant_role": "biblio",
+        "donne": 68,
+        "sens": "B",
+        "seed": 20280
+      },
+      {
+        "tours": 64,
+        "bloquee": false,
+        "gagnant_role": "biblio",
+        "egalite": false,
+        "perdant_tuiles_restantes": 3,
+        "conservation_erreurs": [],
+        "ecarts_optimalite": [],
+        "par_role": {
+          "notre": {
+            "tours": 32,
+            "tuiles_posees": 30,
+            "poses": 13,
+            "duree_totale": 0.9812812259997372,
+            "duree_max": 0.3722673579995899,
+            "mise_contrainte": 0,
+            "tuiles_finales": 3
+          },
+          "biblio": {
+            "tours": 32,
+            "tuiles_posees": 32,
+            "poses": 14,
+            "duree_totale": 0.9852453000021342,
+            "duree_max": 0.05621202899965283,
+            "mise_contrainte": 1,
+            "tuiles_finales": 0
+          }
+        },
+        "perdant_role": "notre",
+        "donne": 69,
+        "sens": "A",
+        "seed": 20281
+      },
+      {
+        "tours": 67,
+        "bloquee": false,
+        "gagnant_role": "biblio",
+        "egalite": false,
+        "perdant_tuiles_restantes": 1,
+        "conservation_erreurs": [],
+        "ecarts_optimalite": [],
+        "par_role": {
+          "notre": {
+            "tours": 33,
+            "tuiles_posees": 33,
+            "poses": 13,
+            "duree_totale": 2.538986487001239,
+            "duree_max": 0.5345223820004321,
+            "mise_contrainte": 0,
+            "tuiles_finales": 1
+          },
+          "biblio": {
+            "tours": 34,
+            "tuiles_posees": 34,
+            "poses": 14,
+            "duree_totale": 1.386958647004576,
+            "duree_max": 0.09210228200026904,
+            "mise_contrainte": 5,
+            "tuiles_finales": 0
+          }
+        },
+        "perdant_role": "notre",
+        "donne": 69,
+        "sens": "B",
+        "seed": 20281
+      },
+      {
+        "tours": 47,
+        "bloquee": false,
+        "gagnant_role": "notre",
+        "egalite": false,
+        "perdant_tuiles_restantes": 3,
+        "conservation_erreurs": [],
+        "ecarts_optimalite": [],
+        "par_role": {
+          "notre": {
+            "tours": 24,
+            "tuiles_posees": 27,
+            "poses": 11,
+            "duree_totale": 1.807294936001199,
+            "duree_max": 0.2398049550001815,
+            "mise_contrainte": 0,
+            "tuiles_finales": 0
+          },
+          "biblio": {
+            "tours": 23,
+            "tuiles_posees": 25,
+            "poses": 9,
+            "duree_totale": 0.7652416270029789,
+            "duree_max": 0.06386983999982476,
+            "mise_contrainte": 1,
+            "tuiles_finales": 3
+          }
+        },
+        "perdant_role": "biblio",
+        "donne": 70,
+        "sens": "A",
+        "seed": 20282
+      },
+      {
+        "tours": 60,
+        "bloquee": false,
+        "gagnant_role": "notre",
+        "egalite": false,
+        "perdant_tuiles_restantes": 2,
+        "conservation_erreurs": [],
+        "ecarts_optimalite": [],
+        "par_role": {
+          "notre": {
+            "tours": 30,
+            "tuiles_posees": 30,
+            "poses": 14,
+            "duree_totale": 4.685990571002549,
+            "duree_max": 0.9315820429992527,
+            "mise_contrainte": 0,
+            "tuiles_finales": 0
+          },
+          "biblio": {
+            "tours": 30,
+            "tuiles_posees": 30,
+            "poses": 12,
+            "duree_totale": 1.2926933929975348,
+            "duree_max": 0.14233079599944176,
+            "mise_contrainte": 1,
+            "tuiles_finales": 2
+          }
+        },
+        "perdant_role": "biblio",
+        "donne": 70,
+        "sens": "B",
+        "seed": 20282
+      },
+      {
+        "tours": 78,
+        "bloquee": false,
+        "gagnant_role": "biblio",
+        "egalite": false,
+        "perdant_tuiles_restantes": 3,
+        "conservation_erreurs": [],
+        "ecarts_optimalite": [],
+        "par_role": {
+          "notre": {
+            "tours": 39,
+            "tuiles_posees": 34,
+            "poses": 16,
+            "duree_totale": 1.8920461829993656,
+            "duree_max": 0.3220678260004206,
+            "mise_contrainte": 0,
+            "tuiles_finales": 3
+          },
+          "biblio": {
+            "tours": 39,
+            "tuiles_posees": 35,
+            "poses": 18,
+            "duree_totale": 1.3437672270001713,
+            "duree_max": 0.05065451399968879,
+            "mise_contrainte": 1,
+            "tuiles_finales": 0
+          }
+        },
+        "perdant_role": "notre",
+        "donne": 71,
+        "sens": "A",
+        "seed": 20283
+      },
+      {
+        "tours": 78,
+        "bloquee": false,
+        "gagnant_role": "notre",
+        "egalite": false,
+        "perdant_tuiles_restantes": 3,
+        "conservation_erreurs": [],
+        "ecarts_optimalite": [],
+        "par_role": {
+          "notre": {
+            "tours": 39,
+            "tuiles_posees": 35,
+            "poses": 18,
+            "duree_totale": 1.6607656739997765,
+            "duree_max": 0.11268121899956896,
+            "mise_contrainte": 0,
+            "tuiles_finales": 0
+          },
+          "biblio": {
+            "tours": 39,
+            "tuiles_posees": 34,
+            "poses": 16,
+            "duree_totale": 1.3738109659998372,
+            "duree_max": 0.06115338700055872,
+            "mise_contrainte": 1,
+            "tuiles_finales": 3
+          }
+        },
+        "perdant_role": "biblio",
+        "donne": 71,
+        "sens": "B",
+        "seed": 20283
+      },
+      {
+        "tours": 65,
+        "bloquee": false,
+        "gagnant_role": "notre",
+        "egalite": false,
+        "perdant_tuiles_restantes": 1,
+        "conservation_erreurs": [],
+        "ecarts_optimalite": [],
+        "par_role": {
+          "notre": {
+            "tours": 33,
+            "tuiles_posees": 31,
+            "poses": 16,
+            "duree_totale": 1.4888847830015948,
+            "duree_max": 0.14478288800000882,
+            "mise_contrainte": 0,
+            "tuiles_finales": 0
+          },
+          "biblio": {
+            "tours": 32,
+            "tuiles_posees": 32,
+            "poses": 13,
+            "duree_totale": 1.1501757459991495,
+            "duree_max": 0.08430775299984816,
+            "mise_contrainte": 5,
+            "tuiles_finales": 1
+          }
+        },
+        "perdant_role": "biblio",
+        "donne": 72,
+        "sens": "A",
+        "seed": 20284
+      },
+      {
+        "tours": 65,
+        "bloquee": false,
+        "gagnant_role": "biblio",
+        "egalite": false,
+        "perdant_tuiles_restantes": 1,
+        "conservation_erreurs": [],
+        "ecarts_optimalite": [],
+        "par_role": {
+          "notre": {
+            "tours": 32,
+            "tuiles_posees": 32,
+            "poses": 13,
+            "duree_totale": 1.1660096660007184,
+            "duree_max": 0.07728928200049268,
+            "mise_contrainte": 0,
+            "tuiles_finales": 1
+          },
+          "biblio": {
+            "tours": 33,
+            "tuiles_posees": 31,
+            "poses": 16,
+            "duree_totale": 0.9443746509996345,
+            "duree_max": 0.048701295000682876,
+            "mise_contrainte": 1,
+            "tuiles_finales": 0
+          }
+        },
+        "perdant_role": "notre",
+        "donne": 72,
+        "sens": "B",
+        "seed": 20284
+      },
+      {
+        "tours": 64,
+        "bloquee": false,
+        "gagnant_role": "biblio",
+        "egalite": false,
+        "perdant_tuiles_restantes": 2,
+        "conservation_erreurs": [],
+        "ecarts_optimalite": [],
+        "par_role": {
+          "notre": {
+            "tours": 32,
+            "tuiles_posees": 31,
+            "poses": 13,
+            "duree_totale": 0.7909066240026732,
+            "duree_max": 0.4764388120001968,
+            "mise_contrainte": 0,
+            "tuiles_finales": 2
+          },
+          "biblio": {
+            "tours": 32,
+            "tuiles_posees": 32,
+            "poses": 14,
+            "duree_totale": 1.113062664003337,
+            "duree_max": 0.08300884500022221,
+            "mise_contrainte": 6,
+            "tuiles_finales": 0
+          }
+        },
+        "perdant_role": "notre",
+        "donne": 73,
+        "sens": "A",
+        "seed": 20285
+      },
+      {
+        "tours": 81,
+        "bloquee": false,
+        "gagnant_role": "biblio",
+        "egalite": false,
+        "perdant_tuiles_restantes": 1,
+        "conservation_erreurs": [],
+        "ecarts_optimalite": [],
+        "par_role": {
+          "notre": {
+            "tours": 40,
+            "tuiles_posees": 35,
+            "poses": 18,
+            "duree_totale": 3.6410252719997516,
+            "duree_max": 0.5779134849999537,
+            "mise_contrainte": 0,
+            "tuiles_finales": 1
+          },
+          "biblio": {
+            "tours": 41,
+            "tuiles_posees": 37,
+            "poses": 18,
+            "duree_totale": 1.3899751770004514,
+            "duree_max": 0.07717468200007715,
+            "mise_contrainte": 3,
+            "tuiles_finales": 0
+          }
+        },
+        "perdant_role": "notre",
+        "donne": 73,
+        "sens": "B",
+        "seed": 20285
+      },
+      {
+        "tours": 54,
+        "bloquee": false,
+        "gagnant_role": "biblio",
+        "egalite": false,
+        "perdant_tuiles_restantes": 2,
+        "conservation_erreurs": [],
+        "ecarts_optimalite": [],
+        "par_role": {
+          "notre": {
+            "tours": 27,
+            "tuiles_posees": 26,
+            "poses": 13,
+            "duree_totale": 2.1446095480014264,
+            "duree_max": 0.22623834000023635,
+            "mise_contrainte": 0,
+            "tuiles_finales": 2
+          },
+          "biblio": {
+            "tours": 27,
+            "tuiles_posees": 30,
+            "poses": 11,
+            "duree_totale": 1.091865077998591,
+            "duree_max": 0.0800612410002941,
+            "mise_contrainte": 3,
+            "tuiles_finales": 0
+          }
+        },
+        "perdant_role": "notre",
+        "donne": 74,
+        "sens": "A",
+        "seed": 20286
+      },
+      {
+        "tours": 57,
+        "bloquee": false,
+        "gagnant_role": "biblio",
+        "egalite": false,
+        "perdant_tuiles_restantes": 3,
+        "conservation_erreurs": [],
+        "ecarts_optimalite": [],
+        "par_role": {
+          "notre": {
+            "tours": 28,
+            "tuiles_posees": 28,
+            "poses": 11,
+            "duree_totale": 1.8386105580011645,
+            "duree_max": 0.2088784380002835,
+            "mise_contrainte": 0,
+            "tuiles_finales": 3
+          },
+          "biblio": {
+            "tours": 29,
+            "tuiles_posees": 29,
+            "poses": 14,
+            "duree_totale": 0.825854007001908,
+            "duree_max": 0.06155143700016197,
+            "mise_contrainte": 1,
+            "tuiles_finales": 0
+          }
+        },
+        "perdant_role": "notre",
+        "donne": 74,
+        "sens": "B",
+        "seed": 20286
+      },
+      {
+        "tours": 75,
+        "bloquee": false,
+        "gagnant_role": "notre",
+        "egalite": false,
+        "perdant_tuiles_restantes": 6,
+        "conservation_erreurs": [],
+        "ecarts_optimalite": [],
+        "par_role": {
+          "notre": {
+            "tours": 38,
+            "tuiles_posees": 37,
+            "poses": 15,
+            "duree_totale": 5.062479547001203,
+            "duree_max": 0.7142135340000095,
+            "mise_contrainte": 0,
+            "tuiles_finales": 0
+          },
+          "biblio": {
+            "tours": 37,
+            "tuiles_posees": 32,
+            "poses": 13,
+            "duree_totale": 1.4833723140000075,
+            "duree_max": 0.10794910499953403,
+            "mise_contrainte": 2,
+            "tuiles_finales": 6
+          }
+        },
+        "perdant_role": "biblio",
+        "donne": 75,
+        "sens": "A",
+        "seed": 20287
+      },
+      {
+        "tours": 92,
+        "bloquee": false,
+        "gagnant_role": "notre",
+        "egalite": false,
+        "perdant_tuiles_restantes": 1,
+        "conservation_erreurs": [],
+        "ecarts_optimalite": [],
+        "par_role": {
+          "notre": {
+            "tours": 46,
+            "tuiles_posees": 41,
+            "poses": 19,
+            "duree_totale": 16.52928004399473,
+            "duree_max": 1.5622515049999492,
+            "mise_contrainte": 0,
+            "tuiles_finales": 0
+          },
+          "biblio": {
+            "tours": 46,
+            "tuiles_posees": 41,
+            "poses": 18,
+            "duree_totale": 3.602256129000125,
+            "duree_max": 0.2781093610001335,
+            "mise_contrainte": 9,
+            "tuiles_finales": 1
+          }
+        },
+        "perdant_role": "biblio",
+        "donne": 75,
+        "sens": "B",
+        "seed": 20287
+      },
+      {
+        "tours": 55,
+        "bloquee": false,
+        "gagnant_role": "notre",
+        "egalite": false,
+        "perdant_tuiles_restantes": 1,
+        "conservation_erreurs": [],
+        "ecarts_optimalite": [],
+        "par_role": {
+          "notre": {
+            "tours": 28,
+            "tuiles_posees": 31,
+            "poses": 11,
+            "duree_totale": 4.889989018997767,
+            "duree_max": 0.6126824169996326,
+            "mise_contrainte": 0,
+            "tuiles_finales": 0
+          },
+          "biblio": {
+            "tours": 27,
+            "tuiles_posees": 28,
+            "poses": 12,
+            "duree_totale": 1.2752286380036821,
+            "duree_max": 0.0919979959999182,
+            "mise_contrainte": 1,
+            "tuiles_finales": 1
+          }
+        },
+        "perdant_role": "biblio",
+        "donne": 76,
+        "sens": "A",
+        "seed": 20288
+      },
+      {
+        "tours": 44,
+        "bloquee": false,
+        "gagnant_role": "notre",
+        "egalite": false,
+        "perdant_tuiles_restantes": 2,
+        "conservation_erreurs": [],
+        "ecarts_optimalite": [],
+        "par_role": {
+          "notre": {
+            "tours": 22,
+            "tuiles_posees": 26,
+            "poses": 10,
+            "duree_totale": 2.1540592430037577,
+            "duree_max": 0.3644316979998621,
+            "mise_contrainte": 0,
+            "tuiles_finales": 0
+          },
+          "biblio": {
+            "tours": 22,
+            "tuiles_posees": 25,
+            "poses": 9,
+            "duree_totale": 0.9441180410012748,
+            "duree_max": 0.10798074200010888,
+            "mise_contrainte": 2,
+            "tuiles_finales": 2
+          }
+        },
+        "perdant_role": "biblio",
+        "donne": 76,
+        "sens": "B",
+        "seed": 20288
+      },
+      {
+        "tours": 46,
+        "bloquee": false,
+        "gagnant_role": "biblio",
+        "egalite": false,
+        "perdant_tuiles_restantes": 5,
+        "conservation_erreurs": [],
+        "ecarts_optimalite": [],
+        "par_role": {
+          "notre": {
+            "tours": 23,
+            "tuiles_posees": 24,
+            "poses": 8,
+            "duree_totale": 0.7379420209981618,
+            "duree_max": 0.09808036899994477,
+            "mise_contrainte": 0,
+            "tuiles_finales": 5
+          },
+          "biblio": {
+            "tours": 23,
+            "tuiles_posees": 27,
+            "poses": 10,
+            "duree_totale": 1.1365465909975683,
+            "duree_max": 0.09375523299968336,
+            "mise_contrainte": 8,
+            "tuiles_finales": 0
+          }
+        },
+        "perdant_role": "notre",
+        "donne": 77,
+        "sens": "A",
+        "seed": 20289
+      },
+      {
+        "tours": 53,
+        "bloquee": false,
+        "gagnant_role": "biblio",
+        "egalite": false,
+        "perdant_tuiles_restantes": 2,
+        "conservation_erreurs": [],
+        "ecarts_optimalite": [],
+        "par_role": {
+          "notre": {
+            "tours": 26,
+            "tuiles_posees": 28,
+            "poses": 10,
+            "duree_totale": 0.9848628589988948,
+            "duree_max": 0.14348013200014975,
+            "mise_contrainte": 0,
+            "tuiles_finales": 2
+          },
+          "biblio": {
+            "tours": 27,
+            "tuiles_posees": 30,
+            "poses": 11,
+            "duree_totale": 0.9309553159991992,
+            "duree_max": 0.09809692599992559,
+            "mise_contrainte": 3,
+            "tuiles_finales": 0
+          }
+        },
+        "perdant_role": "notre",
+        "donne": 77,
+        "sens": "B",
+        "seed": 20289
+      },
+      {
+        "tours": 75,
+        "bloquee": false,
+        "gagnant_role": "notre",
+        "egalite": false,
+        "perdant_tuiles_restantes": 2,
+        "conservation_erreurs": [],
+        "ecarts_optimalite": [],
+        "par_role": {
+          "notre": {
+            "tours": 38,
+            "tuiles_posees": 36,
+            "poses": 16,
+            "duree_totale": 5.329839260996778,
+            "duree_max": 0.6414142169996921,
+            "mise_contrainte": 0,
+            "tuiles_finales": 0
+          },
+          "biblio": {
+            "tours": 37,
+            "tuiles_posees": 33,
+            "poses": 16,
+            "duree_totale": 2.0440819919995192,
+            "duree_max": 0.09684482000011485,
+            "mise_contrainte": 6,
+            "tuiles_finales": 2
+          }
+        },
+        "perdant_role": "biblio",
+        "donne": 78,
+        "sens": "A",
+        "seed": 20290
+      },
+      {
+        "tours": 73,
+        "bloquee": false,
+        "gagnant_role": "biblio",
+        "egalite": false,
+        "perdant_tuiles_restantes": 1,
+        "conservation_erreurs": [],
+        "ecarts_optimalite": [],
+        "par_role": {
+          "notre": {
+            "tours": 36,
+            "tuiles_posees": 33,
+            "poses": 16,
+            "duree_totale": 5.2084353359978195,
+            "duree_max": 0.6782575010001892,
+            "mise_contrainte": 0,
+            "tuiles_finales": 1
+          },
+          "biblio": {
+            "tours": 37,
+            "tuiles_posees": 35,
+            "poses": 16,
+            "duree_totale": 1.6550971700007722,
+            "duree_max": 0.09019596800044383,
+            "mise_contrainte": 1,
+            "tuiles_finales": 0
+          }
+        },
+        "perdant_role": "notre",
+        "donne": 78,
+        "sens": "B",
+        "seed": 20290
+      },
+      {
+        "tours": 45,
+        "bloquee": false,
+        "gagnant_role": "notre",
+        "egalite": false,
+        "perdant_tuiles_restantes": 2,
+        "conservation_erreurs": [],
+        "ecarts_optimalite": [],
+        "par_role": {
+          "notre": {
+            "tours": 23,
+            "tuiles_posees": 26,
+            "poses": 11,
+            "duree_totale": 1.1239818079984616,
+            "duree_max": 0.3222213250001005,
+            "mise_contrainte": 0,
+            "tuiles_finales": 0
+          },
+          "biblio": {
+            "tours": 22,
+            "tuiles_posees": 26,
+            "poses": 8,
+            "duree_totale": 0.7049289349988612,
+            "duree_max": 0.07696067300003051,
+            "mise_contrainte": 1,
+            "tuiles_finales": 2
+          }
+        },
+        "perdant_role": "biblio",
+        "donne": 79,
+        "sens": "A",
+        "seed": 20291
+      },
+      {
+        "tours": 50,
+        "bloquee": false,
+        "gagnant_role": "notre",
+        "egalite": false,
+        "perdant_tuiles_restantes": 2,
+        "conservation_erreurs": [],
+        "ecarts_optimalite": [],
+        "par_role": {
+          "notre": {
+            "tours": 25,
+            "tuiles_posees": 28,
+            "poses": 11,
+            "duree_totale": 1.4566140580000138,
+            "duree_max": 0.41067310600010387,
+            "mise_contrainte": 0,
+            "tuiles_finales": 0
+          },
+          "biblio": {
+            "tours": 25,
+            "tuiles_posees": 27,
+            "poses": 10,
+            "duree_totale": 1.0672098040013225,
+            "duree_max": 0.09755145899998752,
+            "mise_contrainte": 4,
+            "tuiles_finales": 2
+          }
+        },
+        "perdant_role": "biblio",
+        "donne": 79,
+        "sens": "B",
+        "seed": 20291
+      },
+      {
+        "tours": 89,
+        "bloquee": false,
+        "gagnant_role": "notre",
+        "egalite": false,
+        "perdant_tuiles_restantes": 1,
+        "conservation_erreurs": [],
+        "ecarts_optimalite": [],
+        "par_role": {
+          "notre": {
+            "tours": 45,
+            "tuiles_posees": 40,
+            "poses": 19,
+            "duree_totale": 1.1625304870003674,
+            "duree_max": 0.061751156999889645,
+            "mise_contrainte": 0,
+            "tuiles_finales": 0
+          },
+          "biblio": {
+            "tours": 44,
+            "tuiles_posees": 36,
+            "poses": 21,
+            "duree_totale": 1.2682548159982616,
+            "duree_max": 0.08861764899938862,
+            "mise_contrainte": 2,
+            "tuiles_finales": 1
+          }
+        },
+        "perdant_role": "biblio",
+        "donne": 80,
+        "sens": "A",
+        "seed": 20292
+      },
+      {
+        "tours": 90,
+        "bloquee": false,
+        "gagnant_role": "notre",
+        "egalite": false,
+        "perdant_tuiles_restantes": 2,
+        "conservation_erreurs": [],
+        "ecarts_optimalite": [],
+        "par_role": {
+          "notre": {
+            "tours": 45,
+            "tuiles_posees": 39,
+            "poses": 20,
+            "duree_totale": 1.0318556520005586,
+            "duree_max": 0.05328904599991802,
+            "mise_contrainte": 0,
+            "tuiles_finales": 0
+          },
+          "biblio": {
+            "tours": 45,
+            "tuiles_posees": 36,
+            "poses": 21,
+            "duree_totale": 1.2114016270061256,
+            "duree_max": 0.070095799000228,
+            "mise_contrainte": 2,
+            "tuiles_finales": 2
+          }
+        },
+        "perdant_role": "biblio",
+        "donne": 80,
+        "sens": "B",
+        "seed": 20292
+      },
+      {
+        "tours": 54,
+        "bloquee": false,
+        "gagnant_role": "biblio",
+        "egalite": false,
+        "perdant_tuiles_restantes": 2,
+        "conservation_erreurs": [],
+        "ecarts_optimalite": [],
+        "par_role": {
+          "notre": {
+            "tours": 27,
+            "tuiles_posees": 27,
+            "poses": 12,
+            "duree_totale": 2.946777785001359,
+            "duree_max": 0.3359268130006967,
+            "mise_contrainte": 0,
+            "tuiles_finales": 2
+          },
+          "biblio": {
+            "tours": 27,
+            "tuiles_posees": 30,
+            "poses": 11,
+            "duree_totale": 1.3558379670021168,
+            "duree_max": 0.13869199199962168,
+            "mise_contrainte": 6,
+            "tuiles_finales": 0
+          }
+        },
+        "perdant_role": "notre",
+        "donne": 81,
+        "sens": "A",
+        "seed": 20293
+      },
+      {
+        "tours": 58,
+        "bloquee": false,
+        "gagnant_role": "notre",
+        "egalite": false,
+        "perdant_tuiles_restantes": 1,
+        "conservation_erreurs": [],
+        "ecarts_optimalite": [],
+        "par_role": {
+          "notre": {
+            "tours": 29,
+            "tuiles_posees": 31,
+            "poses": 12,
+            "duree_totale": 4.027221381002164,
+            "duree_max": 0.6058629909994124,
+            "mise_contrainte": 0,
+            "tuiles_finales": 0
+          },
+          "biblio": {
+            "tours": 29,
+            "tuiles_posees": 28,
+            "poses": 14,
+            "duree_totale": 1.2212050829994041,
+            "duree_max": 0.15700780299994221,
+            "mise_contrainte": 1,
+            "tuiles_finales": 1
+          }
+        },
+        "perdant_role": "biblio",
+        "donne": 81,
+        "sens": "B",
+        "seed": 20293
+      }
+    ],
+    "donnes_demandees": 100,
+    "donnes_jouees": 83,
+    "parties_jouees": 164,
+    "interrompu": true,
+    "duree_s": 2107.71734786,
+    "seed_base": 20212,
+    "max_tours": 400,
+    "budget_temps": 1.5
+  },
+  "agregat": {
+    "parties_jouees": 164,
+    "victoires": {
+      "notre": 89,
+      "biblio": 75
+    },
+    "decisives": 164,
+    "egalites": 0,
+    "bloquees": 0,
+    "taux_victoire": {
+      "notre": {
+        "victoires": 89,
+        "parties": 164,
+        "taux": 0.5426829268292683,
+        "ic95_bas": 0.46633286241134086,
+        "ic95_haut": 0.61707918666383
+      },
+      "biblio": {
+        "victoires": 75,
+        "parties": 164,
+        "taux": 0.4573170731707317,
+        "ic95_bas": 0.38292081333617,
+        "ic95_haut": 0.5336671375886591
+      }
+    },
+    "tours_par_partie_moyen": 64.9329268292683,
+    "indicateurs": {
+      "notre": {
+        "tuiles_posees_par_tour": 0.9776651651651652,
+        "tuiles_posees_par_pose": 2.3337813620071683,
+        "duree_moyenne_coup": 0.09278220377927485,
+        "duree_max_coup": 1.5622515049999492,
+        "tuiles_restantes_quand_perd": 2.44,
+        "parties_perdues": 75,
+        "mise_contrainte": 0
+      },
+      "biblio": {
+        "tuiles_posees_par_tour": 0.9751926329637286,
+        "tuiles_posees_par_pose": 2.3479638009049775,
+        "duree_moyenne_coup": 0.038904273391290205,
+        "duree_max_coup": 0.38695380900026066,
+        "tuiles_restantes_quand_perd": 2.449438202247191,
+        "parties_perdues": 89,
+        "mise_contrainte": 529
+      }
+    },
+    "ecarts_optimalite": [
+      {
+        "tour": 64,
+        "siege_actif": 1,
+        "role_actif": "notre",
+        "nb_notre": 1,
+        "nb_biblio": 0,
+        "donne": 20,
+        "sens": "B"
+      }
+    ],
+    "conservation_erreurs": [],
+    "coups_refuses": []
+  }
+}

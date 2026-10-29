@@ -2120,3 +2120,71 @@ en **§8ter**. Conséquences pour cette section :
 - Le juge d'analyse des coups ratés (§11) peut désormais utiliser soit la
   bibliothèque (dev), soit le modèle maison exact du jeu — tous deux
   renvoient l'optimum.
+
+## 15. Match « notre solveur » vs bibliothèque sur parties entières (issue #212, suite de #206)
+
+Nos deux solveurs exacts posent le **même nombre** de tuiles à chaque tour
+(#204), mais **départagent** différemment à nombre égal : le nôtre préfère la
+**perturbation minimale** du plateau (#199) puis **économise les jokers** ; la
+bibliothèque applique ses propres règles. L'issue #212 répond à la question
+*« ces choix de départage nous désavantagent-ils sur une partie entière ? »* en
+faisant jouer des parties entières, l'une pilotée par notre solveur, l'autre par
+la bibliothèque.
+
+**Portée — à ne pas sur-interpréter.** Les deux solveurs n'optimisent qu'UN
+tour. Ce match ne mesure donc PAS les stratégies sur plusieurs tours (réserve,
+joker gardé, rétention — §13), ni la force d'un humain : seulement si, à jeu
+« un tour » égal, nos critères de départage tiennent la route.
+
+### Outil (dev-only, hors jeu livré)
+
+- **`scripts/match_solveurs.py`** — joue des parties à deux joueurs en
+  **miroir** (mêmes donnes, places échangées : la graine est réappliquée avant
+  chaque `creer_partie`, donc chaque solveur joue une fois chaque main et une
+  fois chaque position — avantage de la main et de l'ouverture neutralisés).
+  - **« Joueur bibliothèque »** (`decider_bibliotheque`) bâti sur l'adaptateur
+    `scripts/solveur_exact.py` (#204) : renvoie un coup complet (tuiles posées +
+    nouveau plateau) remis dans l'ordre et validé par `valider_combinaison`,
+    conservation du plateau contrôlée. **Mise initiale** : la bibliothèque
+    réarrange table + main au second temps (interdit avant la mise) ; on la
+    **contraint à n'utiliser que la main** (résolution sur plateau vide puis
+    recollage du plateau intact), cas compté à part (`mise_contrainte`).
+  - **« Notre solveur »** = niveau **Expert livré** (`jouer_niveau_expert`).
+  - **Contrôles à chaque coup** : conservation des **106 tuiles**, et comparaison
+    du nombre maximal de tuiles posables des deux solveurs sur le même état (tout
+    écart = écart d'optimalité à investiguer, ne devrait jamais arriver).
+  - **Limite de temps ferme** (`--limite-temps`), arrêt propre entre deux
+    parties, **résultats partiels** écrits en continu (rapport `.txt` + `.json`).
+  - **Indicateurs** : taux de victoire + **IC 95 % (Wilson)**, tuiles restantes
+    en main du perdant (serrage), tuiles posées/tour, tours/partie, parties
+    bloquées, temps moyen/max par coup. Lancement :
+
+    ```
+    .venv-solveur-exact/bin/python scripts/match_solveurs.py \
+        --donnes 100 --limite-temps 4000 --sortie resultats_match_212.txt
+    ```
+
+- **`tests/test_match_solveurs.py`** — tests du script, sautés proprement si la
+  bibliothèque est absente (`pytest.importorskip`) ; le petit match complet est
+  marqué `lent`.
+
+### Résultat de la campagne
+
+Campagne du 2026-10-29 (graine 20212, budget Expert 1,5 s), arrêtée à la limite
+ferme de 2100 s : **83 donnes = 164 parties**.
+
+- **Notre solveur (Expert)** : 89/164 = **54,3 %**, IC 95 % **[46,6 ; 61,7] %**.
+- **Bibliothèque** : 75/164 = **45,7 %**, IC 95 % **[38,3 ; 53,4] %**.
+- Égalités 0, parties bloquées 0. Tours/partie moyen 64,9. Tuiles restantes du
+  perdant : 2,44 (notre) vs 2,45 (biblio). Tuiles posées/tour : 0,978 vs 0,975.
+  Temps/coup moyen : 0,093 s (notre) vs 0,039 s (biblio). Conservation : 0 erreur.
+
+**Conclusion.** Les IC 95 % **se chevauchent** → **aucun avantage démontré** au
+jeu « un tour » : nos critères de départage (perturbation minimale #199, économie
+de jokers) **ne nous désavantagent pas de façon mesurable**. Le progrès est à
+chercher dans le jeu sur plusieurs tours (§13). 1 écart d'optimalité signalé sur
+~10 000 états (donne 20B, tour 64), **non reproductible en rejeu propre
+monothread déterministe** → artefact temporel du solveur maison borné en temps
+sous charge concurrente, pas un défaut structurel (égalité exacte vérifiée #204).
+*Résultats complets : `resultats_match_212.txt` / `.json`.*
+

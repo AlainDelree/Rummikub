@@ -1,0 +1,55 @@
+========================================================================
+MATCH — notre solveur d'Expert  vs  bibliothèque rummikub-solver
+(issue #212, suite de #206)
+========================================================================
+
+Donnes demandées   : 100
+Donnes jouées      : 83 (164 parties, miroir places échangées)
+  (!) Limite de temps atteinte : résultats PARTIELS exploités.
+Durée totale       : 2107.7 s
+Graine de base     : 20212   max_tours=400   budget Expert=1.5 s
+
+------------------------------------------------------------------------
+TAUX DE VICTOIRE (IC 95 %, Wilson ; dénominateur = parties jouées)
+------------------------------------------------------------------------
+  Notre solveur (Expert)     :   89 / 164  =  54.3 %  [46.6 % ; 61.7 %]
+  Bibliothèque               :   75 / 164  =  45.7 %  [38.3 % ; 53.4 %]
+  Égalités                   : 0
+  Parties bloquées           : 0
+
+------------------------------------------------------------------------
+INDICATEURS DE MARGE ET DE JEU
+------------------------------------------------------------------------
+  Tours par partie (moyen)   : 64.9
+  • Notre solveur (Expert)
+      tuiles restantes en main quand il PERD (moy.) : 2.44 (sur 75 défaites)
+      tuiles posées par tour (moy.)                 : 0.978
+      temps par coup — moyen / max                  : 0.0928 s / 1.5623 s
+  • Bibliothèque
+      tuiles restantes en main quand il PERD (moy.) : 2.45 (sur 89 défaites)
+      tuiles posées par tour (moy.)                 : 0.975
+      temps par coup — moyen / max                  : 0.0389 s / 0.3870 s
+      coups « main seule » avant la mise (biblio)   : 529
+
+------------------------------------------------------------------------
+CONTRÔLES
+------------------------------------------------------------------------
+  Écarts d'optimalité (nb posables différent même état) : 1
+   (!) À INVESTIGUER — ne devrait jamais arriver :
+     donne 20B tour 64 (actif=notre) : notre=1 biblio=0
+  Erreurs de conservation des 106 tuiles                : 0
+  Coups refusés par le moteur (repli pioche)            : 0
+
+------------------------------------------------------------------------
+INTERPRÉTATION
+------------------------------------------------------------------------
+  Les intervalles de confiance à 95 % des deux taux de victoire se CHEVAUCHENT : à ce stade, aucun solveur n'a d'avantage démontré au jeu « un tour ».
+  Conséquence : nos critères de départage (simplicité, économie de jokers) ne nous désavantagent pas de façon mesurable ; le progrès est à chercher dans le jeu sur plusieurs tours (CONTEXTE.md §13).
+  ATTENTION : 1 écart(s) d'optimalité détecté(s) (les deux solveurs ne posent pas le même nombre de tuiles sur un même état) — à investiguer, cela fausserait le match.
+
+PORTÉE — à ne pas sur-interpréter : les deux solveurs n'optimisent
+qu'UN tour. Ce match ne mesure PAS les stratégies sur plusieurs tours
+(réserve, joker gardé, rétention — CONTEXTE.md §13), ni la force d'un
+humain : seulement si, à jeu « un tour » égal, nos critères de
+départage (simplicité #199, économie de jokers) tiennent la route.
+========================================================================
