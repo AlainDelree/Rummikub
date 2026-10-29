@@ -33,6 +33,7 @@
   --niveau-intermediaire: #a07820;
   --niveau-avance:        #7a5a10;
   --niveau-expert:        #4a3008;
+  --niveau-champion:      #241603;
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -199,6 +200,7 @@ body {
 .btn-niveau[data-niveau="Intermédiaire"] { background: var(--niveau-intermediaire); color: #fff; }
 .btn-niveau[data-niveau="Avancé"]        { background: var(--niveau-avance);        color: #fff; }
 .btn-niveau[data-niveau="Expert"]        { background: var(--niveau-expert);        color: #fff; }
+.btn-niveau[data-niveau="Champion du Monde"] { background: var(--niveau-champion); color: #fff; }
 .btn-niveau.actif { border-color: #fff; box-shadow: 0 0 0 2px rgba(0,0,0,0.3); }
 
 /* --- Bouton vert principal --- */

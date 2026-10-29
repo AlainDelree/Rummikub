@@ -30,12 +30,13 @@ from rummikub.moteur.partie import (
     _points_tuiles_posees,
 )
 from rummikub.moteur.solveur import (
-    resoudre_coup, BudgetDepasse, PREFERER_SIMPLICITE,
+    resoudre_coup, BudgetDepasse, PREFERER_SIMPLICITE, mesurer_perturbation,
 )
 from rummikub.moteur.solveur_exact import (
     resoudre_exact, SolveurExactIndisponible, BudgetExactDepasse,
 )
 from rummikub.moteur import evaluation_main
+from rummikub.moteur import niveaux as _niveaux
 
 
 # --------------------------------------------------------------------------- #
@@ -873,11 +874,14 @@ def _coup_exact(etat, idx, budget_temps, preferer_simple, eval_config=None):
 SOLVEUR_EXACT = "exact"          # modèle exact HiGHS (#206)
 SOLVEUR_RECHERCHE = "recherche"  # recherche arborescente de repli (solveur.py)
 SOLVEUR_AVANCE = "avance"        # Avancé en dernier repli
+# Affaiblissement des niveaux bridés (issue #213) :
+SOLVEUR_SANS_REARR = "sans-rearrangement"  # coup sans toucher au plateau (pert. max nulle)
 
 LIBELLES_SOLVEUR = {
     SOLVEUR_EXACT: "modèle exact",
     SOLVEUR_RECHERCHE: "recherche de repli",
     SOLVEUR_AVANCE: "Avancé en repli",
+    SOLVEUR_SANS_REARR: "sans réarrangement (bridé)",
 }
 
 
@@ -951,17 +955,131 @@ def jouer_niveau_expert(etat, idx, budget_temps=None, on_repli=None,
     return _marquer_solveur(jouer_niveau_avance(etat, idx), SOLVEUR_AVANCE)
 
 
-NIVEAUX_IA = {
-    "Débutant": jouer_niveau_debutant,
-    "Facile": jouer_niveau_facile,
-    "Intermédiaire": jouer_niveau_intermediaire,
-    "Avancé": jouer_niveau_avance,
-    "Expert": jouer_niveau_expert,
-}
+# --------------------------------------------------------------------------- #
+# Échelle des six niveaux : un SEUL moteur exact, réglé par des paramètres
+# (issue #213). Voir moteur/niveaux.py pour les paramètres (le seul endroit à
+# régler) et la structure cible de l'échelle.
+# --------------------------------------------------------------------------- #
+
+# Fonctions HEURISTIQUES historiques conservées (jouer_niveau_debutant/facile/
+# intermediaire/avance) : elles ne portent plus l'échelle (c'est le moteur exact
+# bridé qui le fait), mais restent le REPLI naturel quand highspy/numpy manquent
+# (via jouer_niveau_expert) et le support des tests de tactiques de joker. Ne
+# plus s'y référer pour juger de la force d'un NIVEAU : voir jouer_niveau_bride.
+
+
+def _rng_oubli(etat, idx):
+    """RNG du tirage d'oubli (issue #213). Déterministe — donc simulations
+    reproductibles — dès que ``config.graine_ia`` est fixée : la graine combine
+    (graine, manche, tour, joueur) pour être indépendante de l'ordre d'appel.
+    Sans graine (jeu normal), tirage non reproductible."""
+    graine = etat.get("config", {}).get("graine_ia")
+    if graine is None:
+        return random.Random()
+    seed = int(graine) & 0xFFFFFFFF
+    for v in (etat.get("manche_numero", 1), etat.get("tour_numero", 0), idx):
+        seed = (seed * 1_000_003 + int(v)) & 0xFFFFFFFFFFFF
+    return random.Random(seed)
+
+
+def _coup_sans_rearrangement(etat, idx):
+    """Meilleur coup qui ne DÉPLACE aucune tuile du plateau : pose depuis la
+    main et prolonge les combinaisons existantes, sans jamais recomposer le
+    plateau (perturbation garantie nulle, mesure #199). C'est exactement la
+    portée d'un joueur à ``perturbation_max=0``."""
+    coup = _coup_maximal(etat, idx, ordre_points=True)
+    return _marquer_solveur(coup, SOLVEUR_SANS_REARR)
+
+
+def _coup_selon_perturbation(etat, idx, perturbation_max, budget_temps, on_repli):
+    """Meilleur coup « vu » compte tenu de la perturbation autorisée.
+
+    ``perturbation_max is None`` → solveur complet (Avancé/Expert/Champion).
+    ``perturbation_max == 0`` → coup sans réarrangement (jamais de déplacement).
+    ``perturbation_max > 0`` → coup complet s'il ne déplace pas plus de
+    ``perturbation_max`` tuiles du plateau, sinon on retombe sur le coup sans
+    réarrangement (le joueur ne « voit » pas une recomposition plus ample)."""
+    if perturbation_max is None:
+        return jouer_niveau_expert(etat, idx, budget_temps=budget_temps,
+                                   on_repli=on_repli)
+
+    sans_rearr = _coup_sans_rearrangement(etat, idx)
+    if perturbation_max <= 0:
+        return sans_rearr
+
+    complet = jouer_niveau_expert(etat, idx, budget_temps=budget_temps,
+                                  on_repli=on_repli)
+    if not (isinstance(complet, dict) and complet.get("action") == "jouer"):
+        return sans_rearr if sans_rearr is not None else complet
+    deplacees, _combos = mesurer_perturbation(etat.get("plateau", []),
+                                              complet["nouveau_plateau"])
+    if deplacees <= perturbation_max:
+        return complet
+    return sans_rearr if sans_rearr is not None else _piocher_ou_passer(etat)
+
+
+def jouer_niveau_bride(etat, idx, nom_niveau, budget_temps=None, rng=None,
+                       on_repli=None):
+    """Joue le tour du niveau ``nom_niveau`` avec le moteur exact RÉGLÉ par les
+    paramètres de ``moteur/niveaux.py`` (issue #213).
+
+    1. calcule le meilleur coup que le niveau « voit » (borné par
+       ``perturbation_max``) ;
+    2. un coup qui VIDE la main gagne la partie : renvoyé tel quel, jamais
+       oublié ni dégradé (§13) ;
+    3. sinon, avec la probabilité ``taux_oubli`` (réduite si la main est petite,
+       voir ``niveaux.taux_oubli_effectif``), le joueur « oublie » le coup et
+       pioche à la place (tour raté). Tirage reproductible sous ``graine_ia``.
+
+    Le mécanisme ayant décidé le coup est annoté sur l'action (clé ``solveur``,
+    journalisée) : le repli silencieux quand highspy/numpy manquent reste donc
+    traçable (``recherche``/``avance`` au lieu de ``exact``)."""
+    bridage = _niveaux.bridage_pour(nom_niveau)
+    if rng is None:
+        rng = _rng_oubli(etat, idx)
+    taille_main = len(etat["joueurs"][idx]["chevalet"])
+
+    coup = _coup_selon_perturbation(
+        etat, idx, bridage.perturbation_max, budget_temps, on_repli)
+
+    if not (isinstance(coup, dict) and coup.get("action") == "jouer"):
+        # Aucun coup posable : pioche/passe (déjà décidé par le moteur).
+        return coup if isinstance(coup, dict) else _piocher_ou_passer(etat)
+
+    # Un coup qui vide la main gagne : jamais oublié (§13).
+    vide_la_main = (taille_main - len(coup.get("ids_tuiles") or [])) <= 0
+    if vide_la_main:
+        return coup
+
+    p = _niveaux.taux_oubli_effectif(bridage.taux_oubli, taille_main)
+    if p > 0 and rng.random() < p:
+        repli = _piocher_ou_passer(etat)
+        # On conserve la trace du mécanisme + marque explicite d'oubli.
+        repli["solveur"] = coup.get("solveur")
+        repli["oubli"] = True
+        return repli
+    return coup
+
+
+def _fabriquer_niveau(nom_niveau):
+    """Fabrique la fonction de niveau (signature ``(etat, idx)``) branchée sur
+    le moteur bridé pour ``nom_niveau``."""
+    def _jouer(etat, idx):
+        return jouer_niveau_bride(etat, idx, nom_niveau)
+    _jouer.__name__ = "jouer_niveau_bride_" + nom_niveau.replace(" ", "_")
+    return _jouer
+
+
+# NIVEAUX_IA : les six niveaux (issue #213), tous branchés sur le moteur exact
+# bridé. Clés = libellés de ``config.NIVEAUX`` (« Champion du Monde » inclus).
+NIVEAUX_IA = {nom: _fabriquer_niveau(nom) for nom in _niveaux.ECHELLE}
 
 
 def jouer_ia(etat, joueur_index):
-    """Point d'entrée : délègue au niveau du joueur (défaut : débutant)."""
+    """Point d'entrée : joue le tour selon le niveau du joueur (défaut : le
+    niveau le plus faible). Tous les niveaux passent par le même moteur exact
+    réglé par ``moteur/niveaux.py`` (issue #213)."""
     niveau = etat["joueurs"][joueur_index].get("niveau")
-    fn = NIVEAUX_IA.get(niveau, jouer_niveau_debutant)
-    return fn(etat, joueur_index)
+    if niveau not in NIVEAUX_IA:
+        niveau = _niveaux.ECHELLE[0]
+    return jouer_niveau_bride(etat, joueur_index, niveau)

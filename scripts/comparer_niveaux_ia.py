@@ -245,14 +245,18 @@ def _jouer_une_manche(etat: dict, max_tours: int, temps_par_niveau: dict,
 def jouer_match(config_joueurs: list[dict], nb_manches: int, max_tours: int,
                 temps_par_niveau: dict, replis_expert: list,
                 preferer_simple: bool, perturbations_expert: list,
-                eval_configs: list = None) -> dict:
+                eval_configs: list = None, graine_ia=None) -> dict:
     """Joue un MATCH complet à 2 joueurs de ``nb_manches`` manches (issue
     #203). Les manches s'enchaînent via ``nouvelle_manche`` (score cumulé
     conservé, nouvelle donne et mise initiale remise à zéro à chaque manche).
     Si une manche est arrêtée par le garde-fou ``max_tours``, le match entier
     est marqué comme arrêté (``arretee_garde_fou``) et abandonné.
     """
-    etat = creer_partie(config_joueurs, {"nb_manches": nb_manches})
+    # graine_ia (#213) : rend reproductible l'affaiblissement des niveaux bridés
+    # (tirage d'oubli) — sans elle, l'oubli tire sur l'entropie système et la
+    # campagne n'est pas reproductible. Dérivée de la graine de la donne.
+    etat = creer_partie(config_joueurs,
+                        {"nb_manches": nb_manches, "graine_ia": graine_ia})
     backup_debut_tour(etat)
 
     manches = []
@@ -354,7 +358,7 @@ def comparer(niveau_a: str, niveau_b: str, nb_donnes: int, seed: int,
             resultat = jouer_match(config_joueurs, nb_manches, max_tours,
                                    temps_par_niveau, replis_expert,
                                    preferer_simple, perturbations_expert,
-                                   eval_configs)
+                                   eval_configs, graine_ia=graine)
             coups_invalides_total += resultat["coups_invalides"]
             coups_tuiles_disparues_total += resultat["coups_tuiles_disparues"]
             anomalies_conservation_total += resultat["anomalies_conservation"]

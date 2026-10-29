@@ -101,6 +101,20 @@ AVERTISSEMENT = (
 )
 
 
+def _juge_maison_exact(etat, idx, budget_temps=None):
+    """Juge par défaut (#213) : modèle exact de la MAISON
+    (``moteur/solveur_exact.py``). Même signature de callable que le juge
+    externe de #204 ``(etat, idx, budget_temps=...) -> coup|None``. Renvoie
+    ``None`` (plutôt que lever) si le modèle échoue à conclure, pour que
+    l'analyse se poursuive sans erreur."""
+    from rummikub.moteur import solveur_exact as _mex
+    try:
+        return _mex.resoudre_coup_exact(
+            etat, idx, budget_temps=budget_temps if budget_temps else 10.0)
+    except (_mex.BudgetExactDepasse, _mex.SolveurExactIndisponible):
+        return None
+
+
 def _dossier_defaut() -> Path:
     try:
         from rummikub import config
@@ -711,10 +725,16 @@ def main(argv=None) -> int:
                              "(voir scripts/solveur_exact.py et CONTEXTE.md §14).")
     args = parser.parse_args(argv)
 
-    # Juge exact optionnel (issue #204) : callable injecté dans l'analyse à la
-    # place du solveur maison. Importé seulement si demandé (la bibliothèque
-    # est une dépendance de développement, absente en production).
-    solveur_juge = None
+    # Juge de l'analyse (issue #213, suite de #204) :
+    #   * PAR DÉFAUT = modèle exact de la MAISON (``moteur/solveur_exact.py``,
+    #     celui qui joue Expert/Avancé/Champion) — optimum exact du tour, plus
+    #     aucune décision « inconclusive » ni coup manqué par gel de
+    #     combinaisons (contrairement à l'ancien défaut, la recherche
+    #     arborescente ``moteur/solveur.py``, désormais simple repli si
+    #     highspy/numpy manquent).
+    #   * ``--juge-exact`` = bibliothèque externe ``rummikub-solver`` (#204),
+    #     devenue un CONTRÔLE CROISÉ facultatif et indépendant.
+    solveur_juge = None  # None => repli ultime sur la recherche arborescente maison
     if args.juge_exact:
         _racine = Path(__file__).resolve().parent
         if str(_racine) not in sys.path:
@@ -729,9 +749,22 @@ def main(argv=None) -> int:
             print(solveur_exact.MESSAGE_INSTALLATION, file=sys.stderr)
             return 1
         solveur_juge = solveur_exact.resoudre_coup_exact
-        print(f"JUGE EXACT activé (backend {solveur_exact._backend_defaut()}) : "
-              f"plus aucune décision « inconclusive » ni coup gelé — le maximum "
-              f"affiché est l'optimum exact du tour.\n", file=sys.stderr)
+        print(f"JUGE (contrôle croisé) : bibliothèque rummikub-solver (backend "
+              f"{solveur_exact._backend_defaut()}) — optimum exact indépendant "
+              f"du modèle maison.\n", file=sys.stderr)
+    else:
+        from rummikub.moteur import solveur_exact as _maison_exact
+        if _maison_exact.DISPONIBLE:
+            solveur_juge = _juge_maison_exact
+            print("JUGE par défaut : modèle exact de la MAISON "
+                  "(moteur/solveur_exact.py) — optimum exact du tour, aucune "
+                  "décision « inconclusive » (#213). Contrôle croisé facultatif "
+                  "avec --juge-exact (bibliothèque rummikub-solver).\n",
+                  file=sys.stderr)
+        else:
+            print("highspy/numpy absents : le juge se replie sur la recherche "
+                  "arborescente (moteur/solveur.py) — borne basse, voir "
+                  "CONTEXTE.md §14.\n", file=sys.stderr)
 
     if args.budget < 10.0:
         print(f"AVERTISSEMENT : --budget {args.budget} s est inférieur au budget "
@@ -805,8 +838,9 @@ def main(argv=None) -> int:
         afficher_detail_tour(trouvees, args.tour)
 
     if args.budget_mesure and solveur_juge is not None:
-        print("--budget-mesure est sans objet avec --juge-exact (le solveur exact "
-              "n'a pas de budget de temps) : mesure ignorée.\n", file=sys.stderr)
+        print("--budget-mesure est sans objet avec un juge EXACT (modèle maison "
+              "par défaut, ou bibliothèque avec --juge-exact : aucun budget de "
+              "temps pertinent) : mesure ignorée.\n", file=sys.stderr)
     elif args.budget_mesure:
         a_mesurer = [r for r in resultats if r["coup_rate"] or r["pose_sous_optimale"]]
         print(f"=== Budget nécessaire (mesuré sur {len(a_mesurer)} coup(s) "

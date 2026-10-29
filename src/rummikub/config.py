@@ -29,7 +29,14 @@ VALEUR_MAX         = 13
 NB_JOKERS          = 2
 NB_TUILES_DEPART   = 14
 MISE_INITIALE_MIN  = 30
-NIVEAUX            = ["Débutant", "Facile", "Intermédiaire", "Avancé", "Expert"]
+# Échelle des six niveaux d'IA (issue #213), du plus faible au plus fort.
+# « Champion du Monde » (6e niveau) complète l'échelle, alignée sur les six
+# niveaux de Scrabble (Débutant → Champion du Monde). L'ORDRE fait foi : il
+# fixe la force croissante et l'ordre d'affichage (dégradé du clair au foncé).
+# Les parties sauvegardées avec les anciens niveaux (5) restent valides : un
+# niveau inconnu retombe sur « Débutant » (voir moteur/niveaux.py, ia.py).
+NIVEAUX            = ["Débutant", "Facile", "Intermédiaire", "Avancé",
+                      "Expert", "Champion du Monde"]
 AVATARS            = [f"avatar-{i:02d}" for i in range(1, 16)]
 
 # Journal de partie (débogage) : si True, chaque action de jeu est tracée dans

@@ -33,6 +33,7 @@
 .badge-niveau-ia.niveau-intermediaire { background: var(--niveau-intermediaire); }
 .badge-niveau-ia.niveau-avance        { background: var(--niveau-avance); }
 .badge-niveau-ia.niveau-expert        { background: var(--niveau-expert); }
+.badge-niveau-ia.niveau-champion-du-monde { background: var(--niveau-champion); }
 
 /* Boutons d'ajout d'adversaire par niveau */
 #boutons-ajout-niveau { display: flex; flex-wrap: wrap; align-items: center;

@@ -2,7 +2,7 @@
 
 // Avatars SVG et helpers genrés : voir commun.js (AVATARS, avatarPour,
 // elementAvatar, avatarAleatoirePourPrenom) + genres.js (genrePrénom).
-const NIVEAUX = ["Débutant", "Facile", "Intermédiaire", "Avancé", "Expert"];
+const NIVEAUX = ["Débutant", "Facile", "Intermédiaire", "Avancé", "Expert", "Champion du Monde"];
 const MAX_ADVERSAIRES = 3;
 
 // État local de l'accueil
@@ -43,7 +43,7 @@ async function init() {
 
 // ---------------------------------------------------------------- joueurs (humain + IA)
 function slugNiveau(niv) {
-  return (niv || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  return (niv || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, "-");
 }
 
 function afficherJoueurs() {

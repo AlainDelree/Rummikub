@@ -32,7 +32,7 @@ src/rummikub/
   config.py                 Constantes globales + chemins frozen/dev (RACINE_PROJET
                             via sys._MEIPASS si gelé, sinon parents). COULEURS,
                             VALEUR_MIN/MAX, NB_JOKERS(2), NB_TUILES_DEPART(14),
-                            MISE_INITIALE_MIN(30), NIVEAUX (5 libellés IA), AVATARS.
+                            MISE_INITIALE_MIN(30), NIVEAUX (6 libellés IA, §16), AVATARS.
   reglages.py               charger()/sauvegarder(data) de config.json (fusion DEFAUTS).
   persistance/stockage.py   SQLite : sauvegarder_partie, charger_parties(5 derniers),
                             charger_partie, marquer_terminee, supprimer_partie.
@@ -45,9 +45,10 @@ src/rummikub/
     validation.py           valider_suite/groupe/combinaison/plateau.
     partie.py               État de partie, tours, pioche, backup, manches.
     score.py                calculer_scores_manche, trouver_gagnant_manche.
-    ia.py                   5 niveaux d'IA (voir §5) + tactiques de
-                            récupération de joker (voir §8, niveau Avancé
-                            et repli d'Expert).
+    ia.py                   6 niveaux d'IA sur un même moteur exact bridé
+                            (voir §16, issue #213) + tactiques de
+                            récupération de joker (voir §8, repli).
+    niveaux.py              Paramètres d'affaiblissement des niveaux (§16).
     solveur.py              Solveur de réarrangement global du plateau,
                             utilisé par Expert (voir §8bis, #186).
     description_coup.py     Résumé écrit + étapes du rejeu pas-à-pas d'un
@@ -249,8 +250,10 @@ de manche intermédiaire, classement final, affichage de l'égalité).
 Tout le cœur du projet est en place et testé :
 - ✅ Moteur (tuiles, validation, partie, tours, pioche, backup/annulation,
   scores, manches).
-- ✅ **IA implémentée** (`moteur/ia.py`) : 5 niveaux — Débutant, Facile,
-  Intermédiaire, Avancé, Expert. Point d'entrée `jouer_ia(etat, joueur_index)`
+- ✅ **IA implémentée** (`moteur/ia.py`) : 6 niveaux — Débutant, Facile,
+  Intermédiaire, Avancé, Expert, Champion du Monde (issue #213, §16), tous sur
+  un même modèle exact réglé par des paramètres (`moteur/niveaux.py`). Point
+  d'entrée `jouer_ia(etat, joueur_index)`
   → `{"action": "jouer"|"piocher"|"passer", "ids_tuiles": [...],
   "nouveau_plateau": [...]}`. Les fonctions ne mutent jamais l'état ; tout coup
   proposé est revalidé (`_coup_valide`) pour ne jamais être rejeté par
@@ -269,8 +272,10 @@ icône `assets/rummikub.ico` (facultative, absente → aucune icône).
   `pythonpath=src`, `testpaths=tests`).
 - `tests/test_moteur.py` : sac/distribution, suites/groupes/combinaisons,
   plateau, mise initiale, tours, pioche, backup/annulation.
-- `tests/test_ia.py` : les 5 niveaux ne plantent pas et renvoient une action
-  valide.
+- `tests/test_ia.py` : les niveaux ne plantent pas et renvoient une action
+  valide (+ tactiques de joker testées directement sur les fonctions
+  heuristiques). `tests/test_niveaux.py` (#213) : l'échelle des six niveaux et
+  l'affaiblissement paramétré (perturbation, oubli, reproductibilité, repli).
 - `tests/test_bilan.py` : lecture des journaux de parties et calcul du bilan
   par niveau d'IA (voir §9).
 - `tests/test_description_coup.py` : résumé écrit d'un coup de l'IA (coup
@@ -2012,6 +2017,73 @@ une au fur et à mesure que de futures issues les testent/implémentent.
   centaines de donnes) serait nécessaire pour résoudre un éventuel effet
   sous-bruit, en particulier dans les situations bloquées (rares ici). À
   réactiver seulement si un tel gain est un jour démontré.
+- [ ] **Piste 8 — Ne pas libérer un joker pour rien** (idée d'Alain, #213,
+  documentation seulement — non implémentée). Observé en jeu : Alain pouvait
+  récupérer un joker du plateau en posant une tuile, mais n'avait aucune
+  combinaison à former avec ce joker ; le replacer en bout de suite ou en 4e
+  tuile d'un groupe l'aurait rendu **disponible à l'adversaire** au tour
+  suivant. Il a préféré ne pas jouer. Un solveur qui n'optimise qu'UN tour (le
+  modèle exact actuel) libérerait le joker et le reposerait quand même, offrant
+  une ressource à l'adversaire sans gain pour soi. Deuxième cas, plus net :
+  l'IA a elle-même LAISSÉ un joker en bout d'une suite (joker-6-7-8, joker en
+  1re position), donc immédiatement reprenable par l'adversaire (poser le 5 de
+  la couleur le remplace et libère le joker) ; elle aurait pu le placer
+  autrement pour ne pas l'offrir. **Piste** : à nombre de tuiles posées égal,
+  pénaliser un coup qui, dans le plateau résultant, laisse un joker en position
+  **facilement reprenable** — que l'IA vienne de le replacer OU qu'il y était
+  déjà et qu'elle aurait pu l'enfouir — c'est-à-dire un joker en **bout de
+  suite** (valeur à une extrémité) ou en **4e tuile d'un groupe**. Plus fin :
+  évaluer le coup sur deux tours. **Exception qui prime sur cette piste ET sur
+  toutes les pistes de prudence** (réserve d'un coup, points restants, joker
+  reprenable, rétention défensive) : **si le coup vide le chevalet, il gagne la
+  partie** — il n'y a pas de tour suivant, donc aucun critère « pour plus tard »
+  ne doit jamais empêcher ni dégrader un coup qui gagne immédiatement ; tout
+  critère de prudence ne s'applique qu'aux coups laissant au moins une tuile en
+  main. Ce garde-fou est **déjà appliqué** par l'échelle de #213 (un coup qui
+  vide la main n'est jamais « oublié » ni bridé, voir §16 et
+  `moteur/ia.jouer_niveau_bride`). Lien avec la piste 1 (réserve d'un coup,
+  évaluation sur deux tours) et les critères de départage de l'évaluation de la
+  main. **À tester une fois l'échelle des niveaux en place (faite par #213).**
+- [ ] **Piste 9 — Rétention défensive de tuiles** (idée d'Alain, #213,
+  documentation seulement — non implémentée). Observé : Alain a gardé en main
+  une suite complète (p. ex. 2-3-4-5-6 d'une couleur) du début à la fin, au
+  lieu de la poser, pour **priver l'adversaire** des tuiles qu'elle contient —
+  risqué (grosse pénalité en cas de défaite) mais payant en une seule manche,
+  où la pénalité ne change pas le résultat. Cas réel mesuré (journal d'une
+  partie gagnée contre Expert) : Alain a gardé la suite 2-3-4-5-6 rouge pendant
+  8 tours (5 tuiles), puis 4 tuiles pendant 3 tours, avant de tout poser au coup
+  final — il a gagné (Expert resté à 3 tuiles). Un solveur qui pose le maximum
+  à chaque tour ne fait jamais cela. **Nuance d'Alain** : la valeur des tuiles
+  retenues doit entrer dans le calcul, d'autant plus en plusieurs manches.
+  Retenir 2-3-4-5-6 (20 pts de risque) est acceptable ; retenir 9-10-11-12-13
+  (55 pts) est bien plus risqué et, en multi-manches (où les points cumulés
+  décident), probablement à éviter. En une seule manche, la valeur importe peu
+  (la pénalité ne change que la marge, pas le résultat) ; en plusieurs manches,
+  elle devient déterminante. La rétention doit donc **pondérer le gain défensif
+  par la valeur des tuiles retenues et par le poids des points du mode de jeu**
+  (lié à la piste 5/7). **Précision qui rend la piste CALCULABLE sans voir la
+  main adverse** : l'IA connaît les 106 tuiles, les siennes et celles du tapis ;
+  par soustraction, elle connaît l'ensemble exact des tuiles « ailleurs » (main
+  adverse + pioche), la taille du sac, et peut estimer la taille de la main
+  adverse à partir des parties déjà jouées (pondérée par la phase : souvent
+  >10 tuiles au début, <5 en fin — statistique à tirer des journaux, par
+  joueur). De là, pour une tuile donnée, elle estime la **probabilité** qu'elle
+  soit dans la main adverse plutôt que dans le sac, donc la probabilité qu'une
+  pièce retenue prive réellement l'adversaire. La stratégie : retenir une pièce
+  (de préférence de faible valeur, surtout en multi-manches) quand la
+  probabilité qu'elle serve à l'adversaire est élevée et que la garder ne
+  compromet pas sa propre sortie. À relier à la piste 1 (réserve) et à
+  l'évaluation sur deux tours. **Piste avancée, très difficile** (l'IA ne voit
+  pas la main adverse) : à ne considérer que pour un niveau au SOMMET de
+  l'échelle (Champion du Monde) et après les pistes plus simples.
+
+> **Note #213 — ces pistes alimentent les deux niveaux du haut.** La structure
+> cible de l'échelle (§16) réserve les stratégies multi-tours à **Expert**
+> (versions PARTIELLES, dosées) et **Champion du Monde** (versions COMPLÈTES).
+> Les pistes 1, 8 et 9 ci-dessus en sont les briques. Elles ne sont PAS
+> implémentées par #213 (qui met en place l'échelle, l'affaiblissement des
+> niveaux du bas et les outils de calibrage) : Expert et Champion du Monde y
+> restent provisoirement calés sur le solveur un-tour complet (= Avancé).
 
 ## 14. Solveur exact de vérification — bibliothèque `rummikub-solver` (licence MIT, issue #204, suite de #201)
 
@@ -2187,4 +2259,154 @@ chercher dans le jeu sur plusieurs tours (§13). 1 écart d'optimalité signalé
 monothread déterministe** → artefact temporel du solveur maison borné en temps
 sous charge concurrente, pas un défaut structurel (égalité exacte vérifiée #204).
 *Résultats complets : `resultats_match_212.txt` / `.json`.*
+
+## 16. Échelle des SIX niveaux d'IA sur un même modèle exact (issue #213, suite de #206)
+
+Depuis #213, les **six** niveaux d'IA (le 6e, **« Champion du Monde »**, complète
+l'échelle à l'image des six niveaux de Scrabble) sont bâtis sur **un seul
+moteur** — le modèle exact d'un tour (`moteur/solveur_exact.py`, le joueur
+d'Expert depuis #206) — dont la **force est réglée par des paramètres** réunis en
+UN SEUL endroit (`moteur/niveaux.py`), et non plus par six algorithmes de force
+inégale. Le point d'entrée reste `moteur/ia.jouer_ia(etat, idx)`.
+
+### Structure cible de l'échelle (répartition voulue par Alain)
+
+Le solveur exact « un tour » (qui pose toujours le maximum) **n'est PAS** le
+niveau le plus fort : c'est le niveau **Avancé**.
+
+| Niveau | Moteur | `perturbation_max` | `taux_oubli` (départ) |
+|--------|--------|:--:|:--:|
+| Débutant | exact BRIDÉ | 0 | 35 % |
+| Facile | exact BRIDÉ | 0 | 22 % |
+| Intermédiaire | exact BRIDÉ | 3 | 12 % |
+| Avancé | exact COMPLET | ∞ (aucune limite) | 0 |
+| Expert | exact complet **+ multi-tours PARTIELLES** (à venir) | ∞ | 0 |
+| Champion du Monde | exact complet **+ multi-tours COMPLÈTES** (à venir) | ∞ | 0 |
+
+- **Débutant, Facile, Intermédiaire** : le solveur un-tour AFFAIBLI (voit moins
+  loin, oublie des coups), de plus en plus bridé vers le bas.
+- **Avancé** : le solveur un-tour COMPLET, tel quel.
+- **Expert** : solveur un-tour + stratégies multi-tours **partielles** (dosées :
+  anticipation sur deux tours plutôt que trois, rétention défensive modérée,
+  non-don de joker — §13, pistes 1/8/9).
+- **Champion du Monde** : solveur + stratégies multi-tours **complètes** (réserve
+  d'un coup, non-don de joker, rétention défensive probabiliste — §13).
+
+> **⚠️ État provisoire livré par #213.** Les stratégies multi-tours (§13) **ne
+> sont PAS** implémentées par #213. Expert et Champion du Monde sont donc
+> **provisoirement IDENTIQUES à Avancé** (solveur un-tour complet), jusqu'à ce
+> que des issues ultérieures développent le multi-tours. Un tournoi d'échelle
+> montrera donc une progression nette Débutant < Facile < Intermédiaire < Avancé
+> puis un **plateau** Avancé ≈ Expert ≈ Champion (égalités statistiques) — c'est
+> ATTENDU, pas un défaut. Repère voulu par Alain : son propre niveau doit
+> correspondre à **Intermédiaire**, ou entre Intermédiaire et Avancé (à ajuster
+> par les mesures — voir « calibrage » ci-dessous).
+
+### Les deux paramètres d'affaiblissement (`moteur/niveaux.py`, le SEUL endroit)
+
+- **`perturbation_max`** — nombre maximal de tuiles **du plateau** que le coup
+  peut DÉPLACER (mesure #199, `solveur.mesurer_perturbation`). Ajouter des tuiles
+  de la main à une combinaison existante ou créer de nouvelles combinaisons **ne
+  compte pas**. Exprime ce qu'un joueur « voit » : `0` = ne touche jamais à la
+  structure du plateau (pose + extensions) ; `None` = aucune limite (solveur
+  complet). Mécanique (`ia._coup_selon_perturbation`) : à `0`, le coup sans
+  réarrangement (`_coup_maximal`, déplacement garanti nul) ; à `k>0`, le coup
+  complet s'il déplace ≤ k tuiles, sinon repli sur le coup sans réarrangement.
+- **`taux_oubli`** — probabilité, à chaque tour, que le joueur ne « voie » pas le
+  meilleur coup et **pioche** à la place. Tirage reproductible dès que
+  `config.graine_ia` est fixée (simulations). **Garde-fous d'incohérence** :
+  un coup qui **vide la main gagne la partie** et n'est JAMAIS oublié ni dégradé ;
+  le taux **décroît quand la main est petite** (`taux_oubli_effectif`, nul à une
+  seule tuile, plein au-delà de `SEUIL_OUBLI = 7`) pour ne pas « piocher » bêtement
+  en fin de partie. Valeurs de départ INDICATIVES (à resserrer par les mesures).
+- **Repli sans dépendances** : si `highspy`/`numpy` manque, le moteur se replie
+  sans erreur (recherche arborescente `solveur.py`, puis heuristique Avancé) ; le
+  **journal indique le mécanisme** via la clé `solveur` de l'action
+  (`exact`/`recherche`/`avance`/`sans-rearrangement`), déjà journalisée (#211).
+
+Les fonctions heuristiques historiques (`jouer_niveau_debutant/facile/
+intermediaire/avance`) **demeurent** dans `moteur/ia.py` : elles ne portent plus
+l'échelle (c'est le moteur bridé qui le fait, via `jouer_niveau_bride` et
+`NIVEAUX_IA`) mais restent le **repli** quand le modèle exact est indisponible et
+le support des tests de tactiques de joker (§8). Les parties sauvegardées avec
+les 5 anciens niveaux **restent valides** (un libellé inconnu retombe sur
+« Débutant », `niveaux.bridage_pour`).
+
+### Personnage / avatar du nouveau niveau
+
+Ce projet n'a **pas** de persona fixe par niveau : les adversaires IA tirent un
+prénom aléatoire d'un pool partagé (`ui/noms_ordinateur.py`, prénoms genrés) et
+un avatar parmi les 15 SVG existants (`ui/web/avatars/`), quel que soit le
+niveau. **Aucune liste de personnages de Scrabble n'est disponible dans le
+dépôt.** Champion du Monde reçoit donc, comme les cinq autres niveaux, un
+nom + avatar tirés de ces mêmes pools (signalé ici conformément à l'issue). Côté
+écran d'accueil, son bouton et son badge reçoivent le **même traitement visuel**
+que les autres, en prolongeant le dégradé clair→foncé des niveaux : nouvelle
+variable CSS `--niveau-champion: #241603` (la plus foncée), classe de badge
+`niveau-champion-du-monde` (le *slug* de `accueil.js` convertit désormais les
+espaces en tirets).
+
+### Outils de calibrage (`scripts/`)
+
+- **`scripts/echelle_niveaux.py`** — TOURNOI D'ÉCHELLE. Parties à deux en miroir
+  entre tous les niveaux voisins (+ quelques paires non voisines), ≥ 40 donnes
+  par paire, tableau des taux de victoire + IC 95 % (Wilson). Vérifie que
+  l'échelle est strictement croissante et que l'écart entre voisins est net
+  (~60–80 %). Premier plan, **limite de temps ferme** (`--limite-temps`),
+  résultats partiels, durée indiquée. Réutilise `comparer()` de
+  `comparer_niveaux_ia.py`. Ex. :
+
+  ```
+  python scripts/echelle_niveaux.py --donnes 40 --seed 0 --limite-temps 3600
+  ```
+
+- **`scripts/profil_joueur.py`** — PROFIL DE JOUEUR, côte à côte. Pour un
+  **humain** (à partir des journaux, fichiers d'une même partie reliés par
+  `partie_id`, **jugé par le modèle exact de la maison**) OU un **niveau d'IA**
+  (parties simulées), calcule les mêmes indicateurs : tuiles posées/tour vs
+  optimum, part des tours où le joueur pioche alors qu'un coup existait,
+  répartition des poses par taille (petit/moyen/grand selon le nombre de
+  combinaisons touchées), nombre moyen de tours, taux de victoire, et **DEUX
+  indicateurs de fin de partie DISTINCTS à ne pas confondre** : (a) **tuiles
+  restantes** en main quand le joueur perd = mesure du serrage, donc du NIVEAU
+  (était-il près de finir ? un seul 13 restant pèse autant de points que cinq
+  petites tuiles, mais est bien plus proche de la victoire) ; (b) **points
+  restants** = prudence sur la valeur des tuiles, qui ne compte VRAIMENT qu'en
+  match à plusieurs manches (en une manche, perdre à −1 ou −22 revient au même).
+  L'affichage sépare (a) et (b) et rappelle leurs rôles. Ex. :
+
+  ```
+  # Profil d'un/de niveaux d'IA (le dossier de l'agent n'a pas de journaux) :
+  python scripts/profil_joueur.py --niveau "Intermédiaire,Avancé,Expert" --donnes 40
+  # Profil d'Alain (commande qu'ALAIN doit lancer, journaux activés) :
+  python scripts/profil_joueur.py --journaux data/logs_parties --joueur Alain \
+      --niveau "Intermédiaire,Avancé"
+  ```
+
+- **`scripts/analyser_coups_rates.py`** — le **juge par défaut est désormais le
+  modèle exact de la MAISON** (`moteur/solveur_exact.py`) : plus aucune décision
+  « inconclusive » ni coup manqué par gel de combinaisons. L'option `--juge-exact`
+  (bibliothèque `rummikub-solver`, #204) devient un **contrôle croisé facultatif**
+  et indépendant. Repli sur la recherche arborescente si `highspy`/`numpy` manque.
+
+### Comment établir le niveau d'Alain (à faire par Alain)
+
+Le niveau d'Alain **n'est pas** établi par #213 : il le sera par la comparaison
+de SON profil (`profil_joueur.py --journaux …`, journaux inaccessibles à
+l'agent) avec les profils des niveaux candidats, ET par quelques parties jouées
+contre eux. Procédure : activer `log_parties` dans `config.json`, jouer des
+parties jusqu'au terme, puis lancer les commandes ci-dessus.
+
+### Tests
+
+`tests/test_niveaux.py` : l'échelle a six niveaux (Champion inclus) ; un niveau
+inconnu retombe sur Débutant ; `perturbation_max=0` ne déplace **aucune** tuile
+et `None` récupère le joker ; la borne de perturbation est respectée ; l'oubli à
+100 % fait piocher, un coup gagnant n'est jamais oublié, l'oubli décroît sur une
+petite main ; reproductibilité sous `graine_ia` ; Champion atteint l'optimum
+exact sur les cas de référence ; repli propre sans `highspy`/`numpy`.
+`tests/test_playwright_accueil_reglages.py` : le bouton « Champion du Monde »
+ajoute bien un adversaire de ce niveau. Les tests existants (IA, moteur,
+solveurs) restent **inchangés** : les fonctions heuristiques de niveau,
+toujours présentes, continuent d'être testées directement.
 

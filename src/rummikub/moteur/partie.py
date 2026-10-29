@@ -91,6 +91,11 @@ def creer_partie(config_joueurs: list[dict], config_regles: dict) -> dict:
                 "valeur_joker_penalite", 30),
             "mise_initiale_min": config_regles.get(
                 "mise_initiale_min", config.MISE_INITIALE_MIN),
+            # Graine de l'affaiblissement des niveaux d'IA (issue #213) : fixe
+            # le tirage « d'oubli » des niveaux bridés (Débutant → Intermédiaire)
+            # pour des simulations reproductibles. ``None`` en jeu normal →
+            # tirage non reproductible (voir moteur/ia._rng_oubli). Clé optionnelle.
+            "graine_ia": config_regles.get("graine_ia"),
         },
     }
     return etat

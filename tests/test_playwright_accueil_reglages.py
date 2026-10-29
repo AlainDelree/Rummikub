@@ -131,6 +131,20 @@ def test_lancer_partie_transmet_le_nombre_de_manches(page):
     assert page._erreurs_console == []
 
 
+def test_bouton_champion_du_monde_ajoute_un_adversaire(page):
+    # Issue #213 : sixième niveau « Champion du Monde ». Le bouton existe et
+    # cliquer dessus ajoute un adversaire de ce niveau (badge slugifié sans
+    # espaces : « champion-du-monde »).
+    bouton = page.query_selector(
+        "button.btn-ajout-niveau[data-niveau='Champion du Monde']")
+    assert bouton is not None
+    page.click("button.btn-ajout-niveau[data-niveau='Champion du Monde']")
+    page.wait_for_function("etat.adversaires.length === 1")
+    assert page.evaluate("etat.adversaires[0].niveau") == "Champion du Monde"
+    assert page.query_selector(".badge-niveau-ia.niveau-champion-du-monde") is not None
+    assert page._erreurs_console == []
+
+
 def test_valeur_hors_bornes_retombe_sur_1(page):
     # Une valeur enregistrée hors de [1, 9] (ou absente) est réaffichée comme 1.
     page.evaluate("etat.reglages.nb_manches = 99; remplirChampManches();")
