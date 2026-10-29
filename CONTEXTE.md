@@ -2486,3 +2486,74 @@ ajoute bien un adversaire de ce niveau. Les tests existants (IA, moteur,
 solveurs) restent **inchangés** : les fonctions heuristiques de niveau,
 toujours présentes, continuent d'être testées directement.
 
+## 17. Vérifier qu'Expert ne décompose jamais le plateau inutilement (issue #215, suite de #199)
+
+Le profil d'Expert (§16, `scripts/profil_joueur.py`) montre qu'environ deux
+tiers de ses poses sont « grandes » (elles **touchent** 3 combinaisons du
+plateau ou plus). Question d'Alain : ces grosses recompositions sont-elles
+toutes NÉCESSAIRES, ou l'IA décompose-t-elle parfois le plateau pour rien ? Le
+critère de simplicité de #199 (« à nombre de tuiles posées égal, préférer le
+coup qui perturbe le moins le plateau » — `moteur/solveur.mesurer_perturbation`
+pour la MESURE, départage par variables `cover` dans
+`moteur/solveur_exact.py`) est censé l'empêcher. #215 le vérifie
+**systématiquement** (et non sur quelques cas isolés) et fournit à Alain des
+exemples lisibles.
+
+**`scripts/verifier_simplicite_expert.py`** (script d'analyse SEUL — aucune
+modification du moteur/IA/solveur). Pour chaque pose d'Expert :
+
+1. mesure la perturbation du coup RÉELLEMENT joué (`mesurer_perturbation` #199 :
+   `(tuiles du plateau déplacées, combinaisons modifiées)`) ;
+2. interroge INDÉPENDAMMENT le solveur (modèle exact `solveur_exact` si
+   `highspy`/`numpy` dispo, sinon recherche `solveur`) avec un budget GÉNÉREUX
+   (`--budget-juge`, 5 s par défaut > 1,5 s de production) pour obtenir « le
+   coup le plus simple posant le plus de tuiles » (max tuiles, puis
+   perturbation minimale) ;
+3. quand les deux posent le MÊME nombre de tuiles (cas normal, Expert maximise
+   toujours), compare les perturbations → écart de simplicité. Un coup qui pose
+   MOINS que l'optimum (budget/coup raté, cf. §11) est compté à part, hors sujet.
+
+Deux sources : **journaux** (`--journaux DIR`, poses d'Expert reliées comme #202
+via `persistance/parties_liees`) ou, à défaut, **simulation** d'Expert contre
+lui-même. Le script affiche la distribution, l'écart moyen/maximal, et la
+proportion de GROS coups qui sont des décompositions nécessaires.
+
+Il produit aussi, dans un **dossier de SORTIE** (`--sortie`, hors du dépôt — par
+défaut un sous-dossier du répertoire temporaire ; `_sortie_locale/` et
+`exemples_simplicite_expert.txt` sont gitignorés), le fichier
+**`exemples_simplicite_expert.txt`** : une dizaine de cas variés (petits, moyens,
+grands ; au moins un où Expert décompose beaucoup), chacun décrit en français
+clair SANS jargon — plateau de départ ENTIER, main complète, nombre de tuiles
+posables, coup joué étape par étape (réutilise `moteur/description_coup.py`),
+plateau d'arrivée ENTIER, le coup plus simple s'il existe (plateau d'arrivée
+entier aussi), et une ligne « décomposition nécessaire / évitable ».
+
+Résultat de la campagne (simulation Expert, 12 parties, 323 poses, budget-juge
+5 s) : **100 % des poses sont au minimum de perturbation, 0 décomposition
+évitable** — dont 208 « gros » coups (3+ combinaisons touchées, soit ~64 %,
+cohérent avec le ~68 % du profil) **tous nécessaires**. Nuance importante :
+« toucher 3 combinaisons » (métrique du profil) n'est PAS « déplacer des
+tuiles » — beaucoup de gros coups prolongent/reforment des combinaisons sans
+déplacer la moindre tuile (perturbation nulle). Le critère de #199 tient donc
+ses promesses sur cet échantillon. Si un écart non nul apparaissait, le script
+le SIGNALE (sans corriger le solveur : correction = issue dédiée).
+
+Commande pour Alain (sur ses propres parties) :
+
+```
+PYTHONPATH=src python3 scripts/verifier_simplicite_expert.py \
+    --journaux data/logs_parties --sortie /tmp/simplicite_expert
+# ou, sans journaux, par simulation :
+PYTHONPATH=src python3 scripts/verifier_simplicite_expert.py --donnes 20
+```
+
+### Tests
+
+`tests/test_verifier_simplicite_expert.py` : description française d'une
+combinaison (groupe, suite, suite avec joker) ; un coup déjà minimal → écart nul
+(« nécessaire ») ; un coup artificiellement SUR-DÉCOMPOSÉ (combinaison éclatée en
+deux) → écart bien détecté (« évitable ») ; un coup posant moins que l'optimum
+exclu du calcul ; le juge indépendant et l'enchaînement complet
+(`analyser_coup`/`rediger_exemple`) sur un état jouable. Tournent sans
+dépendance externe (le juge se replie sur la recherche arborescente).
+
