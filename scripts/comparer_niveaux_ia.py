@@ -53,6 +53,7 @@ if SRC.is_dir() and str(SRC) not in sys.path:
 
 from rummikub.config import NIVEAUX  # noqa: E402
 from rummikub.moteur.ia import jouer_ia, jouer_niveau_expert  # noqa: E402
+from rummikub.moteur import evaluation_main  # noqa: E402
 from rummikub.moteur.partie import (  # noqa: E402
     annuler_tour,
     backup_debut_tour,
@@ -106,7 +107,8 @@ def _anomalies_conservation(etat: dict) -> list[str]:
 
 def jouer_un_tour(etat: dict, idx: int, temps_par_niveau: dict,
                   replis_expert: list, preferer_simple: bool,
-                  perturbations_expert: list) -> tuple[dict, bool, bool]:
+                  perturbations_expert: list,
+                  eval_configs: list = None) -> tuple[dict, bool, bool]:
     """Joue le tour de l'IA à l'index ``idx``.
 
     Chronomètre l'appel à ``jouer_ia`` et l'ajoute à
@@ -144,9 +146,10 @@ def jouer_un_tour(etat: dict, idx: int, temps_par_niveau: dict,
     debut = time.monotonic()
     try:
         if niveau == "Expert":
+            eval_config = eval_configs[idx] if eval_configs else None
             res_ia = jouer_niveau_expert(
                 etat, idx, on_repli=_compter_repli,
-                preferer_simple=preferer_simple)
+                preferer_simple=preferer_simple, eval_config=eval_config)
         else:
             res_ia = jouer_ia(etat, idx)
     except Exception:
@@ -192,7 +195,8 @@ def jouer_un_tour(etat: dict, idx: int, temps_par_niveau: dict,
 
 def _jouer_une_manche(etat: dict, max_tours: int, temps_par_niveau: dict,
                       replis_expert: list, preferer_simple: bool,
-                      perturbations_expert: list) -> dict:
+                      perturbations_expert: list,
+                      eval_configs: list = None) -> dict:
     """Joue la manche courante de ``etat`` jusqu'à sa fin naturelle (chevalet
     vidé ou pioche épuisée) ou jusqu'au garde-fou ``max_tours``. Retourne les
     statistiques de CETTE manche ; ``etat`` est muté en place."""
@@ -210,7 +214,7 @@ def _jouer_une_manche(etat: dict, max_tours: int, temps_par_niveau: dict,
         idx = etat["index_joueur_actuel"]
         etat, invalide, tuiles_disparues = jouer_un_tour(
             etat, idx, temps_par_niveau, replis_expert, preferer_simple,
-            perturbations_expert)
+            perturbations_expert, eval_configs)
         if invalide:
             coups_invalides += 1
         if tuiles_disparues:
@@ -240,7 +244,8 @@ def _jouer_une_manche(etat: dict, max_tours: int, temps_par_niveau: dict,
 
 def jouer_match(config_joueurs: list[dict], nb_manches: int, max_tours: int,
                 temps_par_niveau: dict, replis_expert: list,
-                preferer_simple: bool, perturbations_expert: list) -> dict:
+                preferer_simple: bool, perturbations_expert: list,
+                eval_configs: list = None) -> dict:
     """Joue un MATCH complet à 2 joueurs de ``nb_manches`` manches (issue
     #203). Les manches s'enchaînent via ``nouvelle_manche`` (score cumulé
     conservé, nouvelle donne et mise initiale remise à zéro à chaque manche).
@@ -257,7 +262,7 @@ def jouer_match(config_joueurs: list[dict], nb_manches: int, max_tours: int,
     for numero in range(1, nb_manches + 1):
         res = _jouer_une_manche(etat, max_tours, temps_par_niveau,
                                 replis_expert, preferer_simple,
-                                perturbations_expert)
+                                perturbations_expert, eval_configs)
         coups_invalides += res["coups_invalides"]
         coups_tuiles_disparues += res["coups_tuiles_disparues"]
         anomalies_conservation += res["anomalies_conservation"]
@@ -286,7 +291,8 @@ def jouer_match(config_joueurs: list[dict], nb_manches: int, max_tours: int,
 
 def comparer(niveau_a: str, niveau_b: str, nb_donnes: int, seed: int,
             max_tours: int, nb_manches: int = 1,
-            preferer_simple: bool = True) -> dict:
+            preferer_simple: bool = True,
+            eval_a: str = "off", eval_b: str = "off") -> dict:
     """``nb_manches`` (#203) : nombre de manches par match — chaque donne est
     jouée en miroir (places échangées) sur un match complet, le vainqueur du
     match étant le joueur au plus haut score cumulé. Les résultats sont donnés
@@ -295,7 +301,16 @@ def comparer(niveau_a: str, niveau_b: str, nb_donnes: int, seed: int,
     ``preferer_simple`` (#199) : réglage transmis à chaque appel d'Expert —
     comparer deux campagnes identiques (même graine), l'une avec et l'autre
     sans, permet de mesurer l'effet du critère de simplicité sur la force
-    d'Expert (voir CONTEXTE.md §9 et §13)."""
+    d'Expert (voir CONTEXTE.md §9 et §13).
+
+    ``eval_a``/``eval_b`` (#211) : preset d'évaluation de la main restante
+    (``moteur/evaluation_main.depuis_preset``) appliqué au niveau Expert du
+    camp A / du camp B. Permet de comparer, EN MIROIR dans une même campagne,
+    deux réglages d'Expert (p. ex. ``off`` contre ``complet``, ou deux poids de
+    points), le reste étant strictement identique. Sans effet sur un camp qui
+    n'est pas Expert."""
+    cfg_eval = {"A": evaluation_main.depuis_preset(eval_a, nb_manches),
+                "B": evaluation_main.depuis_preset(eval_b, nb_manches)}
     rng_graines = random.Random(seed)
     graines = [rng_graines.randrange(2**32) for _ in range(nb_donnes)]
 
@@ -334,9 +349,12 @@ def comparer(niveau_a: str, niveau_b: str, nb_donnes: int, seed: int,
                  "niveau": niveau_camp[camp]}
                 for camp in camps
             ]
+            # Config d'évaluation alignée sur l'index du joueur (camp camps[k]).
+            eval_configs = [cfg_eval[camp] for camp in camps]
             resultat = jouer_match(config_joueurs, nb_manches, max_tours,
                                    temps_par_niveau, replis_expert,
-                                   preferer_simple, perturbations_expert)
+                                   preferer_simple, perturbations_expert,
+                                   eval_configs)
             coups_invalides_total += resultat["coups_invalides"]
             coups_tuiles_disparues_total += resultat["coups_tuiles_disparues"]
             anomalies_conservation_total += resultat["anomalies_conservation"]
@@ -401,6 +419,8 @@ def comparer(niveau_a: str, niveau_b: str, nb_donnes: int, seed: int,
         "replis_expert_timeout": replis_expert[1],
         "perturbations_expert": perturbations_expert,
         "preferer_simple": preferer_simple,
+        "eval_a": eval_a,
+        "eval_b": eval_b,
         "nb_donnes": nb_donnes,
         "nb_parties": 2 * nb_donnes,
     }
@@ -437,7 +457,10 @@ def afficher_rapport(resume: dict) -> None:
     n_manches = len(resume["tours_decidees"])
 
     print("=" * 70)
-    print(f"COMPARAISON : {niveau_a} (camp A) vs {niveau_b} (camp B)")
+    suffixe_a = f" [eval={resume['eval_a']}]" if resume.get("eval_a", "off") != "off" else ""
+    suffixe_b = f" [eval={resume['eval_b']}]" if resume.get("eval_b", "off") != "off" else ""
+    print(f"COMPARAISON : {niveau_a} (camp A){suffixe_a} vs "
+          f"{niveau_b} (camp B){suffixe_b}")
     print(f"Matchs de {nb_manches} manche(s) — "
          f"{resume['nb_donnes']} donne(s) x 2 (miroir) = "
          f"{resume['nb_parties']} match(s) demandé(s), "
@@ -542,6 +565,14 @@ def main(argv: list[str]) -> int:
                              "pour comparer les deux versions par "
                              "simulation (relancer la même commande avec "
                              "et sans ce drapeau, même --seed).")
+    parser.add_argument("--eval-a", default="off",
+                        help="Preset d'évaluation de la main restante (#211) "
+                             "pour l'Expert du camp A (défaut off). Presets : "
+                             + ", ".join(evaluation_main.PRESETS) + " ; suffixe "
+                             "-avant/-apres pour la position vs la simplicité.")
+    parser.add_argument("--eval-b", default="off",
+                        help="Preset d'évaluation de la main restante (#211) "
+                             "pour l'Expert du camp B (défaut off).")
     parser.add_argument("--sans-exact", action="store_true",
                         help="Fige Expert sur son ANCIENNE recherche "
                              "arborescente (moteur/solveur.py) au lieu du "
@@ -570,10 +601,18 @@ def main(argv: list[str]) -> int:
         _ia.UTILISER_SOLVEUR_EXACT = False
         print("[#206] Modèle exact DÉSACTIVÉ (Expert = recherche arborescente).")
 
+    # Validation précoce des presets d'évaluation (message clair).
+    try:
+        evaluation_main.depuis_preset(args.eval_a, args.manches)
+        evaluation_main.depuis_preset(args.eval_b, args.manches)
+    except ValueError as exc:
+        parser.error(str(exc))
+
     debut = time.monotonic()
     resume = comparer(args.niveau_a, args.niveau_b, args.donnes, args.seed,
                       args.max_tours, nb_manches=args.manches,
-                      preferer_simple=not args.sans_preferer_simple)
+                      preferer_simple=not args.sans_preferer_simple,
+                      eval_a=args.eval_a, eval_b=args.eval_b)
     duree = time.monotonic() - debut
 
     afficher_rapport(resume)

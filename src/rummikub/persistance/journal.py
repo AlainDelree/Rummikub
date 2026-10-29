@@ -154,7 +154,7 @@ def _creer_journal(etat: dict) -> dict:
 
 def logger_action(etat: dict, action: str, *,
                    auteur_index: int = None, nb_tuiles_posees: int = 0,
-                   nb_tuiles_deplacees: int = 0) -> None:
+                   nb_tuiles_deplacees: int = 0, solveur: str = None) -> None:
     """Enregistre une action de jeu dans le journal de la partie courante.
 
     ``action`` : type de décision prise (``"pose"``, ``"pioche"``, ``"passe"``
@@ -169,6 +169,12 @@ def logger_action(etat: dict, action: str, *,
     ``nb_tuiles_deplacees`` : nombre de tuiles du plateau déplacées (pas
     posées) par cette même décision (0 sauf, potentiellement, pour une pose
     humaine — voir ``ui/api.py:jeu_jouer_coup``).
+    ``solveur`` (issue #211, point 5bis) : pour un coup d'une IA **Expert**,
+    code du mécanisme qui a décidé (``"exact"`` modèle exact, ``"recherche"``
+    recherche arborescente de repli, ``"avance"`` Avancé en repli — voir
+    ``moteur/ia.LIBELLES_SOLVEUR``). ``None`` (défaut) pour les humains et les
+    autres niveaux d'IA ; **clé omise** du journal dans ce cas (rétrocompatible :
+    les journaux antérieurs n'ont pas cette clé).
 
     No-op immédiat si ``config.LOG_PARTIES`` est ``False``. Toute erreur d'écriture
     est silencieusement ignorée : le journal ne doit jamais interrompre le jeu.
@@ -183,7 +189,7 @@ def logger_action(etat: dict, action: str, *,
         if journal is None:
             journal = _creer_journal(etat)
             _journaux[pid] = journal
-        journal["data"]["actions"].append({
+        entree = {
             "horodatage": datetime.now().isoformat(timespec="seconds"),
             "action": action,
             "tour": etat.get("tour_numero"),
@@ -212,7 +218,12 @@ def logger_action(etat: dict, action: str, *,
             "plateau": copy.deepcopy(etat.get("plateau", [])),
             "pioche": copy.deepcopy(etat.get("pioche", [])),
             "sac_restant": len(etat.get("pioche", [])),
-        })
+        }
+        # Clé facultative et rétrocompatible (#211, 5bis) : omise sauf pour un
+        # coup d'Expert, pour lequel elle indique le mécanisme décideur.
+        if solveur is not None:
+            entree["solveur"] = solveur
+        journal["data"]["actions"].append(entree)
         with open(journal["chemin"], "w", encoding="utf-8") as f:
             json.dump(journal["data"], f, ensure_ascii=False, indent=2)
     except Exception:

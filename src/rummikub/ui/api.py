@@ -273,8 +273,12 @@ class Api:
         action_journal = {"piocher": "pioche", "passer": "passe"}.get(
             type_reel, type_reel)
         nb_posees = len(res_ia.get("ids_tuiles") or []) if coup_joue else 0
+        # Mécanisme décideur d'Expert (#211, 5bis) : présent seulement si l'IA
+        # est Expert (``jouer_niveau_expert`` annote le coup), sinon ``None``
+        # (clé omise du journal).
         logger_action(self._app.etat_jeu, action_journal, auteur_index=idx,
-                     nb_tuiles_posees=nb_posees)
+                     nb_tuiles_posees=nb_posees,
+                     solveur=res_ia.get("solveur"))
         return {"ok": True, "etat": self._app.etat_jeu}
 
     def jeu_retour_accueil(self):

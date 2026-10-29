@@ -368,6 +368,53 @@ def top_coups_rates(resultats: list, n: int = 5) -> list:
     return rates[:n]
 
 
+# Libellés des codes de mécanisme décideur d'Expert (#211, 5bis) — repris de
+# ``moteur/ia.LIBELLES_SOLVEUR`` mais redéfinis ici pour que ``coups_rates`` ne
+# dépende pas du moteur d'IA (lecture de journaux seule). ``None`` → "non noté"
+# (journal antérieur à #211, ou coup d'une IA non-Expert).
+LIBELLES_SOLVEUR = {
+    "exact": "modèle exact",
+    "recherche": "recherche de repli",
+    "avance": "Avancé en repli",
+    None: "non noté",
+}
+
+
+def repartition_solveurs(parties: list) -> dict:
+    """Répartition du mécanisme décideur (#211, 5bis) des coups d'une IA
+    **Expert**, lue dans la clé facultative ``solveur`` des actions des
+    journaux ``parties`` (liste de ``data`` de journaux). Retourne
+    ``{"exact": n, "recherche": n, "avance": n, None: n}`` agrégé sur toutes les
+    actions d'Expert (pose/pioche/passe). Permet aux analyses de signaler ou
+    d'exclure les coups joués en repli (le repli est silencieux quand
+    ``highspy``/``numpy`` manquent). Tolère les formats anciens (clé absente →
+    comptée dans ``None``)."""
+    repart: dict = {}
+    for data in parties:
+        if not isinstance(data, dict):
+            continue
+        joueurs = _joueurs_normalises(data.get("joueurs"))
+        actions = data.get("actions")
+        if not joueurs or not isinstance(actions, list):
+            continue
+        for a in actions:
+            if not isinstance(a, dict):
+                continue
+            idx = a.get("auteur_index")
+            if not isinstance(idx, int) or not (0 <= idx < len(joueurs)):
+                continue
+            joueur = joueurs[idx]
+            if joueur.get("est_ia") is not True or joueur.get("niveau") != "Expert":
+                continue
+            if a.get("action") not in ("pose", "pioche", "passe"):
+                continue
+            code = a.get("solveur")
+            if code not in LIBELLES_SOLVEUR:
+                code = None
+            repart[code] = repart.get(code, 0) + 1
+    return repart
+
+
 # =========================================================================== #
 # Issue #193 (suite de #188) : poses sous-optimales, budget nécessaire,
 # analyse d'un joueur humain, technique de la « réserve ».

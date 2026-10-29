@@ -921,7 +921,17 @@ répond à ce risque.
   python scripts/comparer_niveaux_ia.py --niveau-a Avancé --niveau-b Expert
   python scripts/comparer_niveaux_ia.py --niveau-a Avancé --niveau-b Expert \
       --donnes 200 --seed 7 --max-tours 500
+  # Depuis #211 : comparer deux réglages d'ÉVALUATION DE LA MAIN d'Expert,
+  # en miroir dans une même campagne (le reste identique) :
+  python scripts/comparer_niveaux_ia.py --niveau-a Expert --niveau-b Expert \
+      --eval-a off --eval-b complet --manches 3 --donnes 30
   ```
+
+  **Depuis #211**, `--eval-a`/`--eval-b` appliquent un preset d'évaluation de la
+  main restante (`moteur/evaluation_main.depuis_preset` : `off`, `complet`,
+  `doublons`, `bords`, `points`, `points-nul|faible|moyen|fort`, suffixe
+  `-avant`/`-apres` pour la position vs la simplicité) à l'Expert de chaque camp
+  — voir §13 pour les résultats chiffrés de la campagne #211.
 
   Affiche : victoires/taux/marge d'erreur (IC 95 %) par niveau, nombre
   moyen de tuiles/points de pénalité du perdant, durée moyenne en tours,
@@ -1944,7 +1954,64 @@ une au fur et à mesure que de futures issues les testent/implémentent.
   désormais un critère MESURÉ (`mesurer_perturbation`, `moteur/solveur.py`)
   et appliqué par défaut, pas seulement une préférence de lisibilité pour
   le pas-à-pas — contrairement aux pistes 2 et 5 ci-dessus (évaluation de
-  la main restante, rôle des points), qui restent, elles, à tester.
+  la main restante, rôle des points), désormais testées par #211 (voir
+  l'entrée dédiée ci-dessous).
+- [x] **Testée (#211) — évaluation de la main restante (pistes 2, 5, 6, 7)** :
+  une **évaluation de la main restante** (doublons, tuiles de bord graduées
+  1/13 > 2/12 > milieu, points restants pondérés par le nombre de manches) a
+  été implémentée (`moteur/evaluation_main.py`) et intégrée au **modèle exact**
+  comme objectif secondaire linéaire, JAMAIS avant le nombre de tuiles posées
+  (`moteur/solveur_exact.py` : termes par ensemble pour bords/points, variable
+  auxiliaire `d_i` par doublon). La tuile **isolée** est laissée de côté dans le
+  solveur (non linéarisable simplement — elle dépend du reste de la main), et
+  seulement calculée pour les tests/l'affichage. Deux ordres vs la simplicité
+  ont été essayés (`apres_simplicite`, défaut ; `avant_simplicite`).
+
+  **Mesure** (`scripts/comparer_niveaux_ia.py --eval-a off --eval-b <preset>`,
+  30 donnes = 60 matchs en miroir, seed 42 ; marge d'erreur ±12,6 pt à 95 % ;
+  camp A = Expert de référence `off`, camp B = variante) :
+
+  | Variante (camp B)       | 1 manche : victoires B / score cumulé moyen B | 3 manches : victoires B / cumul B |
+  |-------------------------|:--:|:--:|
+  | doublons seuls          | 46,7 % / −0,4 | — |
+  | bords seuls             | 48,3 % / −1,0 | — |
+  | complet (d+b+p)         | 46,7 % / −1,6 | 48,3 % / −0,4 |
+  | complet, ordre *avant*  | 48,3 % / −0,3 | — |
+  | points nul              | — | 46,7 % / −2,2 |
+  | points faible (poids 1) | 48,3 % / −0,4 | 45,0 % / −1,6 |
+  | points moyen (poids 3)  | — | 46,7 % / −1,0 |
+  | points fort (poids 8)   | — | 46,7 % / −1,1 |
+
+  **Conclusion : aucun critère, à aucun poids ni dans aucun des deux ordres,
+  n'apporte de gain significatif** — tous les taux de victoire restent à moins
+  de 12,6 pt de 50/50, aussi bien en 1 manche qu'en 3 manches. Temps de calcul
+  par tour inchangé en pratique (moyenne ≈ 180–215 ms, max sous le budget de
+  1,5 s ; +10 % sur les positions typiques, +30 % sur les cas de référence les
+  plus lourds, l'évaluation ajoutant une passe MIP sur le même petit modèle).
+  Perturbation moyenne du plateau inchangée (≈ 1,76 tuile déplacée / coup).
+
+  **« À partir de quel poids les points deviennent-ils contre-productifs ? »** :
+  dans cet échantillon, **aucun seuil n'est atteint jusqu'au poids 8**. Le poids
+  fort ne dégrade pas le taux de victoire (46,7 %, égal au poids nul) et réduit
+  même légèrement le déficit de score cumulé (−2,2 à poids nul → −1,0/−1,1 à
+  poids moyen/fort, en 3 manches) — l'effet reste sous le plancher de bruit à
+  30 donnes. **Cause probable de l'absence de gain** : le modèle exact vide déjà
+  les chevalets très vite (dans ces campagnes, **180/180 manches terminées
+  chevalet vidé, 0 bloquée**) ; quand personne n'est bloqué, la qualité de la
+  main restante départage rarement le vainqueur, qui est décidé par le premier
+  chevalet vidé — ce que le critère primaire (nombre de tuiles posées) maximise
+  déjà. L'exemple d'Alice (poser la suite 1-2-3 rouge plutôt que le groupe pour
+  écouler un doublon `2r` + le bord `1`) est bien reproduit par l'évaluation
+  (test `test_eval_depart_departage_exemple_alice`), mais ces départages n'ont
+  pas d'effet mesurable sur l'issue des parties à cette échelle.
+
+  **Adoption** : conformément au point 4 de l'issue, **l'évaluation est livrée
+  DÉSACTIVÉE par défaut** (`moteur/ia.EVAL_MAIN_DEFAUT`, `active=False`). Tout le
+  mécanisme reste en place et réglable en un seul endroit
+  (`moteur/evaluation_main.py`) ; une campagne beaucoup plus large (plusieurs
+  centaines de donnes) serait nécessaire pour résoudre un éventuel effet
+  sous-bruit, en particulier dans les situations bloquées (rares ici). À
+  réactiver seulement si un tel gain est un jour démontré.
 
 ## 14. Solveur exact de vérification — bibliothèque `rummikub-solver` (licence MIT, issue #204, suite de #201)
 

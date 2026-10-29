@@ -119,6 +119,7 @@ from rummikub.config import COULEURS, VALEUR_MIN, VALEUR_MAX, NB_JOKERS, \
 from rummikub.moteur.tuiles import Tuile, tuile_depuis_dict
 from rummikub.moteur.partie import plateau_depuis_dict, _plateau_vers_dict
 from rummikub.moteur.validation import valider_combinaison
+from rummikub.moteur import evaluation_main
 
 
 MESSAGE_INSTALLATION = (
@@ -179,6 +180,7 @@ class _Ensemble:
     taille: int                   # nombre de tuiles
     preal: int                    # somme des valeurs des tuiles RÉELLES
     pfull: int                    # somme des valeurs de position (joker compris)
+    pbord: int                    # somme des pénalités de bord des tuiles réelles (#211)
     aspects: frozenset            # multiset d'aspects {(aspect, compte)} (perturbation)
 
 
@@ -186,7 +188,7 @@ def _counts_depuis_tokens(tokens):
     comptes = {}
     njok = 0
     preal = 0
-    pfull = 0
+    pbord = 0
     aspects = {}
     for i, tok in enumerate(tokens):
         if tok[0] == "J":
@@ -197,8 +199,9 @@ def _counts_depuis_tokens(tokens):
             _, c, v = tok
             comptes[_type_idx(c, v)] = comptes.get(_type_idx(c, v), 0) + 1
             preal += v
+            pbord += evaluation_main.penalite_bord(v)
             aspects[(c, v)] = aspects.get((c, v), 0) + 1
-    return comptes, njok, preal, aspects
+    return comptes, njok, preal, pbord, aspects
 
 
 def _pfull_tokens(tokens):
@@ -278,7 +281,7 @@ def _enumerer_suites():
 def _construire_sets():
     sets = []
     for tokens in _enumerer_groupes() + _enumerer_suites():
-        comptes, njok, preal, aspects = _counts_depuis_tokens(tokens)
+        comptes, njok, preal, pbord, aspects = _counts_depuis_tokens(tokens)
         pfull = _pfull_tokens(tokens)
         sets.append(_Ensemble(
             tokens=tokens,
@@ -287,6 +290,7 @@ def _construire_sets():
             taille=len(tokens),
             preal=preal,
             pfull=pfull,
+            pbord=pbord,
             aspects=frozenset(aspects.items()),
         ))
     return sets
@@ -436,7 +440,8 @@ def _a_solution_primale(h) -> bool:
 
 
 def _resoudre_modele(table_tiles, chevalet, mise_faite, mise_min,
-                     flexibles_aspects, budget_temps, preferer_simple):
+                     flexibles_aspects, budget_temps, preferer_simple,
+                     eval_config=None):
     """Construit et résout le modèle ILP lexicographique. Retourne
     ``(combos_tokens, optimal)`` où ``combos_tokens`` est la liste des ensembles
     placés (tokens ordonnés), ou lève :class:`BudgetExactDepasse`."""
@@ -599,6 +604,58 @@ def _resoudre_modele(table_tiles, chevalet, mise_faite, mise_min,
             h.addRow(-highspy.kHighsInf, 0.0, len(vars_m) + 1, indices, valeurs)
         return couts
 
+    def _ajouter_doublons():
+        """Ajoute, pour chaque type de tuile présent **au moins deux fois en
+        main** (``r_i ≥ 2``), une variable auxiliaire ``d_i ∈ [0, 1]`` valant 1
+        si les deux exemplaires restent en main (un doublon non placé), et la
+        contrainte (#211) :
+
+            d_i + Σ_s a_{s,i} x_s ≥ t_i + r_i − 1
+
+        soit ``d_i ≥ (t_i + r_i − 1) − P_i = (restant_en_main_i − 1)``. La borne
+        basse 0 de ``d_i`` et le terme ``−poids·d_i`` de l'objectif d'évaluation
+        (maximisé) poussent ``d_i`` à ``max(0, restant − 1)`` : 1 ssi deux
+        exemplaires restent. Continue (la structure reste exacte à ``x`` entier
+        fixé). Retourne ``[(col_d_i, idx_type), ...]``."""
+        cols = []
+        for idx, r_i in comptes_main.items():
+            if idx == _TYPE_JOKER or r_i < 2:
+                continue
+            t_i = comptes_table.get(idx, 0)
+            col = h.getNumCol()
+            h.addVariable(lb=0.0, ub=1.0,
+                          type=highspy.HighsVarType.kContinuous, obj=0.0)
+            termes = par_type.get(idx, [])
+            indices = np.array([j for j, _n in termes] + [col], dtype=np.int32)
+            valeurs = np.array([float(n) for _j, n in termes] + [1.0],
+                               dtype=np.float64)
+            h.addRow(float(t_i + r_i - 1), highspy.kHighsInf,
+                     len(indices), indices, valeurs)
+            cols.append(col)
+        return cols
+
+    def _couts_eval():
+        """Coûts (à MAXIMISER) de l'évaluation de la main restante (#211),
+        linéarisés sur les tuiles POSÉES : poser une tuile retire sa pénalité de
+        la main. ``bord``/``points`` : termes par ensemble ``x_s`` ; ``doublons``
+        : termes ``−poids`` sur les variables auxiliaires ``d_i``. Renvoie
+        ``[]`` si aucun critère actif ne produit de terme (p. ex. points seuls à
+        poids nul) — la passe d'évaluation est alors sautée."""
+        wb = eval_config.poids_bord if eval_config.bords else 0
+        wp = eval_config.poids_points_effectif() if eval_config.points else 0
+        couts = []
+        if wb or wp:
+            for j, (s, _ub) in enumerate(faisables):
+                coef = wb * s.pbord + wp * s.preal
+                if coef:
+                    couts.append((j, float(coef)))
+        if eval_config.doublons and eval_config.poids_doublon:
+            for col in _ajouter_doublons():
+                couts.append((col, float(-eval_config.poids_doublon)))
+        return couts
+
+    eval_actif = eval_config is not None and eval_config.active
+
     # ---- Passe 1 : nombre de tuiles posées (critère primaire) ----
     couts_tuiles = [(j, float(s.taille)) for j, (s, _ub) in enumerate(faisables)]
     _poser_objectif(couts_tuiles, highspy.ObjSense.kMaximize)
@@ -615,40 +672,88 @@ def _resoudre_modele(table_tiles, chevalet, mise_faite, mise_min,
 
     # Si la passe 1 n'est pas prouvée optimale (limite de temps), on garde la
     # solution réalisable trouvée et on s'arrête là (pas de départage).
-    if optimal:
-        opt1 = round(h.getObjectiveValue())
-        _fixer(couts_tuiles, opt1)
+    #
+    # Les passes de départage ci-dessous partagent deux closures : ``_passe``
+    # pose un objectif, résout, et fige (égalité) son optimum pour la suite ;
+    # elles ne tournent QUE si la passe 1 a prouvé son optimum (sinon la mise à
+    # l'égalité n'aurait pas de sens). ``optimal``/``meilleures_valeurs`` sont
+    # mutés via la liste ``_etat_passes`` (pas de ``nonlocal`` à travers les
+    # closures imbriquées).
+    _etat_passes = {"optimal": optimal, "valeurs": meilleures_valeurs}
 
-        # ---- Passe 2 : perturbation minimale ----
-        if preferer_simple and flexibles_aspects and (deadline - time.monotonic()) > 0:
-            couts_pert = _ajouter_cover()
-            _warm(meilleures_valeurs)
-            _poser_objectif(couts_pert, highspy.ObjSense.kMaximize)
-            e2 = _solve()
-            if e2 == "optimal":
-                meilleures_valeurs = _valeurs()
-                _fixer(couts_pert, round(h.getObjectiveValue()))
-            elif e2 == "faisable":
-                meilleures_valeurs = _valeurs()
-                optimal = False
+    def _passe(couts, figer=True):
+        """Pose ``max Σ couts`` à partir de la meilleure solution courante, puis
+        fige son optimum si ``figer``. Sans effet si une passe précédente n'a
+        pas prouvé son optimum, ou si ``couts`` est vide, ou si le budget est
+        épuisé."""
+        if not _etat_passes["optimal"] or not couts:
+            return
+        if (deadline - time.monotonic()) <= 0:
+            return
+        _warm(_etat_passes["valeurs"])
+        _poser_objectif(couts, highspy.ObjSense.kMaximize)
+        e = _solve()
+        if e == "optimal":
+            _etat_passes["valeurs"] = _valeurs()
+            if figer:
+                _fixer(couts, round(h.getObjectiveValue()))
+        elif e == "faisable":
+            _etat_passes["valeurs"] = _valeurs()
+            _etat_passes["optimal"] = False
 
-        # ---- Passe 3 : points posés, puis économie de jokers de la main ----
+    def _passe_simplicite(figer=True):
+        # ---- Perturbation minimale du plateau (#199) ----
+        if preferer_simple and flexibles_aspects:
+            _passe(_ajouter_cover(), figer=figer)
+
+    def _passe_points_jokers():
+        # ---- Points posés, puis économie de jokers (comportement d'avant #211,
+        # conservé quand l'évaluation de la main est inactive) ----
         # Une seule résolution : max Σ (W·points_s − jokers_s) x_s avec
         # W = jokers+1, qui maximise d'abord les points posés (chaque point
         # vaut plus que tout l'écart possible de jokers, borné par ``jokers``),
         # puis minimise les jokers de la main. Coefficients petits + gap nul →
-        # optimum lexicographique exact en un seul solve (une passe de moins).
-        if optimal and (deadline - time.monotonic()) > 0:
-            W = NB_JOKERS + 1
-            couts_pts_jok = [(j, float(W * s.preal - s.njok))
-                             for j, (s, _ub) in enumerate(faisables)
-                             if s.preal or s.njok]
-            if couts_pts_jok:
-                _warm(meilleures_valeurs)
-                _poser_objectif(couts_pts_jok, highspy.ObjSense.kMaximize)
-                e3 = _solve()
-                if e3 in ("optimal", "faisable"):
-                    meilleures_valeurs = _valeurs()
+        # optimum lexicographique exact en un seul solve.
+        W = NB_JOKERS + 1
+        couts_pts_jok = [(j, float(W * s.preal - s.njok))
+                         for j, (s, _ub) in enumerate(faisables)
+                         if s.preal or s.njok]
+        _passe(couts_pts_jok, figer=False)
+
+    def _passe_eval(figer=True):
+        # ---- Évaluation de la main restante (#211), départage à nombre de
+        # tuiles posées ÉGAL : jamais avant le critère primaire ----
+        _passe(_couts_eval(), figer=figer)
+
+    def _passe_jokers_seuls():
+        # ---- Économie de jokers de la main, seule (quand l'évaluation prend
+        # en charge les points) : min Σ jokers_s x_s ----
+        couts = [(j, float(-s.njok)) for j, (s, _ub) in enumerate(faisables)
+                 if s.njok]
+        _passe(couts, figer=False)
+
+    if _etat_passes["optimal"]:
+        opt1 = round(h.getObjectiveValue())
+        _fixer(couts_tuiles, opt1)
+
+        if eval_actif:
+            # Deux ordres mesurés par simulation (#211, point 2) : l'évaluation
+            # ne départage JAMAIS avant le nombre de tuiles posées, mais peut
+            # passer avant ou après la simplicité. La dernière passe (jokers)
+            # n'a pas besoin d'être figée.
+            if eval_config.avant_simplicite:
+                _passe_eval(figer=True)
+                _passe_simplicite(figer=True)
+            else:
+                _passe_simplicite(figer=True)
+                _passe_eval(figer=True)
+            _passe_jokers_seuls()
+        else:
+            _passe_simplicite(figer=True)
+            _passe_points_jokers()
+
+    optimal = _etat_passes["optimal"]
+    meilleures_valeurs = _etat_passes["valeurs"]
 
     # Décodage : combien de copies de chaque ensemble placer.
     combos_tokens = []
@@ -667,10 +772,15 @@ BUDGET_TEMPS_DEFAUT = 1.5
 
 
 def resoudre_exact(etat: dict, idx: int, budget_temps: float = BUDGET_TEMPS_DEFAUT,
-                   preferer_simple: bool = True) -> ResultatExact:
+                   preferer_simple: bool = True, eval_config=None) -> ResultatExact:
     """Résout l'état ``etat`` pour le joueur ``idx`` avec le modèle exact
     (HiGHS) et renvoie un :class:`ResultatExact` reconstruit dans notre domaine,
     avec les deux contrôles indépendants (validation + conservation) effectués.
+
+    ``eval_config`` (issue #211) : :class:`evaluation_main.ConfigEvaluation`
+    (ou ``None``) qui, si ``active``, ajoute l'évaluation de la main restante
+    comme objectif secondaire — JAMAIS avant le nombre de tuiles posées. Le
+    poids des points est ajusté au nombre de manches du match (lu dans ``etat``).
 
     Lève :class:`SolveurExactIndisponible` si ``highspy``/``numpy`` manque, ou
     :class:`BudgetExactDepasse` si la limite de temps est épuisée sans solution.
@@ -685,6 +795,11 @@ def resoudre_exact(etat: dict, idx: int, budget_temps: float = BUDGET_TEMPS_DEFA
     chevalet = [tuile_depuis_dict(d) if isinstance(d, dict) else d
                 for d in joueur["chevalet"]]
     mise_min = etat.get("config", {}).get("mise_initiale_min", MISE_INITIALE_MIN)
+    if eval_config is not None and eval_config.active:
+        nb_manches = etat.get("config", {}).get("nb_manches", 1)
+        eval_config = eval_config.avec_manches(nb_manches)
+    else:
+        eval_config = None
 
     debut = time.monotonic()
     if mise_faite:
@@ -707,7 +822,7 @@ def resoudre_exact(etat: dict, idx: int, budget_temps: float = BUDGET_TEMPS_DEFA
 
     combos_tokens, optimal = _resoudre_modele(
         table_tiles, chevalet, mise_faite, mise_min, flexibles_aspects,
-        budget_temps, preferer_simple)
+        budget_temps, preferer_simple, eval_config)
     duree = time.monotonic() - debut
 
     # Reconstruction physique : pool = plateau (hors gelées) + chevalet.
@@ -795,7 +910,7 @@ def _perturbation_resultat(plateau_avant, combos_apres):
 
 
 def resoudre_coup_exact(etat: dict, idx: int, budget_temps: float = BUDGET_TEMPS_DEFAUT,
-                        preferer_simple: bool = True):
+                        preferer_simple: bool = True, eval_config=None):
     """Version « drop-in » à la signature de ``solveur.resoudre_coup`` pour le
     niveau Expert et le juge exact.
 
@@ -807,7 +922,8 @@ def resoudre_coup_exact(etat: dict, idx: int, budget_temps: float = BUDGET_TEMPS
     Lève :class:`SolveurExactIndisponible` (dépendances absentes) ou
     :class:`BudgetExactDepasse` (temps épuisé sans solution)."""
     resultat = resoudre_exact(etat, idx, budget_temps=budget_temps,
-                              preferer_simple=preferer_simple)
+                              preferer_simple=preferer_simple,
+                              eval_config=eval_config)
     if resultat.nb_tuiles == 0 or not resultat.ids_tuiles:
         return None
     if not resultat.valide_globalement:

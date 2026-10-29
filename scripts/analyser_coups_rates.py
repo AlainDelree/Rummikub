@@ -75,7 +75,7 @@ from rummikub.persistance.coups_rates import (  # noqa: E402
     detecter_reserves_joueur, extraire_decisions_ia_toutes,
     extraire_decisions_joueur, filtrer_journaux_depuis,
     repartition_budget_necessaire, resume_joueur_humain,
-    top_coups_rates_complet,
+    top_coups_rates_complet, repartition_solveurs, LIBELLES_SOLVEUR,
 )
 
 LIBELLE_MOMENT = {"avant_mise": "avant la mise initiale",
@@ -238,6 +238,29 @@ def _analyser_tous_journaux_ia(chemins, budget_genereux=10.0,
                   f"{resultat['action']}){marque}", file=sys.stderr)
             tous.append(resultat)
     return tous
+
+
+def afficher_repartition_solveurs(chemins, flux=sys.stdout) -> None:
+    """Répartition du mécanisme décideur des coups d'Expert (#211, 5bis) :
+    modèle exact / recherche de repli / Avancé en repli / non noté. Permet de
+    savoir, en lisant un journal, si Expert a joué avec le modèle exact ou s'est
+    replié silencieusement (``highspy``/``numpy`` absents)."""
+    repart = repartition_solveurs(_charger_parties(chemins))
+    total = sum(repart.values())
+    if not total:
+        return
+    print("=== Mécanisme décideur des coups d'Expert (#211) ===", file=flux)
+    for code in ("exact", "recherche", "avance", None):
+        n = repart.get(code, 0)
+        if not n:
+            continue
+        pct = 100.0 * n / total
+        print(f"  {LIBELLES_SOLVEUR[code]:20s} : {n} coup(s) ({pct:.1f} %)",
+              file=flux)
+    if repart.get("recherche") or repart.get("avance"):
+        print("  (des coups en repli sont présents : à exclure/signaler dans "
+              "une analyse qui suppose le modèle exact.)", file=flux)
+    print(file=flux)
 
 
 def afficher_resume_complet(resume: dict, flux=sys.stdout) -> None:
@@ -771,6 +794,7 @@ def main(argv=None) -> int:
 
     resume = calculer_resume_complet(resultats)
     afficher_resume_complet(resume)
+    afficher_repartition_solveurs(chemins)
     afficher_tableau_tailles(resume)
     afficher_top_complet(resultats, n=args.top)
 

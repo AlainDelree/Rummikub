@@ -35,6 +35,7 @@ from rummikub.moteur.solveur import (
 from rummikub.moteur.solveur_exact import (
     resoudre_exact, SolveurExactIndisponible, BudgetExactDepasse,
 )
+from rummikub.moteur import evaluation_main
 
 
 # --------------------------------------------------------------------------- #
@@ -812,6 +813,14 @@ BUDGET_TEMPS_EXPERT = 1.5  # secondes ; voir solveur_exact / solveur (#206/#186)
 # ``scripts/comparer_niveaux_ia.py --sans-exact``). Lu à l'appel.
 UTILISER_SOLVEUR_EXACT = True
 
+# Réglage #211 : évaluation de la main restante comme critère de départage du
+# modèle exact (doublons, tuiles de bord, points selon le nombre de manches).
+# ``evaluation_main.DEFAUT`` fixe les critères activés PAR DÉFAUT et tous les
+# poids (réunis dans ``moteur/evaluation_main.py``). ``active=False`` par
+# défaut : Expert départage comme avant #211 tant que la simulation n'a pas
+# démontré de gain (voir CONTEXTE.md §13). Lu à l'appel.
+EVAL_MAIN_DEFAUT = evaluation_main.DEFAUT
+
 
 def _coup_recherche(etat, idx, budget_temps, preferer_simple):
     """Recherche arborescente conservée comme repli (``solveur.resoudre_coup``,
@@ -824,7 +833,7 @@ def _coup_recherche(etat, idx, budget_temps, preferer_simple):
         return None, True
 
 
-def _coup_exact(etat, idx, budget_temps, preferer_simple):
+def _coup_exact(etat, idx, budget_temps, preferer_simple, eval_config=None):
     """Modèle exact (#206). Ne lève JAMAIS. Retourne ``(statut, charge)`` :
 
     * ``("coup", coup)`` — un coup optimal a été trouvé ;
@@ -838,7 +847,8 @@ def _coup_exact(etat, idx, budget_temps, preferer_simple):
       vaut ``True`` pour un dépassement de budget, ``False`` sinon."""
     try:
         res = resoudre_exact(etat, idx, budget_temps=budget_temps,
-                             preferer_simple=preferer_simple)
+                             preferer_simple=preferer_simple,
+                             eval_config=eval_config)
     except BudgetExactDepasse:
         return "echec", True
     except SolveurExactIndisponible:
@@ -856,8 +866,32 @@ def _coup_exact(etat, idx, budget_temps, preferer_simple):
                     "nouveau_plateau": res.nouveau_plateau}
 
 
+# Codes du mécanisme ayant décidé le coup d'Expert, enregistrés dans le journal
+# de partie (issue #211, point 5bis) pour que l'analyse puisse exclure/signaler
+# les coups joués en repli (le repli est silencieux quand highspy/numpy
+# manquent). Libellés lisibles : voir ``LIBELLES_SOLVEUR``.
+SOLVEUR_EXACT = "exact"          # modèle exact HiGHS (#206)
+SOLVEUR_RECHERCHE = "recherche"  # recherche arborescente de repli (solveur.py)
+SOLVEUR_AVANCE = "avance"        # Avancé en dernier repli
+
+LIBELLES_SOLVEUR = {
+    SOLVEUR_EXACT: "modèle exact",
+    SOLVEUR_RECHERCHE: "recherche de repli",
+    SOLVEUR_AVANCE: "Avancé en repli",
+}
+
+
+def _marquer_solveur(coup, code):
+    """Annote le coup/action renvoyé par Expert du mécanisme qui l'a décidé
+    (#211, 5bis). Tolère ``None`` (aucun coup)."""
+    if isinstance(coup, dict):
+        coup.setdefault("solveur", code)
+    return coup
+
+
 def jouer_niveau_expert(etat, idx, budget_temps=None, on_repli=None,
-                        preferer_simple=None, utiliser_exact=None):
+                        preferer_simple=None, utiliser_exact=None,
+                        eval_config=None):
     """Niveau Expert : joue le coup qui pose le plus grand nombre de tuiles du
     chevalet, en conservant toutes les tuiles du plateau (#206).
 
@@ -887,30 +921,34 @@ def jouer_niveau_expert(etat, idx, budget_temps=None, on_repli=None,
         preferer_simple = PREFERER_SIMPLICITE
     if utiliser_exact is None:
         utiliser_exact = UTILISER_SOLVEUR_EXACT
+    if eval_config is None:
+        eval_config = EVAL_MAIN_DEFAUT
 
     if utiliser_exact:
-        statut, charge = _coup_exact(etat, idx, budget_temps, preferer_simple)
+        statut, charge = _coup_exact(etat, idx, budget_temps, preferer_simple,
+                                     eval_config)
         if statut == "coup":
-            return charge
+            return _marquer_solveur(charge, SOLVEUR_EXACT)
         if statut == "aucun":
             # Optimum prouvé sans coup : pas de recherche redondante, Avancé
-            # tranche directement entre pioche et passe.
-            return jouer_niveau_avance(etat, idx)
+            # tranche directement entre pioche et passe (le modèle exact a
+            # décidé qu'aucune pose n'était possible).
+            return _marquer_solveur(jouer_niveau_avance(etat, idx), SOLVEUR_EXACT)
         # statut == "echec" : repli sur la recherche arborescente, puis Avancé.
         if on_repli is not None:
             on_repli(charge)  # charge = cause_timeout
         coup, _timeout = _coup_recherche(etat, idx, budget_temps, preferer_simple)
         if coup:
-            return coup
-        return jouer_niveau_avance(etat, idx)
+            return _marquer_solveur(coup, SOLVEUR_RECHERCHE)
+        return _marquer_solveur(jouer_niveau_avance(etat, idx), SOLVEUR_AVANCE)
 
     # Mode « avant » (sans modèle exact) : recherche seule, puis Avancé.
     coup, timeout = _coup_recherche(etat, idx, budget_temps, preferer_simple)
     if coup:
-        return coup
+        return _marquer_solveur(coup, SOLVEUR_RECHERCHE)
     if on_repli is not None:
         on_repli(timeout)
-    return jouer_niveau_avance(etat, idx)
+    return _marquer_solveur(jouer_niveau_avance(etat, idx), SOLVEUR_AVANCE)
 
 
 NIVEAUX_IA = {
