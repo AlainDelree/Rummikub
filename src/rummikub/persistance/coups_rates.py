@@ -605,7 +605,11 @@ def decrire_coup(plateau_avant: list, plateau_apres: list, nom: str = None) -> d
     Retourne ``{"texte": str, "etapes": [...], "complexite": {...}}``."""
     plateau_apres = _relabeler_tuiles_indiscernables(plateau_avant or [], plateau_apres or [])
     resume = description_coup.decrire_coup_ia(plateau_avant, plateau_apres, nom=nom)
-    etapes = description_coup.etapes_coup_ia(plateau_avant, plateau_apres)
+    # Analyse de complexité : on garde le découpage CONDENSÉ (issue #207), base
+    # historique de ``nb_etapes``/``categorie``, indépendamment du nouveau
+    # découpage « une modification » devenu le défaut d'affichage (issue #214).
+    etapes = description_coup.etapes_coup_ia(
+        plateau_avant, plateau_apres, mode="condense")
     return {"texte": resume["texte"], "etapes": etapes,
             "complexite": _complexite_coup(resume, etapes)}
 

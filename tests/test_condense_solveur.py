@@ -82,8 +82,8 @@ def _ids_plateau(plateau):
 
 
 def _verifier(avant, apres):
-    condense = etapes_coup_ia(avant, apres)              # condense=True
-    detaille = etapes_coup_ia(avant, apres, condense=False)
+    condense = etapes_coup_ia(avant, apres, mode="condense")
+    detaille = etapes_coup_ia(avant, apres, mode="detaille")
     assert condense[0]["titre"] == "Départ"
     # Aucune tuile à deux endroits à aucune étape.
     for etape in condense:

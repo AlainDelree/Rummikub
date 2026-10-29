@@ -30,8 +30,8 @@ def _coup_depuis_plateaux(avant, apres, nom):
         "type": "pose", "nom": nom, "joueur_index": 0,
         "plateau_avant": avant, "plateau_apres": apres,
         "resume": decrire_coup_ia(avant, apres, nom=nom)["texte"],
-        "etapes": etapes_coup_ia(avant, apres, condense=True),
-        "etapes_detaillees": etapes_coup_ia(avant, apres, condense=False),
+        "etapes": etapes_coup_ia(avant, apres, mode="modification"),
+        "etapes_detaillees": etapes_coup_ia(avant, apres, mode="detaille"),
         "mesure": mesurer_coup_ia(avant, apres),
     }
 
@@ -307,3 +307,78 @@ def test_bascule_avant_apres(page):
 
     # La partie n'a pas été modifiée.
     assert page.evaluate("etat.dernier_coup_ia.resume") == coup["resume"]
+
+
+# ======================================================== issue #214 : front-end
+
+def test_reperes_origine_relient_depart_et_arrivee(page):
+    """Point 3 de l'issue #214 : quand une tuile change de place à une étape, un
+    repère d'origine est présent — un bandeau « Départ » dans la zone quittée et
+    une pastille « arrivée » sur la tuile à sa nouvelle place. L'écran « Départ »
+    (pas d'étape précédente) n'en porte aucun."""
+    coup = _coup_clara()
+    _injecter_coup(page, coup)
+    page.click("#btn-pas-a-pas-coup-ia")
+
+    # Étape 0 « Départ » : aucun repère (rien n'a encore bougé).
+    assert page.locator(".bandeau-departs").count() == 0
+    assert page.locator(".pastille-arrivee").count() == 0
+
+    vu_bandeau = vu_pastille = False
+    for _ in range(len(coup["etapes"]) - 1):
+        page.click("#btn-pas-a-pas-suivant")
+        if page.locator(".bandeau-departs").count() > 0:
+            vu_bandeau = True
+        if page.locator(".pastille-arrivee").count() > 0:
+            vu_pastille = True
+    assert vu_bandeau, "aucun bandeau « Départ » rencontré"
+    assert vu_pastille, "aucune pastille « arrivée » rencontrée"
+
+
+def test_comparaison_combinaison_inchangee_non_surlignee(page):
+    """Défaut 5a de l'issue #214 : une combinaison identique avant et après (même
+    contenu, identifiants internes ré-étiquetés) ne doit PLUS être entourée de
+    bleu. Ici le groupe de 13 est inchangé (relabellisé a→b), seule la suite
+    rouge est étendue : une seule combinaison mise en évidence côté après."""
+    avant = [
+        [_t(13, "rouge", "a"), _t(13, "noir", "a"), _t(13, "bleu", "a")],
+        [_t(1, "rouge"), _t(2, "rouge"), _t(3, "rouge")],
+    ]
+    apres = [
+        [_t(13, "rouge", "b"), _t(13, "noir", "b"), _t(13, "bleu", "b")],
+        [_t(1, "rouge"), _t(2, "rouge"), _t(3, "rouge"), _t(4, "rouge")],
+    ]
+    coup = _coup_depuis_plateaux(avant, apres, "Léo")
+    # Ouverture directe de la vue comparaison (ce coup ne « mérite » pas le
+    # bouton, mais la comparaison se rend de la même façon).
+    page.evaluate(
+        """(coup) => {
+            etat = { dernier_coup_ia: coup, config: {}, joueurs: [] };
+            coupPasAPasActuel = coup;
+            modeComparaisonPasAPas = true;
+            document.getElementById('overlay-pas-a-pas').className = 'overlay-visible';
+            appliquerVuePasAPas();
+        }""",
+        coup,
+    )
+    # Deux combinaisons après, une SEULE mise en évidence (la suite étendue).
+    assert page.locator("#comparaison-apres .groupe-combinaison").count() == 2
+    assert page.locator("#comparaison-apres .combi-modifiee").count() == 1
+    assert page.locator("#comparaison-avant .combi-modifiee").count() == 1
+
+
+def test_legende_comparaison_illustree_par_des_tuiles(page):
+    """Point 5c de l'issue #214 : chaque repère de la légende contient un vrai
+    exemple — UNE tuile dans le repère vert, UNE dans l'orange, TROIS côte à côte
+    dans le repère bleu (une combinaison), pour que la forme se comprenne sans
+    lire le texte."""
+    _injecter_coup(page, _coup_clara())
+    page.click("#btn-pas-a-pas-coup-ia")
+    page.click("#btn-pas-a-pas-comparaison")
+
+    leg = page.locator("#legende-pas-a-pas")
+    assert leg.locator(".legende-tuile-mini.ce-tour").count() == 1
+    assert leg.locator(".legende-tuile-mini.deplacee-tapis").count() == 1
+    # Repère bleu = une combinaison miniature de trois tuiles.
+    assert leg.locator(".legende-combi-illustree").count() == 1
+    assert leg.locator(".legende-combi-illustree .legende-tuile-mini").count() == 3

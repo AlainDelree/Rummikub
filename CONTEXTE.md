@@ -1856,6 +1856,82 @@ changement au moteur de jeu, à l'IA, à la sauvegarde ni au texte/découpage.
   « Les jokers » du cas Bruno, joker sur le plateau + remplaçant dans le cadre
   tous deux mis en avant).
 
+### 12sexies. Découpage « une étape = une modification », repères d'origine, bascule Avant/Après corrigée (issue #214, suite de #207)
+
+Sur un gros coup d'Expert (Léo), ni le condensé (#207, trop fusionné : plusieurs
+modifications dans une même étape) ni le détaillé (une tuile à la fois, trop
+fin) ne se lisaient bien, et la bascule Avant/Après (#207) avait trois défauts.
+L'issue #214 ajoute un **troisième découpage, devenu le mode par défaut**, et
+corrige la bascule. **Aucun changement au moteur de jeu, à l'IA ni à la
+sauvegarde.**
+
+- **Nouveau découpage « une modification »** (`etapes_coup_ia(avant, apres,
+  mode="modification")`, **défaut** — remplace le condensé comme mode affiché) :
+  chaque étape = UN geste compréhensible portant sur UNE SEULE combinaison, et
+  dit toujours CE qui bouge et D'OÙ ça vient / vers où.
+  - **Défaire une combinaison** = UNE étape : toutes ses tuiles réelles (joker
+    compris) rejoignent le cadre d'un coup, puis la combinaison disparaît
+    (`_texte_defaite` : « Le groupe de 9 est défait : le 9 bleu, le 9 jaune et
+    le 9 noir rejoignent les tuiles à placer. »). C'est le point clé qui
+    distingue ce mode du condensé (où la défaite était invisible) et du
+    détaillé (une étape par destination de tuile). Libérer toutes les tuiles
+    d'une combinaison dès son premier « retrait » reste causalement sûr (une
+    tuile consommée plus loin était de toute façon ordonnée après).
+  - **Créer** / **compléter** une combinaison = UNE étape chacune (comme le
+    condensé). Quand une combinaison ne fait que PERDRE une tuile
+    (continuation « update »), le texte précise qu'elle rejoint le cadre
+    (`_texte_update_modif` : « Le 11 rouge sort de la suite rouge (8 à 11) et
+    rejoint les tuiles à placer. »).
+  - Ordre causal, cadre « tuiles à placer », écran « Départ », écran « Les
+    jokers », dernière étape (plateau d'après exact, cadre vide) et surbrillance
+    forte `.tuile-pas-active` (#209) : tous **inchangés**. Résultat : coup de
+    Clara tour 45 = 16 étapes (condensé 10, détaillé 30), entre les deux ;
+    chaque étape ne touche qu'une combinaison (vérifié PAR ASPECT, une
+    relabellisation invisible de tuiles indiscernables ne comptant pas). Borne
+    testée : `nb_combinaisons_modifiees + nb_combinaisons_creees + 3`.
+- **`mode`** ∈ {`"modification"` (défaut), `"detaille"` (= ancien
+  `condense=False`, bouton « Détailler »), `"condense"` (= ancien
+  `condense=True`, conservé pour `coups_rates.py` et la non-régression)}.
+  L'ancien booléen `condense` reste accepté (`True`→condensé, `False`→détaillé)
+  ; `mode` prime. `api.py` stocke désormais `etapes` = `"modification"` et
+  `etapes_detaillees` = `"detaille"`. `coups_rates.py` est épinglé à
+  `"condense"` (base historique de `nb_etapes`/`categorie`, inchangée).
+- **Repères d'origine (front-end, `jeu.js`/`jeu.css`)** : à chaque étape, pour
+  chaque tuile nommée qui vient de changer de place (cadre→plateau quand une
+  combinaison se forme/complète, plateau→cadre quand une combinaison est
+  défaite), un **couple de pastilles de même couleur** — un bandeau « Départ »
+  dans la zone quittée (`.bandeau-departs`/`.chip-depart`) et une pastille
+  « arrivée » en coin de la tuile à sa nouvelle place (`.pastille-arrivee`).
+  Calculés en JS par diff avec l'étape précédente (`calculerReperesOrigine`).
+  **Limite connue (signalée comme prévu par l'issue)** : une vraie flèche
+  reliant les deux points n'est pas réalisable proprement dans la mise en page
+  actuelle (cadre et plateau sont deux zones séparées, re-rendues à chaque
+  étape), d'où le repli par pastilles explicitement prévu.
+- **Bascule Avant/Après corrigée** (`rendreComparaisonPasAPas`) :
+  - **5a — combinaison inchangée** : comparaison par CONTENU VISIBLE (multiset
+    d'aspects, identifiants ignorés — `signatureAspectCombo` /
+    `indexCombinaisonsModifiees`, même principe que
+    `_relabeler_tuiles_indiscernables`) plutôt que par ids. Une combinaison
+    identique avant/après n'est plus entourée de bleu. Les repères de tuile
+    (vert/orange) ne sont posés que DANS une combinaison mise en évidence.
+  - **5b — vert/orange plus visibles** : dans l'overlay les tuiles ne portent
+    pas `.tapis-manipulable`, donc les liserés du vrai tapis ne s'appliquaient
+    pas (repères quasi invisibles). Règles dédiées `.carte-pas-a-pas .tuile-jeu.
+    ce-tour`/`.deplacee-tapis` : contour épais + halo + voile teinté (inset),
+    lisibles sur n'importe quelle couleur de tuile et sur les deux thèmes.
+  - **5c — légende illustrée** (`construireLegendePasAPas`) : un vrai exemple
+    DANS chaque repère — UNE mini-tuile dans le repère vert et orange, TROIS
+    côte à côte dans le repère bleu (`.legende-combi-illustree`), pour que la
+    forme (une tuile vs une combinaison) se comprenne sans lire le texte.
+- **Tests** : `tests/test_description_coup.py` (section « une modification » :
+  défaite en une étape, sortie explicite vers le cadre, Clara entre condensé et
+  détaillé, invariants sur les gros coups réels, coup court inchangé,
+  rétrocompat `condense`) ; `tests/test_playwright_pas_a_pas.py` (repères
+  d'origine départ/arrivée présents quand une tuile bouge et absents au
+  « Départ », combinaison inchangée non surlignée, légende illustrée) ;
+  `tests/test_condense_solveur.py` et `coups_rates` épinglés à `mode="condense"`
+  (comportement inchangé).
+
 ## 13. Pistes d'amélioration de l'IA à tester (issue #195)
 
 Idées formulées par Alain au fil des parties de calibrage contre Expert,

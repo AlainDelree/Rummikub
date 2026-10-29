@@ -672,6 +672,37 @@ def _texte_update(op: dict, desc) -> str:
             f"{_contracter('de', desc(op['tuiles_avant']))}.")
 
 
+# ------------------------- textes du découpage « une étape = une modification »
+# (issue #214) : chaque étape porte sur UNE SEULE combinaison, et dit toujours
+# CE qui bouge et D'OÙ ça vient (ou vers où).
+
+def _texte_defaite(tuiles_avant: list, tuiles_parties: list, desc) -> str:
+    """Texte d'une étape « défaire une combinaison » (mode « une modification »,
+    issue #214) : la combinaison est nommée, et ses tuiles réelles (joker
+    compris) rejoignent le cadre « tuiles à placer ». Ex. « Le groupe de 9 est
+    défait : le 9 bleu, le 9 jaune et le 9 noir rejoignent les tuiles à
+    placer. »"""
+    sujet = _maj(desc(tuiles_avant))
+    accord = "e" if _est_feminin(tuiles_avant) else ""
+    liste = _lister_tuiles_def(tuiles_parties)
+    verbe = "rejoint" if len(tuiles_parties) == 1 else "rejoignent"
+    return f"{sujet} est défait{accord} : {liste} {verbe} les tuiles à placer."
+
+
+def _texte_update_modif(op: dict, desc) -> str:
+    """Comme ``_texte_update``, mais pour une étape « une modification » : quand
+    la combinaison ne fait QUE perdre des tuiles (aucune arrivée), on précise
+    qu'elles rejoignent le cadre, pour qu'on relie la tuile qui réapparaît dans
+    les « tuiles à placer » à la combinaison dont elle sort (issue #214,
+    point 2 — « Le 11 rouge sort de la suite rouge (8 à 11) et rejoint les
+    tuiles à placer »)."""
+    if op["retirees_vues"] and not op["ajoutees_vues"]:
+        verbe2 = "rejoint" if len(op["retirees_vues"]) == 1 else "rejoignent"
+        base = _texte_update(op, desc)
+        return base[:-1] + f" et {verbe2} les tuiles à placer."
+    return _texte_update(op, desc)
+
+
 # ------------------------------------------------------- résumé écrit (gauche)
 
 def _tuiles_posees_brut(plateau_avant: list, plateau_apres: list) -> list:
@@ -890,7 +921,7 @@ def _snapshot_cadre(cadre: dict) -> list:
 
 
 def etapes_coup_ia(plateau_avant: list, plateau_apres: list,
-                   condense: bool = True) -> list:
+                   mode: str = None, condense: bool = None) -> list:
     """Découpe un coup de l'IA en une suite d'états cohérents pour le rejeu
     pas-à-pas : à chaque étape, chaque tuile n'est qu'à un seul endroit à la
     fois (sur le plateau, instantané ``plateau``, ou dans le cadre « tuiles à
@@ -900,13 +931,26 @@ def etapes_coup_ia(plateau_avant: list, plateau_apres: list,
     changement visible. La toute dernière étape correspond exactement à
     ``plateau_apres``, avec un cadre vide.
 
-    ``condense`` (défaut, issue #207) regroupe les gestes par combinaison :
-    une étape par combinaison CRÉÉE ou COMPLÉTÉE, les tuiles libérées d'une
-    combinaison défaite transitant par le cadre sans étape dédiée (les
-    combinaisons rétrécies apparaissent « provisoires »). Le découpage détaillé
-    historique (une étape par mouvement de tuile, issue #191) reste accessible
-    avec ``condense=False`` (bouton « Détailler » du front-end). Pour un coup
-    court, les deux découpages coïncident.
+    Trois découpages (``mode``) :
+
+    - ``"modification"`` (DÉFAUT, issue #214) : **une étape = une
+      modification**, c.-à-d. un seul geste compréhensible portant sur UNE
+      combinaison — défaire une combinaison (toutes ses tuiles réelles, joker
+      compris, rejoignent le cadre en une étape), créer une combinaison,
+      compléter une combinaison, ou une tuile/joker qui sort d'une combinaison
+      et rejoint le cadre. Jamais deux combinaisons dans la même étape (défaut
+      du condensé), jamais une étape par tuile (défaut du détaillé). C'est le
+      mode affiché par défaut par le front-end.
+    - ``"detaille"`` (= ancien ``condense=False``, issue #191) : une étape par
+      mouvement de tuile (bouton « Détailler » du front-end).
+    - ``"condense"`` (= ancien ``condense=True``, issue #207) : regroupe les
+      gestes par combinaison CRÉÉE ou COMPLÉTÉE, les tuiles libérées
+      transitant par le cadre SANS étape dédiée. Conservé pour l'analyse des
+      coups ratés (``persistance/coups_rates.py``) et la non-régression.
+
+    Compatibilité : l'ancien paramètre booléen ``condense`` reste accepté
+    (``True`` → ``"condense"``, ``False`` → ``"detaille"``) ; ``mode`` prime
+    s'il est fourni. Sans aucun des deux, le mode est ``"modification"``.
 
     Chaque étape est un dict {"titre": str, "texte": str, "plateau": [...],
     "cadre": [{"tuile": dict, "origine": "main"|"plateau"}, ...],
@@ -917,6 +961,9 @@ def etapes_coup_ia(plateau_avant: list, plateau_apres: list,
     simplifiée à deux étapes (départ puis arrivée)."""
     plateau_avant = plateau_avant or []
     plateau_apres = plateau_apres or []
+    if mode is None:
+        mode = ("condense" if condense else "detaille") \
+            if condense is not None else "modification"
     # Pas de relabellisation ici (contrairement à ``decrire_coup_ia``) : le
     # découpage en étapes neutralise déjà les échanges de tuiles identiques
     # (``_annuler_par_aspect`` dans une combinaison, repli pour un cycle entre
@@ -924,7 +971,7 @@ def etapes_coup_ia(plateau_avant: list, plateau_apres: list,
     # même contenu, peut au contraire casser le suivi causal d'un très gros
     # coup (issue #207).
     try:
-        return _etapes_coup_ia(plateau_avant, plateau_apres, condense=condense)
+        return _etapes_coup_ia(plateau_avant, plateau_apres, mode=mode)
     except Exception:
         return _etapes_coup_ia_repli(plateau_avant, plateau_apres)
 
@@ -954,12 +1001,13 @@ def _etapes_coup_ia_repli(plateau_avant: list, plateau_apres: list) -> list:
 
 
 def _etapes_coup_ia(plateau_avant: list, plateau_apres: list,
-                    condense: bool = True) -> list:
+                    mode: str = "modification") -> list:
     r = _construire_operations(plateau_avant, plateau_apres)
     ops = r["ops"]
     if not ops and not r["tuiles_posees"]:
         return []  # rien à rejouer
     desc = _desc_fabrique(r)
+    condense = mode == "condense"
 
     working = {}
     for i, combo in enumerate(plateau_avant):
@@ -1034,6 +1082,7 @@ def _etapes_coup_ia(plateau_avant: list, plateau_apres: list,
     # l'ordre entre elles. Un bloc est par construction entièrement
     # invisible (aucune étape affichée pour ses membres).
     i = 0
+    defait_emis = set()   # mode « modification » : combinaisons déjà défaites
     while i < len(ops):
         bloc = ops[i].get("bloc")
         if bloc is not None:
@@ -1056,26 +1105,53 @@ def _etapes_coup_ia(plateau_avant: list, plateau_apres: list,
         ids_touchees = []
         invisible = False
         if op["kind"] == "retrait":
-            ids_touchees = [d["id"] for d in op["tuiles"]]
-            slot = f"a{op['avant_idx']}"
-            ids_set = set(ids_touchees)
-            for tid, d in zip(ids_touchees, op["tuiles"]):
-                cadre[tid] = {"tuile": d, "origine": "plateau"}
-            working[slot] = [d for d in working[slot] if d["id"] not in ids_set]
-            if not working[slot]:
-                del working[slot]
-            donneur = desc(op["tuiles_avant"])
-            verbe = "sort" if len(op["tuiles"]) == 1 else "sortent"
-            texte = (f"{_maj(_lister_tuiles_def(op['tuiles']))} {verbe} "
-                      f"{_contracter('de', donneur)}.")
-            # Mode condensé (issue #207) : les tuiles libérées d'une combinaison
-            # défaite transitent par le cadre SANS étape dédiée — on garde la
-            # mise à jour working/cadre ci-dessus (suivi causal exact), mais la
-            # combinaison qui se reforme (« create »/« update ») portera à elle
-            # seule une étape. La combinaison d'origine rétrécie reste visible
-            # comme « provisoire » jusqu'à ce que sa dernière tuile parte.
-            if condense:
-                invisible = True
+            avant_idx = op["avant_idx"]
+            if mode == "modification":
+                # Mode « une modification » (issue #214) : défaire une
+                # combinaison = UNE SEULE étape. Toutes ses tuiles réelles
+                # (joker compris) rejoignent le cadre d'un coup, puis la
+                # combinaison disparaît. Les « retrait » de la même combinaison
+                # vers d'autres destinations (dispersés dans l'ordre causal)
+                # sont donc déjà traités : on les saute. Libérer toutes ses
+                # tuiles dès le premier « retrait » reste causalement sûr (une
+                # tuile consommée plus loin était de toute façon ordonnée après
+                # ce premier retrait).
+                if avant_idx in defait_emis:
+                    continue
+                defait_emis.add(avant_idx)
+                slot = f"a{avant_idx}"
+                tuiles_parties = [d for o in ops
+                                  if o["kind"] == "retrait"
+                                  and o["avant_idx"] == avant_idx
+                                  for d in o["tuiles"]]
+                for d in tuiles_parties:
+                    cadre[d["id"]] = {"tuile": d, "origine": "plateau"}
+                if slot in working:
+                    del working[slot]
+                ids_touchees = [d["id"] for d in tuiles_parties]
+                texte = _texte_defaite(op["tuiles_avant"], tuiles_parties, desc)
+            else:
+                ids_touchees = [d["id"] for d in op["tuiles"]]
+                slot = f"a{avant_idx}"
+                ids_set = set(ids_touchees)
+                for tid, d in zip(ids_touchees, op["tuiles"]):
+                    cadre[tid] = {"tuile": d, "origine": "plateau"}
+                working[slot] = [d for d in working[slot] if d["id"] not in ids_set]
+                if not working[slot]:
+                    del working[slot]
+                donneur = desc(op["tuiles_avant"])
+                verbe = "sort" if len(op["tuiles"]) == 1 else "sortent"
+                texte = (f"{_maj(_lister_tuiles_def(op['tuiles']))} {verbe} "
+                          f"{_contracter('de', donneur)}.")
+                # Mode condensé (issue #207) : les tuiles libérées d'une
+                # combinaison défaite transitent par le cadre SANS étape
+                # dédiée — on garde la mise à jour working/cadre ci-dessus
+                # (suivi causal exact), mais la combinaison qui se reforme
+                # (« create »/« update ») portera à elle seule une étape. La
+                # combinaison d'origine rétrécie reste visible « provisoire »
+                # jusqu'à ce que sa dernière tuile parte.
+                if condense:
+                    invisible = True
 
         elif op["kind"] == "update":
             slot = f"a{op['avant_idx']}"
@@ -1091,7 +1167,8 @@ def _etapes_coup_ia(plateau_avant: list, plateau_apres: list,
                 invisible = True
             else:
                 ids_touchees = [d["id"] for d in op["retirees_vues"] + op["ajoutees_vues"]]
-                texte = _texte_update(op, desc)
+                texte = (_texte_update_modif(op, desc) if mode == "modification"
+                         else _texte_update(op, desc))
 
         else:  # create
             slot = f"c{op['apres_idx']}"
@@ -1105,11 +1182,12 @@ def _etapes_coup_ia(plateau_avant: list, plateau_apres: list,
         if not invisible:
             etapes.append(etat_courant("", texte, ids_touchees))
 
-    # Mode condensé : garantir que la toute dernière étape est bien le plateau
-    # d'après exact, cadre vide (issue #207). En pratique le dernier « create »
-    # produit déjà cet état ; ce filet le rend robuste et `_sans_etapes_sans_
-    # effet` supprime ce doublon s'il n'apporte rien.
-    if condense and len(etapes) > 1:
+    # Modes « condensé » et « une modification » : garantir que la toute
+    # dernière étape est bien le plateau d'après exact, cadre vide (issue #207,
+    # #214). En pratique le dernier « create » produit déjà cet état ; ce filet
+    # le rend robuste et `_sans_etapes_sans_effet` supprime ce doublon s'il
+    # n'apporte rien.
+    if mode in ("condense", "modification") and len(etapes) > 1:
         etapes.append(etat_courant("", "Après le coup.", []))
 
     return _sans_etapes_sans_effet(etapes)

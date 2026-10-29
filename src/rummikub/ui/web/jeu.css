@@ -662,6 +662,56 @@ button:disabled { opacity: 0.4; cursor: not-allowed; }
 .legende-combi-modifiee { display: inline-block; width: 22px; height: 16px;
   border: 2px solid #3b82f6; background: rgba(59,130,246,0.12);
   border-radius: 4px; }
+/* Légende illustrée (issue #214, point 5c) : repère bleu = une vraie
+   combinaison miniature (trois mini-tuiles) entourée du même liseré bleu que
+   .combi-modifiee, pour signifier « une combinaison » (vs une seule tuile pour
+   les repères vert/orange). */
+.legende-combi-illustree { display: inline-flex; gap: 2px; padding: 3px;
+  border: 2px solid #3b82f6; background: rgba(59,130,246,0.14);
+  border-radius: 6px; vertical-align: middle; }
+.legende-combi-illustree .legende-tuile-mini { animation: none; }
+
+/* Repères « venue de la main » (vert) et « déplacée d'une autre combinaison »
+   (orange) nettement plus visibles dans le pas-à-pas (issue #214, point 5b) :
+   dans l'overlay, les tuiles ne portent PAS .tapis-manipulable, donc les
+   liserés du vrai tapis ne s'appliquent pas — on redéfinit ici un contour épais
+   + halo + léger voile teinté, lisibles sur n'importe quelle couleur de tuile
+   et sur les deux thèmes. Le voile (inset) laisse le disque et le chiffre,
+   dessinés par-dessus, parfaitement lisibles. */
+.carte-pas-a-pas .tuile-jeu.ce-tour {
+  border: 3px solid #16a34a;
+  box-shadow: inset 0 0 0 999px rgba(34,197,94,0.16),
+              0 0 0 2px rgba(34,197,94,0.45),
+              0 0 11px 2px rgba(34,197,94,0.75);
+}
+.carte-pas-a-pas .tuile-jeu.deplacee-tapis {
+  border: 3px solid #ea580c;
+  box-shadow: inset 0 0 0 999px rgba(245,158,11,0.18),
+              0 0 0 2px rgba(245,158,11,0.5),
+              0 0 11px 2px rgba(245,158,11,0.8);
+}
+
+/* Repères d'origine (issue #214, point 3) : couple de pastilles de même couleur
+   reliant le point de départ d'une tuile (bandeau « Départ » de la zone
+   quittée) à son arrivée (pastille en coin de la tuile, à sa nouvelle place). */
+.carte-pas-a-pas .cadre-tuiles-pas-a-pas .tuile-jeu,
+.carte-pas-a-pas .zone-plateau-pas-a-pas .tuile-jeu { position: relative; }
+.pastille-arrivee { position: absolute; top: -4px; right: -4px;
+  width: 13px; height: 13px; border-radius: 50%;
+  background: var(--repere); border: 2px solid #fff; z-index: 5;
+  box-shadow: 0 0 4px 1px rgba(0,0,0,0.45); }
+.bandeau-departs { display: flex; flex-wrap: wrap; align-items: center;
+  gap: 6px; width: 100%; margin-bottom: 8px; padding: 4px 8px;
+  background: rgba(255,255,255,0.85); border-radius: 8px;
+  font-size: 0.72rem; color: #1f2937; }
+.bandeau-departs-titre { font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.03em; opacity: 0.8; }
+.chip-depart { position: relative; display: inline-flex; align-items: center;
+  padding: 1px 8px 1px 19px; border-radius: 10px;
+  border: 1.5px solid var(--repere); background: #fff; color: #1f2937; }
+.chip-depart::before { content: ""; position: absolute; left: 5px; top: 50%;
+  transform: translateY(-50%); width: 9px; height: 9px; border-radius: 50%;
+  background: var(--repere); }
 .soustitre-etape-pas-a-pas { color: var(--couleur-ordinateur); font-size: 0.85rem;
   font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em;
   margin: 0 0 2px; min-height: 1.1em; }

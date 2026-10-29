@@ -556,8 +556,8 @@ def test_condense_clara_tour45_moins_de_douze_etapes():
     moins de 12 étapes une fois condensé, borné par « combinaisons modifiées
     + 4 » (issue #207, point 1), avec les mêmes invariants qu'avant."""
     avant, apres = _charger_plateaux("pas_a_pas_clara_tour45.json")
-    condense = etapes_coup_ia(avant, apres)              # condense=True par défaut
-    detaille = etapes_coup_ia(avant, apres, condense=False)
+    condense = etapes_coup_ia(avant, apres, mode="condense")
+    detaille = etapes_coup_ia(avant, apres, mode="detaille")
 
     _verifier_invariants_condense(avant, apres, condense)
     assert len(condense) < 12
@@ -589,8 +589,8 @@ def test_condense_position_fabriquee_proprietes():
         [t(11, "bleu"), t(12, "bleu"), t(13, "bleu")],
         [t(12, "jaune"), t(12, "noir"), j(1)],
     ]
-    condense = etapes_coup_ia(avant, apres)
-    detaille = etapes_coup_ia(avant, apres, condense=False)
+    condense = etapes_coup_ia(avant, apres, mode="condense")
+    detaille = etapes_coup_ia(avant, apres, mode="detaille")
     _verifier_invariants_condense(avant, apres, condense)
     assert len(condense) < len(detaille)
     mesure = mesurer_coup_ia(avant, apres)
@@ -630,3 +630,145 @@ def test_resume_ignore_echange_tuiles_identiques_entre_combinaisons():
     assert r["nb_combinaisons_modifiees"] == 0
     assert r["nb_combinaisons_defaites"] == 0
     assert r["texte"] == "N'a rien changé sur le plateau."
+
+
+# ============================= découpage « une étape = une modification » (#214)
+# Mode PAR DÉFAUT depuis l'issue #214 : chaque étape porte sur UNE combinaison
+# (défaire / créer / compléter / sortir une tuile vers le cadre), jamais deux,
+# jamais une étape par tuile.
+
+def _aspect_combo(combo):
+    """Signature VISUELLE d'une combinaison (multiset d'aspects, identifiants
+    ignorés) — deux combinaisons de même signature sont indiscernables à
+    l'écran."""
+    return tuple(sorted(
+        "joker" if d.get("est_joker") else f"{d['valeur']}_{d['couleur']}"
+        for d in combo))
+
+
+def _verifier_une_modification_par_etape(etapes):
+    """Chaque étape de changement (titre vide) ne touche VISUELLEMENT qu'une
+    seule combinaison par rapport à la précédente : au plus une combinaison
+    apparaît (création/complétion) et au plus une disparaît (défaite), par
+    ASPECT — une relabellisation invisible de tuiles indiscernables ne compte
+    pas (issue #214, point 1)."""
+    from collections import Counter
+    precedent = None
+    for etape in etapes:
+        courant = Counter(_aspect_combo(c) for c in etape["plateau"] if c)
+        if precedent is not None and not etape["titre"]:
+            apparues = courant - precedent
+            disparues = precedent - courant
+            assert sum(apparues.values()) <= 1, \
+                f"plusieurs combinaisons apparaissent : {etape['texte']}"
+            assert sum(disparues.values()) <= 1, \
+                f"plusieurs combinaisons disparaissent : {etape['texte']}"
+        precedent = courant
+
+
+def test_modification_defaire_une_combinaison_en_une_etape():
+    """Un groupe de 12 démantelé vers trois combinaisons : en mode « une
+    modification », il est défait en UNE SEULE étape (ses trois tuiles rejoignent
+    le cadre d'un coup), pas une étape par tuile comme en détaillé."""
+    avant = [[t(12, "rouge"), t(12, "bleu"), t(12, "jaune")]]
+    apres = [
+        [t(10, "rouge"), t(11, "rouge"), t(12, "rouge")],
+        [t(11, "bleu"), t(12, "bleu"), t(13, "bleu")],
+        [t(12, "jaune"), t(12, "noir"), j(1)],
+    ]
+    etapes = etapes_coup_ia(avant, apres)          # mode « modification » par défaut
+    _verifier_invariants_condense(avant, apres, etapes)
+    _verifier_une_modification_par_etape(etapes)
+
+    defaites = [e for e in etapes if "est défait" in e["texte"]]
+    assert len(defaites) == 1
+    # Le texte nomme la combinaison ET ses tuiles qui rejoignent le cadre.
+    txt = defaites[0]["texte"]
+    assert "groupe de 12" in txt
+    assert "rejoignent les tuiles à placer" in txt
+    assert "12 rouge" in txt and "12 bleu" in txt and "12 jaune" in txt
+    # À cette étape, les trois 12 sont dans le cadre (et nulle part ailleurs).
+    assert {"rouge_12_a", "bleu_12_a", "jaune_12_a"} <= set(
+        _ids_cadre(defaites[0]["cadre"]))
+    # Une étape par création (3) + la défaite (1) : 4 changements, bien plus
+    # que le condensé (3) mais bien moins que le détaillé.
+    changements = [e for e in etapes if not e["titre"]]
+    assert len(changements) == 4
+    detaille = etapes_coup_ia(avant, apres, mode="detaille")
+    condense = etapes_coup_ia(avant, apres, mode="condense")
+    assert len(condense) < len(etapes) < len(detaille)
+
+
+def test_modification_sortie_vers_le_cadre_est_explicite():
+    """Point 2 de l'issue #214 : quand une combinaison ne fait que PERDRE une
+    tuile (continuation « update »), l'étape dit où elle va (le cadre)."""
+    # Suite rouge 8-9-10-11 : l'IA retire le 11 (il ira ailleurs) et garde la
+    # suite 8-9-10 ; les 8,9,10 restent majoritaires -> continuation « update ».
+    avant = [[t(8, "rouge"), t(9, "rouge"), t(10, "rouge"), t(11, "rouge")],
+             [t(11, "bleu"), t(11, "noir")]]
+    apres = [[t(8, "rouge"), t(9, "rouge"), t(10, "rouge")],
+             [t(11, "rouge"), t(11, "bleu"), t(11, "noir")]]
+    etapes = etapes_coup_ia(avant, apres)
+    sorties = [e for e in etapes if "11 rouge" in e["texte"] and "sort" in e["texte"]]
+    assert sorties, [e["texte"] for e in etapes]
+    assert "rejoint les tuiles à placer" in sorties[0]["texte"]
+
+
+def test_modification_clara_tour45_entre_condense_et_detaille():
+    """Le vrai coup de Clara : le découpage « une modification » se situe
+    strictement entre le condensé (trop fusionné) et le détaillé (trop fin),
+    chaque étape ne touche qu'une combinaison, invariants préservés, nombre
+    d'étapes borné par « combinaisons modifiées + créées + 3 » (issue #214)."""
+    avant, apres = _charger_plateaux("pas_a_pas_clara_tour45.json")
+    modif = etapes_coup_ia(avant, apres)           # défaut = « modification »
+    condense = etapes_coup_ia(avant, apres, mode="condense")
+    detaille = etapes_coup_ia(avant, apres, mode="detaille")
+
+    _verifier_invariants_condense(avant, apres, modif)
+    _verifier_une_modification_par_etape(modif)
+    assert len(condense) < len(modif) < len(detaille)
+
+    mesure = mesurer_coup_ia(avant, apres)
+    borne = mesure["nb_combinaisons_modifiees"] + mesure["nb_combinaisons_creees"] + 3
+    assert len(modif) <= borne
+    # Au moins une étape « défaite » explicite (le cœur de l'issue #214).
+    assert any("est défait" in e["texte"] for e in modif)
+
+
+def test_modification_invariants_sur_gros_coups_reels():
+    """Invariants (aucune tuile à deux endroits, plateau final exact, une
+    combinaison par étape) sur les plus gros coups réels fournis (issue #214,
+    point 7)."""
+    for nom in ("pas_a_pas_clara_final.json", "pas_a_pas_alice_final.json"):
+        avant, apres = _charger_plateaux(nom)
+        modif = etapes_coup_ia(avant, apres)
+        _verifier_invariants_condense(avant, apres, modif)
+        _verifier_une_modification_par_etape(modif)
+        assert len(modif) < len(etapes_coup_ia(avant, apres, mode="detaille"))
+
+
+def test_modification_coup_court_inchange():
+    """Un coup court (pose de 3 tuiles formant un groupe) donne le même
+    découpage dans les trois modes (issue #214 : les coups courts restent
+    inchangés)."""
+    avant = [[t(7, "rouge"), t(7, "bleu"), t(7, "noir")]]
+    apres = [
+        [t(7, "rouge"), t(7, "bleu"), t(7, "noir")],
+        [t(5, "rouge"), t(5, "bleu"), t(5, "noir")],
+    ]
+    modif = etapes_coup_ia(avant, apres)
+    assert modif == etapes_coup_ia(avant, apres, mode="condense")
+    assert modif == etapes_coup_ia(avant, apres, mode="detaille")
+
+
+def test_modification_retrocompat_parametre_condense():
+    """L'ancien paramètre booléen ``condense`` reste accepté (condense=True →
+    condensé, condense=False → détaillé) ; sans paramètre, c'est le nouveau mode
+    « une modification »."""
+    avant, apres = _charger_plateaux("pas_a_pas_clara_tour45.json")
+    assert etapes_coup_ia(avant, apres, condense=True) == \
+        etapes_coup_ia(avant, apres, mode="condense")
+    assert etapes_coup_ia(avant, apres, condense=False) == \
+        etapes_coup_ia(avant, apres, mode="detaille")
+    assert etapes_coup_ia(avant, apres) == \
+        etapes_coup_ia(avant, apres, mode="modification")

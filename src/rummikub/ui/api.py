@@ -231,12 +231,13 @@ class Api:
                 resume = decrire_coup_ia(plateau_avant, plateau_apres,
                                           nom=etat["joueurs"][idx]["nom"])
                 etat["dernier_coup_ia"]["resume"] = resume["texte"]
-                # Pas-à-pas CONDENSÉ par défaut (issue #207) + découpage
-                # DÉTAILLÉ (bouton « Détailler »), calculés une seule fois ici.
+                # Découpage « une étape = une modification » par défaut (issue
+                # #214, remplace le condensé #207) + découpage DÉTAILLÉ (bouton
+                # « Détailler »), calculés une seule fois ici.
                 etat["dernier_coup_ia"]["etapes"] = etapes_coup_ia(
-                    plateau_avant, plateau_apres, condense=True)
+                    plateau_avant, plateau_apres, mode="modification")
                 etat["dernier_coup_ia"]["etapes_detaillees"] = etapes_coup_ia(
-                    plateau_avant, plateau_apres, condense=False)
+                    plateau_avant, plateau_apres, mode="detaille")
                 # Mesure d'ampleur du coup : ligne de titre du pas-à-pas et
                 # critère d'affichage du bouton « Pas à pas ».
                 etat["dernier_coup_ia"]["mesure"] = mesurer_coup_ia(

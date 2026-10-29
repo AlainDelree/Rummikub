@@ -196,11 +196,12 @@
             <div id="comparaison-apres" class="zone-plateau-pas-a-pas comparaison-plateau"></div>
           </div>
         </div>
-        <div id="legende-pas-a-pas" class="legende-pas-a-pas">
-          <span class="legende-pas-item"><span class="legende-tuile-mini tuile-jeu ce-tour"></span> Venue de la main de l'IA</span>
-          <span class="legende-pas-item"><span class="legende-tuile-mini tuile-jeu deplacee-tapis"></span> Déplacée d'une autre combinaison</span>
-          <span class="legende-pas-item"><span class="legende-combi-modifiee"></span> Combinaison modifiée ou créée</span>
-        </div>
+        <!-- Légende illustrée (issue #214, point 5c) : chaque repère contient
+             un vrai exemple — UNE tuile dans le repère vert/orange, TROIS
+             tuiles côte à côte dans le repère bleu — pour qu'on comprenne d'un
+             coup d'œil que les deux premiers marquent UNE tuile et le troisième
+             UNE combinaison. Peuplée par construireLegendePasAPas(). -->
+        <div id="legende-pas-a-pas" class="legende-pas-a-pas"></div>
       </div>
 
       <button type="button" id="btn-pas-a-pas-quitter" class="btn-secondaire btn-pas-a-pas-quitter">

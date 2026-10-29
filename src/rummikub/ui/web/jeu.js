@@ -1898,10 +1898,92 @@ function nbChangementsPasAPas(etapes) {
 // que la phrase de l'étape nomme (etape.surbrillance), pour qu'on les repère
 // d'un coup d'œil, nettement plus que le cadre provisoire et le liseré de la
 // combinaison modifiée.
-function rendreApercuPlateauPasAPas(conteneur, plateau, provisoires, surbrillance) {
+// Palette des pastilles d'origine (issue #214, point 3) : couleurs vives,
+// distinctes des couleurs de tuile (rouge/bleu/jaune/noir) et du magenta de la
+// surbrillance active, pour relier sans ambiguïté une tuile à son point de
+// départ.
+const COULEURS_REPERE = ["#06b6d4", "#a855f7", "#14b8a6", "#f97316",
+                         "#8b5cf6", "#0ea5e9"];
+
+// Repères d'origine d'une étape (issue #214, point 3) : pour chaque tuile qui
+// vient de CHANGER d'endroit entre l'étape précédente et celle-ci (cadre →
+// plateau quand une combinaison se forme/complète, plateau → cadre quand une
+// combinaison est défaite), on prépare un couple de pastilles de MÊME couleur :
+// une « départ » dans la zone qu'elle quitte, une « arrivée » sur la tuile à sa
+// nouvelle place. On se limite aux tuiles nommées par l'étape (surbrillance)
+// pour rester lisible. Une vraie flèche reliant les deux points n'est pas
+// réalisable proprement dans la mise en page actuelle (cadre et plateau sont
+// deux zones séparées, re-rendues à chaque étape) : on livre donc le repère par
+// pastilles, explicitement prévu en repli par l'issue.
+function calculerReperesOrigine(etapePrec, etape) {
+  const vide = { arrivees: {}, departsCadre: [], departsPlateau: [] };
+  if (!etapePrec) return vide;
+  const idsCadre = (e) => new Set((e.cadre || []).map((c) => c.tuile.id));
+  const idsPlateau = (e) => new Set(
+    (e.plateau || []).flat().map((d) => d.id));
+  const cadrePrec = idsCadre(etapePrec), platPrec = idsPlateau(etapePrec);
+  const cadreCur = idsCadre(etape), platCur = idsPlateau(etape);
+  const dictCur = {};
+  (etape.cadre || []).forEach((c) => { dictCur[c.tuile.id] = c.tuile; });
+  (etape.plateau || []).flat().forEach((d) => { dictCur[d.id] = d; });
+
+  const arrivees = {}, departsCadre = [], departsPlateau = [];
+  let n = 0;
+  (etape.surbrillance || []).forEach((id) => {
+    const dict = dictCur[id];
+    if (!dict) return;
+    let sens = null;
+    if (platCur.has(id) && cadrePrec.has(id)) sens = "cadre->plateau";
+    else if (cadreCur.has(id) && platPrec.has(id)) sens = "plateau->cadre";
+    if (!sens) return;
+    const couleur = COULEURS_REPERE[n % COULEURS_REPERE.length];
+    n += 1;
+    arrivees[id] = couleur;
+    if (sens === "cadre->plateau") departsCadre.push({ dict, couleur });
+    else departsPlateau.push({ dict, couleur });
+  });
+  return { arrivees, departsCadre, departsPlateau };
+}
+
+// Petite pastille « arrivée » posée en coin d'une tuile : point de couleur, relié
+// par la couleur à la pastille « départ » de la zone d'origine.
+function poserPastilleArrivee(el, couleur) {
+  const p = document.createElement("span");
+  p.className = "pastille-arrivee";
+  p.style.setProperty("--repere", couleur);
+  el.appendChild(p);
+}
+
+// Bandeau « départ » prépendu à une zone (cadre ou plateau) : une pastille de
+// couleur par tuile qui VIENT de quitter cette zone à cette étape, avec le nom
+// court de la tuile, pour la relier à sa pastille « arrivée ».
+function creerBandeauDeparts(markers) {
+  if (!markers || !markers.length) return null;
+  const bandeau = document.createElement("div");
+  bandeau.className = "bandeau-departs";
+  const titre = document.createElement("span");
+  titre.className = "bandeau-departs-titre";
+  titre.textContent = "Départ :";
+  bandeau.appendChild(titre);
+  markers.forEach((m) => {
+    const chip = document.createElement("span");
+    chip.className = "chip-depart";
+    chip.style.setProperty("--repere", m.couleur);
+    chip.textContent = m.dict.est_joker ? "joker"
+      : m.dict.valeur + " " + (m.dict.couleur || "");
+    bandeau.appendChild(chip);
+  });
+  return bandeau;
+}
+
+function rendreApercuPlateauPasAPas(conteneur, plateau, provisoires,
+                                    surbrillance, reperes) {
   conteneur.innerHTML = "";
   const provSet = new Set(provisoires || []);
   const surbSet = new Set(surbrillance || []);
+  const arrivees = (reperes && reperes.arrivees) || {};
+  const bandeau = creerBandeauDeparts(reperes && reperes.departsPlateau);
+  if (bandeau) conteneur.appendChild(bandeau);
   (plateau || []).forEach((combo, idx) => {
     const groupe = document.createElement("div");
     groupe.className = "groupe-combinaison";
@@ -1909,6 +1991,7 @@ function rendreApercuPlateauPasAPas(conteneur, plateau, provisoires, surbrillanc
     combo.forEach((d) => {
       const el = tuileDepuisDict(d);
       if (surbSet.has(d.id)) el.classList.add("tuile-pas-active");
+      if (arrivees[d.id]) poserPastilleArrivee(el, arrivees[d.id]);
       groupe.appendChild(el);
     });
     conteneur.appendChild(groupe);
@@ -1923,9 +2006,12 @@ function rendreApercuPlateauPasAPas(conteneur, plateau, provisoires, surbrillanc
 // de la main à l'écran « Départ », ou une tuile qui vient de rejoindre le
 // cadre) reçoit la MÊME surbrillance forte (tuile-pas-active) que sur le
 // plateau (issue #209), par-dessus son pourtour de provenance vert/orange.
-function rendreCadrePasAPas(conteneur, cadre, surbrillance) {
+function rendreCadrePasAPas(conteneur, cadre, surbrillance, reperes) {
   conteneur.innerHTML = "";
   const surbSet = new Set(surbrillance || []);
+  const arrivees = (reperes && reperes.arrivees) || {};
+  const bandeau = creerBandeauDeparts(reperes && reperes.departsCadre);
+  if (bandeau) conteneur.appendChild(bandeau);
   if (!cadre || !cadre.length) {
     const vide = document.createElement("span");
     vide.className = "cadre-vide";
@@ -1937,6 +2023,7 @@ function rendreCadrePasAPas(conteneur, cadre, surbrillance) {
     const el = tuileDepuisDict(entree.tuile);
     el.classList.add(entree.origine === "main" ? "ce-tour" : "deplacee-tapis");
     if (surbSet.has(entree.tuile.id)) el.classList.add("tuile-pas-active");
+    if (arrivees[entree.tuile.id]) poserPastilleArrivee(el, arrivees[entree.tuile.id]);
     conteneur.appendChild(el);
   });
 }
@@ -1947,12 +2034,17 @@ function rendreEtapePasAPas() {
   const soustitre = document.getElementById("soustitre-etape-pas-a-pas");
   if (soustitre) soustitre.textContent = etape.titre || "";
   document.getElementById("texte-etape-pas-a-pas").textContent = etape.texte;
+  // Repères d'origine (issue #214, point 3) : calculés par diff avec l'étape
+  // précédente, ils relient chaque tuile déplacée à son point de départ.
+  const etapePrec = indexEtapePasAPas > 0
+    ? etapesPasAPasActuelles[indexEtapePasAPas - 1] : null;
+  const reperes = calculerReperesOrigine(etapePrec, etape);
   rendreApercuPlateauPasAPas(
     document.getElementById("zone-plateau-pas-a-pas"), etape.plateau,
-    etape.provisoires, etape.surbrillance);
+    etape.provisoires, etape.surbrillance, reperes);
   rendreCadrePasAPas(
     document.getElementById("cadre-tuiles-pas-a-pas"), etape.cadre,
-    etape.surbrillance);
+    etape.surbrillance, reperes);
   document.getElementById("compteur-etape-pas-a-pas").textContent =
     "Étape " + (indexEtapePasAPas + 1) + " / " + etapesPasAPasActuelles.length;
   document.getElementById("btn-pas-a-pas-precedent").disabled =
@@ -2059,9 +2151,82 @@ function basculerComparaisonPasAPas() {
 // Construit la vue comparative « Avant / Après » (issue #207, point 4) : les
 // deux plateaux en lecture seule, combinaisons modifiées ou créées mises en
 // évidence, tuiles distinguées selon leur origine (main de l'IA / déplacée).
+// Signature VISUELLE d'une tuile (aspect : valeur/couleur, ou "J" pour un
+// joker quelconque) — indépendante de l'identifiant interne. Deux tuiles de
+// même signature sont interchangeables à l'écran (même principe que
+// `_relabeler_tuiles_indiscernables` côté Python, issue #214, défaut 5a).
+function signatureAspectTuile(d) {
+  return d.est_joker ? "J" : d.valeur + "_" + d.couleur;
+}
+function signatureAspectCombo(combo) {
+  return combo.map(signatureAspectTuile).sort().join("|");
+}
+
+// Apparie bijectivement les combinaisons d'avant et d'après par leur CONTENU
+// visible (multiset d'aspects) : une combinaison d'après qui retrouve une
+// combinaison d'avant de même contenu encore libre est INCHANGÉE (ne pas la
+// marquer « modifiée ou créée »), même si ses identifiants internes ont bougé.
+// Retourne l'ensemble des index (du plateau donné) à mettre en évidence.
+function indexCombinaisonsModifiees(plateauCible, plateauAutre) {
+  const dispo = {};
+  (plateauAutre || []).forEach((c) => {
+    const s = signatureAspectCombo(c);
+    dispo[s] = (dispo[s] || 0) + 1;
+  });
+  const evidence = new Set();
+  (plateauCible || []).forEach((c, idx) => {
+    const s = signatureAspectCombo(c);
+    if (dispo[s] > 0) dispo[s] -= 1;   // appariée à une combinaison inchangée
+    else evidence.add(idx);            // nouvelle ou au contenu réellement changé
+  });
+  return evidence;
+}
+
+// Légende illustrée de la vue « Avant / Après » (issue #214, point 5c) :
+// construite une seule fois, elle met un vrai exemple DANS chaque repère — UNE
+// mini-tuile dans le repère vert (« venue de la main ») et orange (« déplacée
+// d'une autre combinaison »), TROIS mini-tuiles côte à côte dans le repère bleu
+// (« combinaison modifiée ou créée »). La forme (une tuile vs un groupe de
+// tuiles) se lit alors sans dépendre du texte. Mini-tuiles réelles (creerTuileJeu)
+// avec un chiffre, un peu plus petites que celles du plateau.
+function construireLegendePasAPas() {
+  const cont = document.getElementById("legende-pas-a-pas");
+  if (!cont || cont.dataset.pret) return;
+  cont.dataset.pret = "1";
+  cont.innerHTML = "";
+  const alea = () => 1 + Math.floor(Math.random() * 13);
+  const mini = (classe) => {
+    const el = creerTuileJeu(alea(), "noir", false);
+    el.classList.add("legende-tuile-mini");
+    if (classe) el.classList.add(classe);
+    return el;
+  };
+  const item = (repere, texte) => {
+    const div = document.createElement("span");
+    div.className = "legende-pas-item";
+    div.appendChild(repere);
+    const span = document.createElement("span");
+    span.textContent = texte;
+    div.appendChild(span);
+    return div;
+  };
+  cont.appendChild(item(mini("ce-tour"), "Venue de la main de l'IA"));
+  cont.appendChild(item(mini("deplacee-tapis"),
+    "Déplacée d'une autre combinaison"));
+  // Repère bleu : une vraie combinaison miniature (trois tuiles) entourée du
+  // liseré bleu, pour signifier « une combinaison » et non « une tuile ».
+  const groupe = document.createElement("span");
+  groupe.className = "legende-combi-illustree";
+  groupe.appendChild(mini(null));
+  groupe.appendChild(mini(null));
+  groupe.appendChild(mini(null));
+  cont.appendChild(item(groupe, "Combinaison modifiée ou créée"));
+}
+
 function rendreComparaisonPasAPas() {
   const coup = coupPasAPasActuel;
   if (!coup) return;
+  construireLegendePasAPas();
   const avant = coup.plateau_avant || [];
   const apres = coup.plateau_apres || [];
   const idsAvant = new Set();
@@ -2069,34 +2234,37 @@ function rendreComparaisonPasAPas() {
   // Tuiles du plateau déplacées (même logique que l'animation / la mesure).
   const deplacees = new Set(
     trouverTuilesDeplacees(avant, apres).map((info) => info.dict.id));
-  // Combinaisons inchangées (mêmes ids) : NON mises en évidence.
-  const cle = (c) => c.map((d) => d.id).sort().join(",");
-  const clesAvant = new Set(avant.map(cle));
-  const clesApres = new Set(apres.map(cle));
+  // Mise en évidence par CONTENU visible (issue #214, défaut 5a) : une
+  // combinaison identique avant/après n'est plus entourée de bleu.
+  const evidenceAvant = indexCombinaisonsModifiees(avant, apres);
+  const evidenceApres = indexCombinaisonsModifiees(apres, avant);
 
   rendreCoteComparaison(
     document.getElementById("comparaison-avant"), avant,
-    (c) => !clesApres.has(cle(c)), () => "neutre");
+    (c, idx) => evidenceAvant.has(idx), () => "neutre");
   rendreCoteComparaison(
     document.getElementById("comparaison-apres"), apres,
-    (c) => !clesAvant.has(cle(c)),
+    (c, idx) => evidenceApres.has(idx),
     (d) => (!idsAvant.has(d.id) ? "main"
             : (deplacees.has(d.id) ? "deplacee" : "neutre")));
 }
 
-// Rend un plateau dans la vue comparative. `comboEnEvidence(combo)` décide si
-// la combinaison est mise en évidence ; `origineTuile(dict)` renvoie
-// "main"/"deplacee"/"neutre" pour colorer le pourtour de chaque tuile.
+// Rend un plateau dans la vue comparative. `comboEnEvidence(combo, idx)` décide
+// si la combinaison est mise en évidence ; `origineTuile(dict)` renvoie
+// "main"/"deplacee"/"neutre" pour colorer le pourtour de chaque tuile — appliqué
+// UNIQUEMENT dans une combinaison mise en évidence (une combinaison inchangée
+// ne doit porter aucun repère de tuile, issue #214).
 function rendreCoteComparaison(conteneur, plateau, comboEnEvidence, origineTuile) {
   if (!conteneur) return;
   conteneur.innerHTML = "";
-  (plateau || []).forEach((combo) => {
+  (plateau || []).forEach((combo, idx) => {
     const groupe = document.createElement("div");
     groupe.className = "groupe-combinaison";
-    if (comboEnEvidence(combo)) groupe.classList.add("combi-modifiee");
+    const enEvidence = comboEnEvidence(combo, idx);
+    if (enEvidence) groupe.classList.add("combi-modifiee");
     combo.forEach((d) => {
       const el = tuileDepuisDict(d);
-      const origine = origineTuile(d);
+      const origine = enEvidence ? origineTuile(d) : "neutre";
       if (origine === "main") el.classList.add("ce-tour");
       else if (origine === "deplacee") el.classList.add("deplacee-tapis");
       groupe.appendChild(el);
