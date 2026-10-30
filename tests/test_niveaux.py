@@ -159,7 +159,15 @@ def test_perturbation_respecte_la_borne(pmax):
 # Paramètre : taux d'oubli
 # --------------------------------------------------------------------------- #
 
-def test_oubli_declenche_pioche_coup_non_gagnant():
+def test_oubli_declenche_pioche_coup_non_gagnant(monkeypatch):
+    # Depuis #217, Facile a une perturbation de 1 : sur cette donne, la
+    # récupération du joker (coup riche de 4 tuiles) VIDE la main (coup gagnant,
+    # jamais oublié). On épingle donc la perturbation à 0 pour que le seul coup
+    # disponible reste l'extension d'une tuile (NON gagnante) et vérifier que
+    # l'oubli la fait piocher — c'est le MÉCANISME d'oubli qu'on teste ici, pas
+    # le réglage de Facile (voir test_oubli_100pct_pioche_toujours, même motif).
+    monkeypatch.setitem(niveaux.BRIDAGES, "Facile",
+                        niveaux.Bridage(perturbation_max=0, taux_oubli=0.30))
     etat = _etat_joker_recuperable("Facile")  # main de 4 tuiles, coup non gagnant
     coup = jouer_niveau_bride(etat, 1, "Facile", rng=_RngFixe(0.0))
     assert coup["action"] == "piocher"

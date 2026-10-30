@@ -96,15 +96,40 @@ def taux_oubli_effectif(taux: float, taille_main: int) -> float:
 # niveau PERD » (plus bas = plus fort), par ``scripts/calibrer_niveaux.py`` en
 # miroir. Objectif : Alain (≈ 3,5 tuiles, profil provisoire) situé ENTRE
 # Intermédiaire et Avancé. Mesure retenue (miroir, graine 0) :
-#   Débutant 0/0.42 ≈ 8 ; Facile 0/0.15 ≈ 7,2 ; Intermédiaire 4/0.08 ≈ 4,5 ;
+#   Débutant 0/0.42 ≈ 8 ; Intermédiaire 4/0.08 ≈ 4,5 ;
 #   Avancé ∞/0 ≈ 2,7 (NON modifié, solveur complet).
 # Cible Débutant ≈ 9 NON atteignable : avec perturbation=0 la mesure sature
 # vers 7–8 quel que soit le taux d'oubli (celui-ci ne pèse quasiment plus sur
 # les tuiles restantes, seulement sur le taux de victoire) ; on retient le
 # réglage le PLUS FAIBLE utile (oubli 0.42) et on le signale (issue #216 §2).
+#
+# FACILE REMONTÉ par #217 (suite #216) : perturbation 0 → 1, oubli 0.15 → 0.30.
+# À #216, Facile (0/0.15) était quasi indistinct de Débutant (Débutant lui
+# gardait même marginalement MOINS de tuiles → ordre inversé) et perdait contre
+# Intermédiaire à 85 % (trop écrasant). À perturbation=0 le taux d'oubli ne pèse
+# presque plus sur l'issue : le seul levier qui sépare réellement les niveaux du
+# bas est la PERTURBATION (#216). On donne donc à Facile une perturbation de 1
+# (petits coups de récupération : déplacer au plus 1 tuile du plateau, ce que
+# l'oubli seul ne permettait pas) et on règle son oubli à 0.30. Ce couple place
+# Facile STRICTEMENT entre Débutant et Intermédiaire sur LES DEUX leviers :
+#   * oubli 0.30 < Débutant 0.42 ET perturbation 1 > Débutant 0 → Facile est
+#     plus fort que Débutant par construction (l'inversion d'ordre ne peut plus
+#     se produire, garantie structurelle et non seulement statistique) ;
+#   * oubli 0.30 > Intermédiaire 0.08 ET perturbation 1 < Intermédiaire 4 →
+#     Facile reste clairement plus faible qu'Intermédiaire (pas de dépassement).
+# Cible tuiles restantes ~6,0–6,3 (entre Débutant ≈ 7 et Intermédiaire ≈ 5,4) :
+# le smoke pert1/oubli0.15 donnait ≈ 4,0 (TROP fort, sous Intermédiaire), d'où
+# l'oubli relevé à 0.30 pour rapprocher Facile de la cible. La mesure fine
+# n'est PAS fiable au calibrage : en MIROIR, deux joueurs pert=1 égaux recyclent
+# le plateau et quasiment TOUTES les donnes atteignent le garde-fou de tours
+# (comme la précaution déjà notée pour Intermédiaire pert=4, #216) ; le tournoi
+# de validation au budget de production, trop coûteux pour aboutir dans le temps
+# imparti de #217, est laissé à relancer par Alain (voir CONTEXTE.md §16,
+# ``scripts/valider_bas_echelle.py``). Le réglage s'appuie donc sur la garantie
+# structurelle ci-dessus plutôt que sur une mesure non significative.
 BRIDAGES: dict[str, Bridage] = {
     "Débutant":          Bridage(perturbation_max=0,    taux_oubli=0.42),
-    "Facile":            Bridage(perturbation_max=0,    taux_oubli=0.15),
+    "Facile":            Bridage(perturbation_max=1,    taux_oubli=0.30),
     "Intermédiaire":     Bridage(perturbation_max=4,    taux_oubli=0.08),
     "Avancé":            Bridage(perturbation_max=None, taux_oubli=0.0),
     # Expert et Champion du Monde : provisoirement identiques à Avancé (solveur

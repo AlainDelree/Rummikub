@@ -2391,12 +2391,74 @@ Intermédiaire et Avancé. **Avancé, Expert, Champion du Monde inchangés.**
 | Niveau | `perturbation_max` | `taux_oubli` | Tuiles restantes en défaite (miroir, graine 0) |
 |--------|:--:|:--:|:--:|
 | Débutant | 0 | **42 %** | ≈ 9,3 |
-| Facile | 0 | **15 %** | ≈ 7,0 |
+| Facile | **1** *(#217)* | **30 %** *(#217)* | cible ≈ 6,0–6,3 *(voir #217 ci-dessous)* |
 | Intermédiaire | **4** | **8 %** | ≈ 5,0 |
 | Avancé (= Expert = Champion) | ∞ | 0 | ≈ 2,7 *(inchangé)* |
 
 Écarts obtenus ≈ 2,0–2,3 tuiles entre voisins ; Alain (≈ 3,5) se place entre
 Intermédiaire (≈ 5,0) et Avancé (≈ 2,7).
+
+### Recalibrage #217 — remonter Facile pour l'écarter de Débutant (suite de #216)
+
+Après #216, le BAS de l'échelle restait mal réparti (mesures tournoi, 40 donnes/
+paire, graine 0, partiel) :
+
+| Niveau | Réglage #216 | Tuiles restantes | Taux adjacent |
+|---|---|---|---|
+| Débutant | 0 / 0.42 | 6,95 | — |
+| Facile | 0 / 0.15 | 7,25 | Débutant vs Facile : Facile 55 % (non signif.) |
+| Intermédiaire | 4 / 0.08 | 5,38 | Facile vs Intermédiaire : Intermédiaire 85 % (trop) |
+
+Deux anomalies : (1) Débutant et Facile quasi indistincts, Débutant gardait même
+LÉGÈREMENT MOINS de tuiles que Facile (ordre inversé) ; (2) Facile perdait contre
+Intermédiaire à 85 % (hors cible 60–80 %). Cause de (1) : **à perturbation = 0 le
+taux d'oubli ne pèse presque plus sur l'issue** (il déplace le taux de victoire,
+pas les tuiles restantes) ; le pousser à 0,42 pour Débutant ne l'a pas affaibli.
+
+**Décision d'Alain : REMONTER Facile** (le rendre plus fort) — cela écarte Facile
+de Débutant par le haut ET réduit l'écart Facile↔Intermédiaire. **Débutant,
+Intermédiaire, Avancé, Expert, Champion du Monde INCHANGÉS.**
+
+**Réglage retenu : Facile = perturbation 1, oubli 0.30** (était 0 / 0.15). La
+perturbation est le **seul levier qui sépare réellement les niveaux du bas**
+(#216) : perturbation 1 autorise de petits coups de récupération (déplacer au
+plus 1 tuile du plateau) que l'oubli seul ne permettait pas. L'oubli passe de
+0,15 à 0,30 pour viser la cible (le smoke pert1/oubli0.15 donnait ≈ 4,0 tuiles,
+TROP fort — sous Intermédiaire ; 0.30 rapproche Facile de ≈ 6,0–6,3). Ce couple
+place Facile **strictement entre Débutant et Intermédiaire sur LES DEUX leviers** :
+
+- oubli 0,30 < Débutant 0,42 **et** perturbation 1 > Débutant 0 → Facile est plus
+  fort que Débutant **par construction** (l'inversion d'ordre ne peut plus se
+  produire — garantie structurelle, pas seulement statistique) ;
+- oubli 0,30 > Intermédiaire 0,08 **et** perturbation 1 < Intermédiaire 4 →
+  Facile reste clairement plus faible qu'Intermédiaire (aucun dépassement).
+
+Monotonie préservée (perturbation non décroissante `[0,1,4,∞,∞,∞]`, oubli non
+croissant `[0.42,0.30,0.08,0,0,0]`), test `test_bridages_monotones…` au vert.
+
+- **Limite computationnelle (comme #216) :** la mesure fine en MIROIR N'EST PAS
+  fiable pour un niveau à perturbation > 0 — deux joueurs égaux pert=1 recyclent
+  le plateau et **quasiment toutes les donnes atteignent le garde-fou de tours**
+  (même précaution que pour Intermédiaire pert=4). Le tournoi de validation au
+  budget de production est **trop coûteux pour aboutir dans le temps imparti de
+  #217** (≈ 2–6 manches décidées seulement par réglage candidat testé en
+  parallèle, écarts ± 30–70 pt → non significatifs). Le réglage s'appuie donc
+  sur la **garantie structurelle** ci-dessus. La validation complète est laissée
+  à relancer par Alain, hors contrainte de temps :
+
+  ```
+  python scripts/valider_bas_echelle.py --donnes 40 --seed 0 \
+      --budget-solveur 1.5 --max-tours 300 --limite-temps 5400 \
+      --donnes-profil 20 --sortie resultats_bas_echelle_217.txt
+  ```
+
+- **Nouvel outil `scripts/valider_bas_echelle.py` (#217) :** tournoi de
+  validation CIBLÉ du bas de l'échelle (Débutant vs Facile, Facile vs
+  Intermédiaire) + tuiles restantes en défaite par niveau, **résultats partiels
+  écrits en continu** dans `--sortie`, limite de temps ferme, budget solveur
+  réglable, et override temporaire d'un réglage candidat de Facile
+  (`--facile-perturbation` / `--facile-oubli`) pour comparer sans toucher
+  `niveaux.py`.
 
 - **Cible Débutant ≈ 9 — limite des deux paramètres (issue §2) :** à
   `perturbation_max = 0` la mesure SATURE vers 7–8 et le `taux_oubli` n'y pèse
@@ -2470,6 +2532,14 @@ espaces en tirets).
   `--limite-temps`), `--budget-solveur` réglable. Sert à régler Débutant /
   Facile / Intermédiaire dans `moteur/niveaux.BRIDAGES`.
 
+- **`scripts/valider_bas_echelle.py`** (#217) — TOURNOI DE VALIDATION CIBLÉ du
+  bas de l'échelle (Débutant vs Facile, Facile vs Intermédiaire) + tuiles
+  restantes en défaite par niveau. Résultats PARTIELS écrits en continu
+  (`--sortie`), limite de temps ferme (`--limite-temps`), `--budget-solveur`
+  réglable, filtre `--paire`, et override candidat de Facile
+  (`--facile-perturbation` / `--facile-oubli`) pour comparer sans figer
+  `niveaux.py`. Pensé pour le temps imparti serré des issues de calibrage.
+
 - **`scripts/echelle_niveaux.py`** — TOURNOI D'ÉCHELLE. Depuis #216,
   `--budget-solveur` (réduire le budget du solveur exact pour tenir une limite
   de temps ferme — à signaler, la force d'Avancé en dépend) et `--donnes-profil`
@@ -2531,6 +2601,11 @@ et `None` récupère le joker ; la borne de perturbation est respectée ; l'oubl
 100 % fait piocher, un coup gagnant n'est jamais oublié, l'oubli décroît sur une
 petite main ; reproductibilité sous `graine_ia` ; Champion atteint l'optimum
 exact sur les cas de référence ; repli propre sans `highspy`/`numpy`.
+(#217 : `test_oubli_declenche_pioche_coup_non_gagnant` épingle désormais la
+perturbation de Facile à 0 via `monkeypatch` — Facile valant maintenant
+perturbation 1, le coup riche de la donne de test VIDE la main, donc n'est
+jamais oublié ; le test continue d'exercer le mécanisme d'oubli sur un coup
+NON gagnant.)
 `tests/test_playwright_accueil_reglages.py` : le bouton « Champion du Monde »
 ajoute bien un adversaire de ce niveau. Les tests existants (IA, moteur,
 solveurs) restent **inchangés** : les fonctions heuristiques de niveau,
