@@ -57,6 +57,18 @@ reproductibles, via scripts/calibrer_niveaux.py et scripts/echelle_niveaux.py.
    (0.3 s) et limite de temps ferme, mais n'a pas pu rendre un tableau complet
    dans le temps imparti.
 
+   MESURE RAPIDE RÉELLE obtenue (paire au chemin RAPIDE, perturbation 0,
+   30 donnes = 60 matchs, graine 0, max_tours 130) :
+     Débutant vs Facile : Facile 35/60 = 58,3 % ± 12,5 pt (garde-fou 0).
+   → Toujours MARGINAL (comme les 57 % de #213) : élargir l'écart d'oubli
+     (0.42 vs 0.15) n'a presque pas bougé le taux de victoire, alors que les
+     tuiles restantes se séparent bien (9,3 vs 7,0). CONFIRME que, à
+     perturbation=0, l'oubli pèse peu sur l'issue des parties : pour mieux
+     séparer Débutant de Facile il faudrait un autre levier (p. ex. autoriser à
+     Facile une perturbation=1, piste pour une issue ultérieure). Les paires
+     impliquant Intermédiaire (chemin solveur) n'ont pas pu être mesurées à
+     grande échelle dans le temps imparti.
+
    >>> À RELANCER PAR ALAIN, hors contrainte de timeout, au budget de
        production, p. ex. :
          python scripts/echelle_niveaux.py --donnes 40 --seed 0 \
