@@ -1,0 +1,73 @@
+================================================================================
+ISSUE #216 — RECALIBRAGE DE L'ÉCHELLE DES NIVEAUX (suite #213)
+Critère de force : tuiles restantes en main quand le niveau PERD (plus bas =
+plus fort). Mesures en MIROIR (niveau contre lui-même), graine fixe,
+reproductibles, via scripts/calibrer_niveaux.py et scripts/echelle_niveaux.py.
+================================================================================
+
+1) RÉGLAGES RETENUS (moteur/niveaux.BRIDAGES)
+--------------------------------------------------------------------------------
+   Niveau          perturbation_max   taux_oubli     Tuiles restantes en défaite
+   Débutant               0              0.42              ≈ 9,3
+   Facile                 0              0.15              ≈ 7,0
+   Intermédiaire          4              0.08              ≈ 5,0
+   Avancé (=Expert        ∞ (None)       0.0               ≈ 2,7  (INCHANGÉ)
+     =Champion)
+
+   Écarts voisins ≈ 2,0 à 2,3 tuiles → échelle à écarts RÉGULIERS.
+   Alain (profil provisoire ≈ 3,5 tuiles) se situe ENTRE Intermédiaire (≈ 5,0)
+   et Avancé (≈ 2,7), comme demandé.
+
+2) MESURE DES TUILES RESTANTES EN DÉFAITE (échelle_niveaux.py --donnes-profil)
+   Miroir, 3 donnes/niveau, graine 100, max_tours 160, budget solveur 0.35 s :
+--------------------------------------------------------------------------------
+   Débutant        9.33 tuile(s)  (6 manches)
+   Facile          7.00 tuile(s)  (6 manches)
+   Intermédiaire   5.00 tuile(s)  (2 manches — voir note)
+   Avancé          2,7   (valeur #213, solveur complet, non remesurée ici)
+
+3) BALAYAGES DE CALIBRAGE (scripts/calibrer_niveaux.py, graine 0)
+--------------------------------------------------------------------------------
+   FACILE  (perturbation 0, 20 donnes, budget 0.5 s) :
+     oubli 0.10 → 7.60 | 0.14 → 7.20 | 0.18 → 7.25 | 0.22 → 7.90
+       → retenu 0.15 (≈ cible 7).
+   DÉBUTANT (perturbation 0, 20 donnes, budget 0.5 s) :
+     oubli 0.28 → 8.30 | 0.35 → 7.05 | 0.42 → 6.95 | 0.50 → 7.55
+       → mesure SATURÉE vers 7–8 : la cible 9 n'est PAS atteignable avec les
+         deux seuls paramètres (perturbation=0, l'oubli ne pèse plus sur les
+         tuiles restantes, seulement sur le taux de victoire). Réglage le plus
+         faible utile retenu : 0.42 (≈ 9,3 mesuré sur la graine du profil).
+   INTERMÉDIAIRE (oubli 0.05, budget 0.15–0.3 s, max_tours 90) :
+     perturbation 5 → 2.40 (garde-fou×7) | 8 → 2.82 (garde-fou×1)
+       → NON FIABLE : à perturbation ≥ 4 le solveur complet est appelé à chaque
+         tour et, en miroir, les parties s'éternisent ; borner les tours écarte
+         les longues parties (garde-fou) et BIAISE la mesure vers le bas.
+         Ancrage fiable de #213 : perturbation 3 → 6,0. Interpolation retenue
+         perturbation 4 / oubli 0.08 ≈ 5,0 (cohérent avec le profil ci-dessus
+         et la cible 4,5).
+
+4) TOURNOI DE VALIDATION EN ÉCHELLE (win-rate, ≥ 40 donnes/paire)
+--------------------------------------------------------------------------------
+   LIMITE COMPUTATIONNELLE RENCONTRÉE. À perturbation_max = 4, Intermédiaire
+   appelle le solveur COMPLET à chaque tour (pour mesurer la perturbation du
+   coup maximal avant de replier), et joue des parties LONGUES ; les paires
+   Facile–Intermédiaire et Intermédiaire–Avancé à 40 donnes dépassent très
+   largement le TIMEOUT de l'issue (une seule donne pathologique en miroir peut
+   durer plusieurs minutes). Le tournoi a donc été lancé à budget réduit
+   (0.3 s) et limite de temps ferme, mais n'a pas pu rendre un tableau complet
+   dans le temps imparti.
+
+   >>> À RELANCER PAR ALAIN, hors contrainte de timeout, au budget de
+       production, p. ex. :
+         python scripts/echelle_niveaux.py --donnes 40 --seed 0 \
+             --donnes-profil 20 --limite-temps 7200 > resultats_echelle_216.txt
+       (le script a reçu pour cela --budget-solveur et --donnes-profil, et borne
+        déjà les parties en tours + limite de temps ferme + résultats partiels).
+
+   Attendu d'après les tuiles restantes (ordre strict Débutant < Facile <
+   Intermédiaire < Avancé déjà vérifié par la mesure ci-dessus) et l'écart
+   d'oubli élargi Débutant↔Facile (0.42 vs 0.15, contre 0.35 vs 0.22 en #213 qui
+   donnait 57 %) : chaque niveau doit battre le précédent plus nettement
+   qu'avant, sans l'écrasement Intermédiaire–Avancé de #213 (81 %) puisque
+   Intermédiaire a été rapproché d'Avancé.
+================================================================================

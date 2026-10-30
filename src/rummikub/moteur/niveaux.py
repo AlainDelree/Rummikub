@@ -91,11 +91,21 @@ def taux_oubli_effectif(taux: float, taille_main: int) -> float:
 
 
 # ---- Table des bridages par niveau (le SEUL endroit à régler) -------------- #
-# Valeurs de départ indicatives (issue #213 §3), à ajuster par les mesures.
+# Valeurs RECALIBRÉES par #216 (suite #213) pour une échelle à écarts RÉGULIERS,
+# mesurées sur le BON critère de force : les « tuiles restantes en main quand le
+# niveau PERD » (plus bas = plus fort), par ``scripts/calibrer_niveaux.py`` en
+# miroir. Objectif : Alain (≈ 3,5 tuiles, profil provisoire) situé ENTRE
+# Intermédiaire et Avancé. Mesure retenue (miroir, graine 0) :
+#   Débutant 0/0.42 ≈ 8 ; Facile 0/0.15 ≈ 7,2 ; Intermédiaire 4/0.08 ≈ 4,5 ;
+#   Avancé ∞/0 ≈ 2,7 (NON modifié, solveur complet).
+# Cible Débutant ≈ 9 NON atteignable : avec perturbation=0 la mesure sature
+# vers 7–8 quel que soit le taux d'oubli (celui-ci ne pèse quasiment plus sur
+# les tuiles restantes, seulement sur le taux de victoire) ; on retient le
+# réglage le PLUS FAIBLE utile (oubli 0.42) et on le signale (issue #216 §2).
 BRIDAGES: dict[str, Bridage] = {
-    "Débutant":          Bridage(perturbation_max=0,    taux_oubli=0.35),
-    "Facile":            Bridage(perturbation_max=0,    taux_oubli=0.22),
-    "Intermédiaire":     Bridage(perturbation_max=3,    taux_oubli=0.12),
+    "Débutant":          Bridage(perturbation_max=0,    taux_oubli=0.42),
+    "Facile":            Bridage(perturbation_max=0,    taux_oubli=0.15),
+    "Intermédiaire":     Bridage(perturbation_max=4,    taux_oubli=0.08),
     "Avancé":            Bridage(perturbation_max=None, taux_oubli=0.0),
     # Expert et Champion du Monde : provisoirement identiques à Avancé (solveur
     # un-tour complet) tant que les stratégies multi-tours (§13) ne sont pas

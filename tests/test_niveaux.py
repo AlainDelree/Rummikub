@@ -5,6 +5,7 @@ sans dépendances, et niveau « Champion du Monde ».
 
 import copy
 import json
+import math
 from pathlib import Path
 
 import pytest
@@ -73,6 +74,27 @@ def test_echelle_a_six_niveaux_avec_champion():
                        "Expert", "Champion du Monde"]
     assert list(NIVEAUX_IA) == NIVEAUX
     assert set(niveaux.BRIDAGES) == set(NIVEAUX)
+
+
+def test_bridages_monotones_du_plus_faible_au_plus_fort():
+    """Cohérence de l'échelle recalibrée (#213, recalibrage #216) : du niveau le
+    plus FAIBLE au plus FORT (ordre de ``config.NIVEAUX``), la perturbation
+    permise ne DÉCROÎT jamais (``None`` = ∞ = le solveur complet, le plus fort)
+    et le taux d'oubli ne CROÎT jamais. Autrement dit, un niveau plus fort est
+    TOUJOURS au moins aussi peu bridé que le niveau juste en dessous."""
+    def perturbation_cle(b):
+        return math.inf if b.perturbation_max is None else b.perturbation_max
+
+    du_faible_au_fort = [niveaux.BRIDAGES[n] for n in NIVEAUX]
+    perturbations = [perturbation_cle(b) for b in du_faible_au_fort]
+    oublis = [b.taux_oubli for b in du_faible_au_fort]
+
+    # Perturbation permise NON DÉCROISSANTE (le fort voit au moins aussi loin).
+    assert perturbations == sorted(perturbations), perturbations
+    # Taux d'oubli NON CROISSANT (le fort oublie au plus autant que le faible).
+    assert oublis == sorted(oublis, reverse=True), oublis
+    # Avancé (et donc Expert/Champion, identiques) jouent le solveur complet.
+    assert niveaux.BRIDAGES["Avancé"].complet
 
 
 def test_champion_du_monde_action_valide():

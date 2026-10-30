@@ -66,10 +66,11 @@ for _p in (SRC, SCRIPTS):
 
 from rummikub.config import NIVEAUX  # noqa: E402
 from rummikub.moteur import niveaux as _niveaux  # noqa: E402
+from rummikub.moteur import ia as _ia  # noqa: E402
 
 # Réutilisation directe de la logique de match miroir, reproductible, de #213.
 from comparer_niveaux_ia import (  # noqa: E402
-    comparer, intervalle_confiance_95,
+    comparer, intervalle_confiance_95, moyenne,
 )
 
 logger = logging.getLogger("echelle_niveaux")
@@ -150,8 +151,59 @@ def jouer_paire(niveau_faible: str, niveau_fort: str, nb_donnes: int,
     }
 
 
+def mesurer_tuiles_restantes(niveau: str, nb_donnes: int, seed: int,
+                             max_tours: int, deadline: float | None) -> dict:
+    """Mesure les **tuiles restantes en défaite** d'un niveau sur le BON critère
+    de force (issue #216, suite #213) : on joue ``nb_donnes`` donnes EN MIROIR
+    du niveau CONTRE LUI-MÊME (chacune rejouée places échangées) et on relève la
+    moyenne des tuiles qu'il reste en main au perdant. Plus ce nombre est bas,
+    plus le niveau finit près de la sortie, donc plus il est fort — c'est la
+    mesure qui justifie le calibrage de l'échelle (voir
+    ``scripts/calibrer_niveaux.py`` et ``scripts/profil_joueur.py``).
+
+    DONNE PAR DONNE pour respecter ``deadline``. ``seed + i`` pour chaque donne :
+    reproductible et comparable d'un niveau à l'autre."""
+    tuiles: list[int] = []
+    donnes_jouees = garde_fou = 0
+    for i in range(nb_donnes):
+        if deadline is not None and time.monotonic() >= deadline:
+            break
+        resume = comparer(niveau, niveau, 1, seed + i, max_tours,
+                          nb_manches=1, preferer_simple=True)
+        tuiles.extend(resume["tuiles_perdant"])
+        garde_fou += resume["fins"]["garde_fou"]
+        donnes_jouees += 1
+    return {
+        "niveau": niveau,
+        "tuiles_restantes": moyenne(tuiles) if tuiles else None,
+        "manches": len(tuiles),
+        "donnes_jouees": donnes_jouees,
+        "garde_fou": garde_fou,
+    }
+
+
+def jouer_profils(nb_donnes: int, seed: int, max_tours: int,
+                  deadline: float | None) -> list[dict]:
+    """Mesure les tuiles restantes en défaite de chaque niveau DISTINCT de
+    l'échelle (Avancé/Expert/Champion du Monde sont identiques tant que le
+    multi-tours n'existe pas : un seul représentant mesuré, « Avancé »)."""
+    vus: set = set()
+    profils: list[dict] = []
+    for niveau in NIVEAUX:
+        cle = _niveaux.bridage_pour(niveau)
+        if cle in vus:
+            continue
+        vus.add(cle)
+        if deadline is not None and time.monotonic() >= deadline:
+            break
+        logger.info("Profil tuiles restantes : %s...", niveau)
+        profils.append(mesurer_tuiles_restantes(niveau, nb_donnes, seed,
+                                                 max_tours, deadline))
+    return profils
+
+
 def jouer_tournoi(nb_donnes: int, seed: int, max_tours: int,
-                  limite_temps: float | None) -> dict:
+                  limite_temps: float | None, donnes_profil: int = 20) -> dict:
     """Joue toutes les paires (adjacentes puis contrôles non adjacents) sous la
     limite de temps FERME ``limite_temps`` (secondes). La limite est vérifiée
     avant chaque DONNE (voir :func:`jouer_paire`) : on arrête de lancer du
@@ -163,6 +215,12 @@ def jouer_tournoi(nb_donnes: int, seed: int, max_tours: int,
     adjacentes, non_adjacentes = _paires_tournoi()
     resultats = {"adjacentes": [], "non_adjacentes": []}
     interrompu = False
+
+    # (0) Profil de force de chaque niveau distinct AVANT le tournoi (tuiles
+    # restantes en défaite, mesure qui justifie le calibrage #216) : fait en
+    # premier pour qu'il figure au rapport même si le tournoi est écourté.
+    profils = (jouer_profils(donnes_profil, seed, max_tours, deadline)
+               if donnes_profil > 0 else [])
 
     for categorie, paires in (("adjacentes", adjacentes),
                               ("non_adjacentes", non_adjacentes)):
@@ -181,9 +239,11 @@ def jouer_tournoi(nb_donnes: int, seed: int, max_tours: int,
 
     return {
         "resultats": resultats,
+        "profils": profils,
         "interrompu": interrompu,
         "duree_s": time.monotonic() - debut,
         "nb_donnes": nb_donnes,
+        "donnes_profil": donnes_profil,
         "seed": seed,
         "max_tours": max_tours,
     }
@@ -225,6 +285,10 @@ def afficher_rapport(rapport: dict) -> None:
     print("TOURNOI EN ÉCHELLE DES SIX NIVEAUX D'IA (issue #213)")
     print(f"{rapport['nb_donnes']} donne(s) x 2 (miroir) par paire — "
           f"graine {rapport['seed']}, max_tours {rapport['max_tours']}")
+    budget = rapport.get("budget_solveur")
+    if budget is not None:
+        print(f"  Budget solveur exact : {budget:.2f} s/tour "
+              f"(production 1.50 — réduit pour tenir le temps imparti).")
     if rapport["interrompu"]:
         print("  (!) Limite de temps atteinte : résultats PARTIELS "
               "(paires restantes non jouées).")
@@ -232,6 +296,23 @@ def afficher_rapport(rapport: dict) -> None:
     print(f"  {'Paire':<40s} {'Plus fort':<18s} {'V/N':>9s}  "
           f"{'Taux (IC 95 %)':>16s}  Verdict")
     print("-" * 78)
+
+    profils = rapport.get("profils") or []
+    if profils:
+        print("  TUILES RESTANTES EN DÉFAITE PAR NIVEAU "
+              f"(miroir, {rapport.get('donnes_profil')} donne(s), plus bas = "
+              "plus fort) :")
+        for p in profils:
+            if p["tuiles_restantes"] is None:
+                mesure = "n/a (aucune manche décidée)"
+            else:
+                mesure = (f"{p['tuiles_restantes']:.2f} tuile(s) "
+                          f"({p['manches']} manche(s))")
+            gf = f" [garde-fou×{p['garde_fou']}]" if p["garde_fou"] else ""
+            print(f"    {p['niveau']:<18s} {mesure}{gf}")
+        print("    (Avancé représente aussi Expert et Champion du Monde, "
+              "réglages identiques — #213 §2.)")
+        print("-" * 78)
 
     print("  PAIRES ADJACENTES :")
     for r in res["adjacentes"]:
@@ -310,6 +391,14 @@ def main(argv: list[str]) -> int:
     parser.add_argument("--limite-temps", type=float, default=None,
                         help="Limite de temps FERME, en secondes, pour tout le "
                              "tournoi (résultats partiels exploités).")
+    parser.add_argument("--donnes-profil", type=int, default=20,
+                        help="Donnes par niveau pour la mesure des tuiles "
+                             "restantes en défaite (miroir ; défaut 20 ; 0 pour "
+                             "ne pas mesurer).")
+    parser.add_argument("--budget-solveur", type=float, default=None,
+                        help="Budget du solveur exact par tour, en secondes "
+                             "(défaut : production = 1.5). Le réduire accélère "
+                             "une campagne longue ; à signaler dans le rapport.")
     parser.add_argument("-v", "--verbose", action="store_true",
                         help="Journalise le détail de chaque paire.")
     args = parser.parse_args(argv[1:])
@@ -322,9 +411,19 @@ def main(argv: list[str]) -> int:
 
     if args.donnes < 1:
         parser.error("--donnes doit être au moins 1")
+    if args.donnes_profil < 0:
+        parser.error("--donnes-profil doit être >= 0")
+
+    if args.budget_solveur is not None:
+        if args.budget_solveur <= 0:
+            parser.error("--budget-solveur doit être > 0")
+        # Budget du solveur exact pour TOUTE la campagne (accélère un tournoi
+        # long ; à signaler dans le rapport car la force d'Avancé en dépend).
+        _ia.BUDGET_TEMPS_EXPERT = args.budget_solveur
 
     rapport = jouer_tournoi(args.donnes, args.seed, args.max_tours,
-                            args.limite_temps)
+                            args.limite_temps, args.donnes_profil)
+    rapport["budget_solveur"] = args.budget_solveur
     afficher_rapport(rapport)
     return 0
 

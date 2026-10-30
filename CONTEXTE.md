@@ -2350,7 +2350,7 @@ inégale. Le point d'entrée reste `moteur/ia.jouer_ia(etat, idx)`.
 Le solveur exact « un tour » (qui pose toujours le maximum) **n'est PAS** le
 niveau le plus fort : c'est le niveau **Avancé**.
 
-| Niveau | Moteur | `perturbation_max` | `taux_oubli` (départ) |
+| Niveau | Moteur | `perturbation_max` | `taux_oubli` (départ #213 — **recalibré #216**, voir plus bas) |
 |--------|--------|:--:|:--:|
 | Débutant | exact BRIDÉ | 0 | 35 % |
 | Facile | exact BRIDÉ | 0 | 22 % |
@@ -2377,6 +2377,45 @@ niveau le plus fort : c'est le niveau **Avancé**.
 > ATTENDU, pas un défaut. Repère voulu par Alain : son propre niveau doit
 > correspondre à **Intermédiaire**, ou entre Intermédiaire et Avancé (à ajuster
 > par les mesures — voir « calibrage » ci-dessous).
+
+### Recalibrage #216 — échelle à écarts réguliers (suite de #213)
+
+L'échelle de #213 était **ordonnée mais mal étalée** (mesure sur le bon critère,
+tuiles restantes en défaite, plus bas = plus fort) : Facile ≈ 7,7, Intermédiaire
+≈ 6,0, Avancé ≈ 2,7 → écart Intermédiaire→Avancé énorme, Facile→Intermédiaire
+minuscule, et le profil provisoire d'Alain (≈ 3,5) tombait dans le **trou**
+entre Intermédiaire et Avancé. #216 déplace Débutant, Facile et Intermédiaire
+« vers la droite » (plus forts) pour des écarts réguliers, Alain visé **entre**
+Intermédiaire et Avancé. **Avancé, Expert, Champion du Monde inchangés.**
+
+| Niveau | `perturbation_max` | `taux_oubli` | Tuiles restantes en défaite (miroir, graine 0) |
+|--------|:--:|:--:|:--:|
+| Débutant | 0 | **42 %** | ≈ 9,3 |
+| Facile | 0 | **15 %** | ≈ 7,0 |
+| Intermédiaire | **4** | **8 %** | ≈ 5,0 |
+| Avancé (= Expert = Champion) | ∞ | 0 | ≈ 2,7 *(inchangé)* |
+
+Écarts obtenus ≈ 2,0–2,3 tuiles entre voisins ; Alain (≈ 3,5) se place entre
+Intermédiaire (≈ 5,0) et Avancé (≈ 2,7).
+
+- **Cible Débutant ≈ 9 — limite des deux paramètres (issue §2) :** à
+  `perturbation_max = 0` la mesure SATURE vers 7–8 et le `taux_oubli` n'y pèse
+  quasiment plus (il déplace surtout le **taux de victoire**, pas les tuiles
+  restantes). On retient le réglage le plus faible utile (oubli 0,42) ; c'est le
+  plus proche atteignable, signalé comme tel.
+- **Mesure d'Intermédiaire — précaution :** à `perturbation_max = 4`, chaque
+  tour appelle le solveur complet (pour mesurer la perturbation du coup maximal
+  avant de replier), donc en MIROIR les parties s'éternisent et beaucoup
+  atteignent le garde-fou de tours ; borner trop court **biaise la mesure vers
+  le bas**. La valeur ≈ 5,0 est cohérente avec l'ancrage fiable de #213
+  (perturbation 3 → 6,0). À revérifier par Alain sur davantage de donnes au
+  budget de production.
+- **Outil :** `scripts/calibrer_niveaux.py` (balaye une grille
+  perturbation × oubli, mesure les tuiles restantes en défaite, graine fixe,
+  `--max-tours` + `--limite-temps` fermes, `--budget-solveur` réglable,
+  `--cible` marque le plus proche). `scripts/echelle_niveaux.py` gagne
+  `--budget-solveur` et `--donnes-profil` (tuiles restantes par niveau **dans le
+  rapport**). Test ajouté : `test_bridages_monotones_du_plus_faible_au_plus_fort`.
 
 ### Les deux paramètres d'affaiblissement (`moteur/niveaux.py`, le SEUL endroit)
 
@@ -2424,7 +2463,18 @@ espaces en tirets).
 
 ### Outils de calibrage (`scripts/`)
 
-- **`scripts/echelle_niveaux.py`** — TOURNOI D'ÉCHELLE. Parties à deux en miroir
+- **`scripts/calibrer_niveaux.py`** (#216) — RECHERCHE DE RÉGLAGES. Balaye une
+  grille `--perturbations` × `--oublis` pour un niveau et mesure, par réglage,
+  les **tuiles restantes en défaite** (miroir, graine fixe, reproductible) ;
+  `--cible` marque le plus proche. Garde-fous de temps fermes (`--max-tours`,
+  `--limite-temps`), `--budget-solveur` réglable. Sert à régler Débutant /
+  Facile / Intermédiaire dans `moteur/niveaux.BRIDAGES`.
+
+- **`scripts/echelle_niveaux.py`** — TOURNOI D'ÉCHELLE. Depuis #216,
+  `--budget-solveur` (réduire le budget du solveur exact pour tenir une limite
+  de temps ferme — à signaler, la force d'Avancé en dépend) et `--donnes-profil`
+  (mesure des tuiles restantes en défaite par niveau, **incluse dans le
+  rapport**). Parties à deux en miroir
   entre tous les niveaux voisins (+ quelques paires non voisines), ≥ 40 donnes
   par paire, tableau des taux de victoire + IC 95 % (Wilson). Vérifie que
   l'échelle est strictement croissante et que l'écart entre voisins est net
