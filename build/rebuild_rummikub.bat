@@ -6,7 +6,7 @@ REM    0.    Localiser ISCC.exe (Inno Setup 6)
 REM    0bis. Determiner et valider le numero de build (garde-fou, issue #178)
 REM    1.    Copier le projet vers C:\Temp\RummikubBuild
 REM    2.    Environnement virtuel .venv_build + dependances
-REM    3.    Fermer Rummikub.exe si en cours
+REM    3.    Signaler une instance de Rummikub.exe en cours (sans la fermer)
 REM    4.    PyInstaller (rummikub.spec)
 REM    5.    Verifier dist\Rummikub\Rummikub.exe + taille (dossier non compresse)
 REM    5bis. Autotest fonctionnel de l'exe (--autotest : solveur exact, issue #208)
@@ -49,9 +49,9 @@ if /i "%~1"=="--build" (
         echo           Arguments acceptes : --publier, --build N
         exit /b 1
     )
-    echo %~2| findstr /r "^[0-9][0-9]*$" >nul
+    echo %~2| findstr /r "^[1-9][0-9]*$" >nul
     if errorlevel 1 (
-        echo [ERREUR] --build necessite un entier positif ; recu : %~2
+        echo [ERREUR] --build necessite un entier strictement positif, sans zero initial ^(exemple : 42, pas 042^) ; recu : %~2
         echo           Arguments acceptes : --publier, --build N
         exit /b 1
     )
@@ -176,15 +176,23 @@ call ".venv_build\Scripts\python.exe" -m pip install pyinstaller
 if errorlevel 1 ( echo [ERREUR] Echec de pip install pyinstaller & popd & exit /b 1 )
 
 REM ===========================================================================
-REM  ETAPE 3 : fermer Rummikub.exe si en cours d'execution
+REM  ETAPE 3 : signaler une instance de Rummikub.exe en cours (sans la fermer)
+REM  Le build se fait entierement dans %BUILDDIR% (copie locale), qui ne
+REM  verrouille aucun fichier reellement lu ou ecrit par une instance en cours
+REM  (l'executable installe tourne depuis un tout autre emplacement). Le script
+REM  ne ferme donc jamais un processus qu'il n'a pas lui-meme lance : il se
+REM  contente de signaler sa presence (sur le modele d'Actualise).
 REM ===========================================================================
 echo.
-echo [3/9] Fermeture de Rummikub.exe si necessaire...
-taskkill /im Rummikub.exe /f >nul 2>&1
+echo [3/9] Detection d'une instance de Rummikub.exe en cours...
+tasklist /fi "imagename eq Rummikub.exe" 2>nul | findstr /i "Rummikub.exe" >nul
 if errorlevel 1 (
     echo       Aucune instance de Rummikub.exe en cours.
 ) else (
-    echo       Rummikub.exe ferme.
+    echo       [ATTENTION] Une instance de Rummikub.exe est en cours d'execution.
+    echo                   Le script ne la ferme pas ^(il ne l'a pas lancee^) ; si le
+    echo                   build echoue plus loin par verrou de fichier, fermez-la
+    echo                   manuellement puis relancez.
 )
 
 REM ===========================================================================
@@ -460,11 +468,14 @@ if "%PUBLIER%"=="1" (
     echo   version.json a ete mis a jour ^(build !EXEBUILD!, SHA-256 du zip^) et
     echo   COMMITE EN LOCAL dans %ORIGDIR%.
     echo.
-    echo   Le script ne fait JAMAIS de git push ni de gh release create. A la main :
-    echo     1^) git -C "%ORIGDIR%" push
-    echo     2^) Creer la Release GitHub ^(tag v!EXEBUILD!^) avec DEUX fichiers attaches :
+    echo   Le script ne fait JAMAIS de git push ni de gh release create.
+    echo   Etapes MANUELLES restantes, dans cet ordre :
+    echo     1^) Fusionner la branche du worktree dans master ^(relecture_web,
+    echo        entree rummikub_ccw^), SANS pousser.
+    echo     2^) Creer la Release v!EXEBUILD! avec DEUX fichiers attaches :
     echo          - installeur\output\!SETUPNAME!
     echo          - installeur\output\!ZIPNAME!
+    echo     3^) Pousser master.
     echo   ============================================================================
 )
 endlocal
