@@ -100,6 +100,7 @@ from _limite_temps_ferme import (  # noqa: E402
 from _rapport_duels import (  # noqa: E402
     SEUIL_NET_BAS, SEUIL_NET_HAUT, entete_machine, verdict_ecart,
 )
+from _verif_solveur_exact import exiger_solveur_exact_ou_quitter  # noqa: E402
 
 logger = logging.getLogger("echelle_niveaux")
 
@@ -467,6 +468,13 @@ def main(argv: list[str]) -> int:
         parser.error("--donnes doit être au moins 1")
     if args.budget_solveur is not None and args.budget_solveur <= 0:
         parser.error("--budget-solveur doit être > 0")
+
+    # Échec franc sans solveur exact (issue #223, point 1) : ce tournoi fait
+    # jouer Avancé/Expert/Champion du Monde ET Facile/Intermédiaire (qui
+    # consultent aussi le modèle exact, voir ia._coup_selon_perturbation) —
+    # pas de ``--sans-exact`` ici, donc toujours requis. AVANT la relance
+    # surveillée ci-dessous, pour échouer vite sans sous-processus inutile.
+    exiger_solveur_exact_ou_quitter()
 
     if args._worker or args.limite_temps is None:
         return _executer(args)

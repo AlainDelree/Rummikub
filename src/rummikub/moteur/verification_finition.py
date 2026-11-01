@@ -45,12 +45,49 @@ from rummikub.moteur.solveur_exact import (
     resoudre_exact, SolveurExactIndisponible, BudgetExactDepasse,
 )
 
-# Statuts journalisés (issue #221, point 5) — dans le même esprit que
-# l'indication du solveur utilisé ajoutée par #211.
-APPLIQUEE_AUTRE_COUP = "appliquee_autre_coup"
-APPLIQUEE_SANS_CHANGEMENT = "appliquee_sans_changement"
+# Statuts journalisés (issue #221, point 5 ; affinés par #223, point 4, pour
+# que les campagnes de mesure puissent expliquer POURQUOI la vérification ne
+# change rien, au lieu de tout regrouper sous deux statuts fourre-tout) —
+# dans le même esprit que l'indication du solveur utilisé ajoutée par #211.
+#
+# Repli / non-exécution (aucun verdict de finition rendu) :
+#   NON_APPLICABLE        chevalet trop grand (> SEUIL_FIN_PARTIE_VERIF_FINITION).
+#   PAS_DE_COUP_A_COMPARER aucun coup « jouer » à comparer (pioche ou passe),
+#                          ou liste de candidats vide.
+#   SOLVEUR_NON_EXACT      le coup du tour n'a pas été décidé par le modèle
+#                          exact (dépendances highspy/numpy absentes, ou repli
+#                          déjà survenu pour ce tour faute de budget) — la
+#                          vérification, qui s'appuie sur CE MÊME solveur, ne
+#                          peut de toute façon pas s'exécuter non plus.
+#   BUDGET_EPUISE          le budget de temps partagé a été réellement
+#                          épuisé PENDANT la vérification elle-même.
+#
+# Vérification exécutée jusqu'au bout (verdict rendu) :
+#   APPLIQUEE_MEILLEUR_SUFFIT  le meilleur coup du solveur (candidats[0])
+#                              permet déjà de finir au tour suivant.
+#   APPLIQUEE_AUCUN_CANDIDAT   aucun candidat ne permet de finir au tour
+#                              suivant : candidats[0] est joué comme avant.
+#   APPLIQUEE_AUTRE_COUP       un autre candidat permet de finir là où
+#                              candidats[0] ne le permet pas : il est préféré.
 NON_APPLICABLE = "non_applicable"
+PAS_DE_COUP_A_COMPARER = "pas_de_coup_a_comparer"
+SOLVEUR_NON_EXACT = "solveur_non_exact"
 BUDGET_EPUISE = "budget_epuise"
+APPLIQUEE_MEILLEUR_SUFFIT = "appliquee_meilleur_suffit"
+APPLIQUEE_AUCUN_CANDIDAT = "appliquee_aucun_candidat"
+APPLIQUEE_AUTRE_COUP = "appliquee_autre_coup"
+
+# Libellés français, dans l'ordre d'affichage attendu des rapports de
+# campagne (#223, point 4).
+LIBELLES = {
+    NON_APPLICABLE: "non applicable (chevalet trop grand)",
+    PAS_DE_COUP_A_COMPARER: "pas de coup à comparer (pioche ou passe)",
+    SOLVEUR_NON_EXACT: "solveur non exact ou dépendances absentes",
+    BUDGET_EPUISE: "budget réellement épuisé",
+    APPLIQUEE_MEILLEUR_SUFFIT: "appliquée : le meilleur coup suffit déjà",
+    APPLIQUEE_AUCUN_CANDIDAT: "appliquée : aucun candidat ne permet de finir",
+    APPLIQUEE_AUTRE_COUP: "appliquée : un autre coup a été choisi",
+}
 
 
 def _id_tuile(t):
@@ -142,11 +179,16 @@ def verifier(etat: dict, idx: int, candidats: list, deadline: float):
     ci-dessous consomme le temps restant jusqu'à cette même échéance, sans
     budget supplémentaire propre.
 
-    Retourne ``(coup_choisi, statut)`` — ``statut`` l'un des quatre codes
-    ci-dessus, jamais ``None`` dans ce cas (l'appelant a déjà filtré les cas
-    "non applicable" avant d'appeler cette fonction)."""
+    Retourne ``(coup_choisi, statut)`` — ``statut`` l'un des sept codes
+    listés en tête de module, jamais ``None`` dans ce cas (l'appelant a déjà
+    filtré les cas "non applicable"/"solveur non exact" avant d'appeler
+    cette fonction). ``APPLIQUEE_MEILLEUR_SUFFIT`` (``candidats[0]`` finit
+    déjà) et ``APPLIQUEE_AUCUN_CANDIDAT`` (aucun candidat ne finit) sont
+    distingués depuis #223 : les deux aboutissaient au même code
+    (``appliquee_sans_changement``), masquant deux situations très
+    différentes dans les rapports de campagne."""
     if not candidats:
-        return None, NON_APPLICABLE
+        return None, PAS_DE_COUP_A_COMPARER
     for i, coup in enumerate(candidats):
         restant = deadline - time.monotonic()
         verdict = _peut_finir_au_tour_suivant(etat, idx, coup, restant)
@@ -154,6 +196,6 @@ def verifier(etat: dict, idx: int, candidats: list, deadline: float):
             return candidats[0], BUDGET_EPUISE
         if verdict:
             if i == 0:
-                return candidats[0], APPLIQUEE_SANS_CHANGEMENT
+                return candidats[0], APPLIQUEE_MEILLEUR_SUFFIT
             return coup, APPLIQUEE_AUTRE_COUP
-    return candidats[0], APPLIQUEE_SANS_CHANGEMENT
+    return candidats[0], APPLIQUEE_AUCUN_CANDIDAT

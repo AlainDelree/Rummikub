@@ -1,5 +1,6 @@
 """Tests de ``scripts/_rapport_duels.py`` (issue #220) : en-tête machine +
-version Python, et verdict d'écart entre 60 et 75 %."""
+version Python + dépendances du solveur exact (#223), et verdict d'écart
+entre 60 et 75 %."""
 
 import sys
 from pathlib import Path
@@ -13,9 +14,16 @@ import _rapport_duels as R  # noqa: E402
 
 def test_entete_machine_contient_nom_et_version_python():
     lignes = R.entete_machine()
-    assert len(lignes) == 1
     assert "Machine :" in lignes[0]
     assert "Python" in lignes[0]
+
+
+def test_entete_machine_contient_les_dependances_du_solveur_exact():
+    """#223, point 1 : l'en-tête de tout rapport indique l'interpréteur et
+    les versions de highspy/numpy."""
+    lignes = R.entete_machine()
+    assert any(sys.executable in l for l in lignes)
+    assert any("highspy" in l and "numpy" in l for l in lignes)
 
 
 def test_verdict_identiques():

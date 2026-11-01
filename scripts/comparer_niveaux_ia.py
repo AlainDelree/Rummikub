@@ -48,19 +48,22 @@ from pathlib import Path
 
 RACINE = Path(__file__).resolve().parent.parent
 SRC = RACINE / "src"
-if SRC.is_dir() and str(SRC) not in sys.path:
-    sys.path.insert(0, str(SRC))
+SCRIPTS = RACINE / "scripts"
+for _p in (SRC, SCRIPTS):
+    if _p.is_dir() and str(_p) not in sys.path:
+        sys.path.insert(0, str(_p))
 
 import contextlib  # noqa: E402
 
 from rummikub.config import NIVEAUX  # noqa: E402
-from rummikub.moteur.ia import (  # noqa: E402
-    jouer_ia, jouer_niveau_expert, _verifier_finition_fin_de_partie,
-    BUDGET_TEMPS_EXPERT,
-)
+from rummikub.moteur.ia import jouer_ia, jouer_niveau_bride  # noqa: E402
 from rummikub.moteur import evaluation_main  # noqa: E402
 from rummikub.moteur import niveaux  # noqa: E402
+from rummikub.moteur import solveur_exact  # noqa: E402
 from rummikub.moteur import verification_finition  # noqa: E402
+from _verif_solveur_exact import (  # noqa: E402
+    entete_dependances, exiger_solveur_exact_ou_quitter,
+)
 from rummikub.moteur.partie import (  # noqa: E402
     annuler_tour,
     backup_debut_tour,
@@ -121,6 +124,17 @@ def _compter_appels_solveur_verif(compteur: list):
 # plateau et la pioche (voir ``_anomalies_conservation``).
 _IDS_REFERENCE = frozenset(t.id for t in creer_sac())
 
+# Statuts qui font réellement tourner ``verification_finition.verifier``
+# (donc consultent le solveur) — les autres (#223, point 4) sont des
+# replis/non-exécutions AVANT d'y arriver (chevalet trop grand, pas de coup
+# à comparer, solveur non exact) et n'appellent jamais le solveur.
+_STATUTS_VERIFIES = frozenset((
+    verification_finition.BUDGET_EPUISE,
+    verification_finition.APPLIQUEE_MEILLEUR_SUFFIT,
+    verification_finition.APPLIQUEE_AUCUN_CANDIDAT,
+    verification_finition.APPLIQUEE_AUTRE_COUP,
+))
+
 
 def _anomalies_conservation(etat: dict) -> list[str]:
     """Vérifie que les 106 tuiles de référence sont chacune présentes une
@@ -154,11 +168,12 @@ def _anomalies_conservation(etat: dict) -> list[str]:
 # --------------------------------------------------------------------------- #
 
 def jouer_un_tour(etat: dict, idx: int, temps_par_niveau: dict,
-                  replis_expert: list, preferer_simple: bool,
+                  replis_expert: dict, preferer_simple: bool,
                   perturbations_expert: list,
                   eval_configs: list = None,
                   stats_verif_finition: dict = None,
-                  appels_solveur_verif: list = None) -> tuple[dict, bool, bool]:
+                  appels_solveur_verif: list = None,
+                  aucun_coup_expert: list = None) -> tuple[dict, bool, bool]:
     """Joue le tour de l'IA à l'index ``idx``.
 
     Chronomètre l'appel à ``jouer_ia`` et l'ajoute à
@@ -171,54 +186,68 @@ def jouer_un_tour(etat: dict, idx: int, temps_par_niveau: dict,
     initiale insuffisante) pour que ce type d'anomalie, bien plus grave,
     ressorte clairement dans le rapport de la campagne.
 
-    Pour le niveau Expert, appelle ``jouer_niveau_expert`` directement
-    (plutôt que le ``jouer_ia`` générique) avec ``on_repli`` (#190) afin de
-    compter, dans ``replis_expert``, le nombre de tours où Expert s'est
-    replié sur Avancé — ``replis_expert[0]`` : total (toute cause) ;
-    ``replis_expert[1]`` : parmi eux, ceux dus à un dépassement du budget
-    de temps SANS avoir rien trouvé (:class:`BudgetDepasse` — la seule
-    cause que l'accélération de #190 peut réduire : l'autre cause, un coup
-    légitimement impossible, ne dépend pas de la vitesse de recherche).
+    Pour le niveau Expert, appelle ``jouer_niveau_bride`` (le MÊME chemin de
+    production que ``jouer_ia``, #223 point 3) avec ``on_repli``/``on_aucun``
+    (points d'observation du moteur, #190/#223 point 2) afin de compter, dans
+    ``replis_expert``, les tours où Expert s'est replié sur la recherche
+    arborescente, SÉPARÉS par cause réelle (#223, point 2 — l'incident de la
+    campagne perdue faute de ``highspy``/``numpy`` venait d'une étiquette
+    inexacte ici) :
+      * ``replis_expert["budget_depasse"]`` : dépassement du budget de temps
+        sans avoir rien trouvé (:class:`BudgetExactDepasse`) ;
+      * ``replis_expert["deps_absentes"]`` : ``highspy``/``numpy`` absents
+        (vérifié directement via ``solveur_exact.DISPONIBLE`` au moment de
+        l'appel, jamais deviné depuis le seul booléen ``timeout``) ;
+      * ``replis_expert["autre"]`` : tout le reste (résultat non valide,
+        exception) — un cas qui ne devrait normalement jamais survenir ici
+        puisque le script refuse de démarrer sans solveur exact (sauf
+        ``--sans-exact``, qui désactive ce comptage).
+    ``aucun_coup_expert`` (liste à un élément) compte séparément les tours où
+    le modèle exact PROUVE qu'aucun coup n'est posable — un cas légitime,
+    PAS un repli (Expert reste décidé par le modèle exact).
+
     ``preferer_simple`` (#199) est transmis tel quel à ``jouer_niveau_
     expert`` ; quand Expert pose effectivement un coup, sa perturbation du
     plateau (``mesurer_perturbation``, voir ``moteur/solveur.py``) est
     ajoutée à ``perturbations_expert`` pour la mesure de campagne.
 
     ``stats_verif_finition``/``appels_solveur_verif`` (issue #221, point 7) :
-    pour Champion du Monde, ``jouer_ia`` applique déjà la vérification de
-    finition via ``jouer_niveau_bride`` — son statut (clé ``verif_finition``
-    du coup renvoyé) est simplement lu ici. **Expert est appelé directement**
-    (ligne ci-dessus, pour ``on_repli``) et NE PASSE PAS par
-    ``jouer_niveau_bride`` : la vérification y est donc appliquée ICI
-    manuellement, par le MÊME appel que la production
-    (``ia._verifier_finition_fin_de_partie``), pour que la mesure couvre
-    aussi Expert, comme demandé par l'issue — sans dupliquer sa logique de
-    décision."""
+    les deux niveaux jouent désormais par le MÊME chemin que le jeu (issue
+    #223, point 3) — ``jouer_niveau_bride`` (ce que ``jouer_ia`` appelle lui
+    aussi, après résolution du niveau). Aucun appel manuel à la vérification
+    de finition ni échéance propre au script : la vérification, l'échéance
+    PARTAGÉE avec le coup normal, et le statut qui en résulte (clé
+    ``verif_finition`` du coup renvoyé) viennent intégralement de
+    ``jouer_niveau_bride`` — seule différence avec ``jouer_ia`` : Expert
+    reçoit ``on_repli``/``on_aucun``/``preferer_simple``/``eval_config``
+    (points d'observation du moteur, pas une logique dupliquée) pour que la
+    campagne compte les replis et compare les réglages d'évaluation, comme
+    avant #223."""
     niveau = etat["joueurs"][idx]["niveau"]
     backup_debut_tour(etat)
     plateau_avant = etat["plateau"]
-    taille_main_avant = len(etat["joueurs"][idx]["chevalet"])
 
     def _compter_repli(timeout):
-        replis_expert[0] += 1
         if timeout:
-            replis_expert[1] += 1
+            replis_expert["budget_depasse"] += 1
+        elif not solveur_exact.DISPONIBLE:
+            replis_expert["deps_absentes"] += 1
+        else:
+            replis_expert["autre"] += 1
+
+    def _compter_aucun():
+        if aucun_coup_expert is not None:
+            aucun_coup_expert[0] += 1
 
     avant_appels = appels_solveur_verif[0] if appels_solveur_verif else 0
     debut = time.monotonic()
     try:
         if niveau == "Expert":
             eval_config = eval_configs[idx] if eval_configs else None
-            res_ia = jouer_niveau_expert(
-                etat, idx, on_repli=_compter_repli,
-                preferer_simple=preferer_simple, eval_config=eval_config)
-            if (res_ia.get("action") == "jouer"
-                    and niveaux.bridage_pour("Expert").verif_finition
-                    and (taille_main_avant - len(res_ia.get("ids_tuiles") or [])) > 0):
-                deadline = time.monotonic() + BUDGET_TEMPS_EXPERT
-                res_ia, statut_verif = _verifier_finition_fin_de_partie(
-                    etat, idx, res_ia, taille_main_avant, deadline)
-                res_ia["verif_finition"] = statut_verif
+            res_ia = jouer_niveau_bride(
+                etat, idx, "Expert", on_repli=_compter_repli,
+                preferer_simple=preferer_simple, eval_config=eval_config,
+                on_aucun=_compter_aucun)
         else:
             res_ia = jouer_ia(etat, idx)
     except Exception:
@@ -233,9 +262,8 @@ def jouer_un_tour(etat: dict, idx: int, temps_par_niveau: dict,
         stats_verif_finition.setdefault(statut_verif, 0)
         stats_verif_finition[statut_verif] += 1
         # Nombre d'appels supplémentaires au solveur : seulement sur les
-        # tours où la vérification a été réellement TENTÉE (exclut
-        # ``non_applicable``, qui ne consulte jamais le solveur).
-        if appels_solveur_verif and statut_verif != verification_finition.NON_APPLICABLE:
+        # tours où la vérification a été réellement TENTÉE.
+        if appels_solveur_verif and statut_verif in _STATUTS_VERIFIES:
             stats_verif_finition.setdefault("appels_par_tour", []).append(
                 appels_solveur_verif[0] - avant_appels)
 
@@ -274,11 +302,12 @@ def jouer_un_tour(etat: dict, idx: int, temps_par_niveau: dict,
 # --------------------------------------------------------------------------- #
 
 def _jouer_une_manche(etat: dict, max_tours: int, temps_par_niveau: dict,
-                      replis_expert: list, preferer_simple: bool,
+                      replis_expert: dict, preferer_simple: bool,
                       perturbations_expert: list,
                       eval_configs: list = None,
                       stats_verif_finition: dict = None,
-                      appels_solveur_verif: list = None) -> dict:
+                      appels_solveur_verif: list = None,
+                      aucun_coup_expert: list = None) -> dict:
     """Joue la manche courante de ``etat`` jusqu'à sa fin naturelle (chevalet
     vidé ou pioche épuisée) ou jusqu'au garde-fou ``max_tours``. Retourne les
     statistiques de CETTE manche ; ``etat`` est muté en place."""
@@ -297,7 +326,7 @@ def _jouer_une_manche(etat: dict, max_tours: int, temps_par_niveau: dict,
         etat, invalide, tuiles_disparues = jouer_un_tour(
             etat, idx, temps_par_niveau, replis_expert, preferer_simple,
             perturbations_expert, eval_configs,
-            stats_verif_finition, appels_solveur_verif)
+            stats_verif_finition, appels_solveur_verif, aucun_coup_expert)
         if invalide:
             coups_invalides += 1
         if tuiles_disparues:
@@ -326,11 +355,12 @@ def _jouer_une_manche(etat: dict, max_tours: int, temps_par_niveau: dict,
 
 
 def jouer_match(config_joueurs: list[dict], nb_manches: int, max_tours: int,
-                temps_par_niveau: dict, replis_expert: list,
+                temps_par_niveau: dict, replis_expert: dict,
                 preferer_simple: bool, perturbations_expert: list,
                 eval_configs: list = None, graine_ia=None,
                 stats_verif_finition: dict = None,
-                appels_solveur_verif: list = None) -> dict:
+                appels_solveur_verif: list = None,
+                aucun_coup_expert: list = None) -> dict:
     """Joue un MATCH complet à 2 joueurs de ``nb_manches`` manches (issue
     #203). Les manches s'enchaînent via ``nouvelle_manche`` (score cumulé
     conservé, nouvelle donne et mise initiale remise à zéro à chaque manche).
@@ -352,7 +382,8 @@ def jouer_match(config_joueurs: list[dict], nb_manches: int, max_tours: int,
         res = _jouer_une_manche(etat, max_tours, temps_par_niveau,
                                 replis_expert, preferer_simple,
                                 perturbations_expert, eval_configs,
-                                stats_verif_finition, appels_solveur_verif)
+                                stats_verif_finition, appels_solveur_verif,
+                                aucun_coup_expert)
         coups_invalides += res["coups_invalides"]
         coups_tuiles_disparues += res["coups_tuiles_disparues"]
         anomalies_conservation += res["anomalies_conservation"]
@@ -382,7 +413,8 @@ def jouer_match(config_joueurs: list[dict], nb_manches: int, max_tours: int,
 def comparer(niveau_a: str, niveau_b: str, nb_donnes: int, seed: int,
             max_tours: int, nb_manches: int = 1,
             preferer_simple: bool = True,
-            eval_a: str = "off", eval_b: str = "off") -> dict:
+            eval_a: str = "off", eval_b: str = "off",
+            sans_exact: bool = False) -> dict:
     """``nb_manches`` (#203) : nombre de manches par match — chaque donne est
     jouée en miroir (places échangées) sur un match complet, le vainqueur du
     match étant le joueur au plus haut score cumulé. Les résultats sont donnés
@@ -398,7 +430,13 @@ def comparer(niveau_a: str, niveau_b: str, nb_donnes: int, seed: int,
     camp A / du camp B. Permet de comparer, EN MIROIR dans une même campagne,
     deux réglages d'Expert (p. ex. ``off`` contre ``complet``, ou deux poids de
     points), le reste étant strictement identique. Sans effet sur un camp qui
-    n'est pas Expert."""
+    n'est pas Expert.
+
+    ``sans_exact`` : SANS EFFET sur le déroulement (le vrai interrupteur est
+    le global ``ia.UTILISER_SOLVEUR_EXACT``, positionné par ``main`` avant
+    l'appel) — reporté tel quel dans le résultat pour que l'en-tête du
+    rapport indique honnêtement si le solveur exact était actif (#223,
+    point 1)."""
     cfg_eval = {"A": evaluation_main.depuis_preset(eval_a, nb_manches),
                 "B": evaluation_main.depuis_preset(eval_b, nb_manches)}
     rng_graines = random.Random(seed)
@@ -419,20 +457,25 @@ def comparer(niveau_a: str, niveau_b: str, nb_donnes: int, seed: int,
     coups_invalides_total = 0
     coups_tuiles_disparues_total = 0
     anomalies_conservation_total = 0
-    # Liste (plutôt qu'un tuple d'int) : mutable, modifiable depuis la
+    # Dict (plutôt qu'un tuple d'int) : mutable, modifiable depuis la
     # fermeture ``_compter_repli`` de ``jouer_un_tour`` sans variable
     # ``nonlocal`` ni retour supplémentaire à faire remonter à travers
-    # ``jouer_partie``. [0] = replis total (toute cause), [1] = parmi eux,
-    # ceux dus à un dépassement de budget sans rien trouvé (voir #190).
-    replis_expert = [0, 0]
+    # ``jouer_partie``. Causes SÉPARÉES (#223, point 2 — l'ancien compteur
+    # ne distinguait que « timeout »/« pas timeout », et le second bucket
+    # a été, dans l'incident qui a motivé #223, étiqueté à tort « coup
+    # légitimement impossible » alors qu'il s'agissait de dépendances
+    # absentes). ``aucun_coup_expert`` est un cas LÉGITIME, pas un repli :
+    # compté séparément (le modèle exact a prouvé qu'aucun coup n'existait).
+    replis_expert = {"budget_depasse": 0, "deps_absentes": 0, "autre": 0}
+    aucun_coup_expert = [0]
     # Perturbation (#199) de chaque coup effectivement posé par Expert :
     # liste de ``(tuiles_deplacees, combos_modifiees)`` (voir
     # ``mesurer_perturbation``, ``moteur/solveur.py``).
     perturbations_expert: list[tuple[int, int]] = []
-    # Vérification de finition en fin de partie (#221, point 7) : compte des
-    # statuts (``appliquee_autre_coup``/``appliquee_sans_changement``/
-    # ``non_applicable``/``budget_epuise``) + nombre d'appels SUPPLÉMENTAIRES
-    # au solveur par tour concerné (clé ``"appels_par_tour"``, liste).
+    # Vérification de finition en fin de partie (#221, point 7 ; statuts
+    # affinés par #223, point 4 — voir ``verification_finition.LIBELLES``)
+    # : compte des statuts + nombre d'appels SUPPLÉMENTAIRES au solveur par
+    # tour concerné (clé ``"appels_par_tour"``, liste).
     stats_verif_finition: dict = {}
     appels_solveur_verif = [0]
     pile_appels = contextlib.ExitStack()
@@ -454,7 +497,8 @@ def comparer(niveau_a: str, niveau_b: str, nb_donnes: int, seed: int,
                                    preferer_simple, perturbations_expert,
                                    eval_configs, graine_ia=graine,
                                    stats_verif_finition=stats_verif_finition,
-                                   appels_solveur_verif=appels_solveur_verif)
+                                   appels_solveur_verif=appels_solveur_verif,
+                                   aucun_coup_expert=aucun_coup_expert)
             coups_invalides_total += resultat["coups_invalides"]
             coups_tuiles_disparues_total += resultat["coups_tuiles_disparues"]
             anomalies_conservation_total += resultat["anomalies_conservation"]
@@ -517,14 +561,15 @@ def comparer(niveau_a: str, niveau_b: str, nb_donnes: int, seed: int,
         "coups_invalides_total": coups_invalides_total,
         "coups_tuiles_disparues_total": coups_tuiles_disparues_total,
         "anomalies_conservation_total": anomalies_conservation_total,
-        "replis_expert_total": replis_expert[0],
-        "replis_expert_timeout": replis_expert[1],
+        "replis_expert": dict(replis_expert),
+        "aucun_coup_expert": aucun_coup_expert[0],
         "perturbations_expert": perturbations_expert,
         "preferer_simple": preferer_simple,
         "eval_a": eval_a,
         "eval_b": eval_b,
         "nb_donnes": nb_donnes,
         "nb_parties": 2 * nb_donnes,
+        "sans_exact": sans_exact,
     }
 
 
@@ -558,7 +603,25 @@ def afficher_rapport(resume: dict) -> None:
     n_matchs = resume["matchs_decides"]
     n_manches = len(resume["tours_decidees"])
 
+    tours_expert = len(resume["temps_par_niveau"].get("Expert", []))
+    replis = resume.get("replis_expert") or {}
+    replis_deps_absentes = replis.get("deps_absentes", 0)
+
     print("=" * 70)
+    for ligne in entete_dependances(sans_exact=resume.get("sans_exact", False)):
+        print(ligne)
+    if replis_deps_absentes and tours_expert:
+        # Avertissement visible (#223, point 2) : si le solveur exact s'est
+        # révélé indisponible PENDANT la campagne (et pas seulement signalé
+        # au démarrage), la mesure d'Expert est faussée pour ces tours — la
+        # situation même qui a motivé cette issue (campagne perdue faute de
+        # highspy/numpy, étiquetée à tort « coup légitimement impossible »).
+        print("!" * 70)
+        print(f"  ATTENTION : {replis_deps_absentes}/{tours_expert} tour(s) "
+             f"d'Expert joués SANS solveur exact (highspy/numpy indisponible "
+             f"pendant la campagne) — ces tours ne mesurent PAS Expert, voir "
+             f"CONTEXTE.md (incident #223).")
+        print("!" * 70)
     suffixe_a = f" [eval={resume['eval_a']}]" if resume.get("eval_a", "off") != "off" else ""
     suffixe_b = f" [eval={resume['eval_b']}]" if resume.get("eval_b", "off") != "off" else ""
     print(f"COMPARAISON : {niveau_a} (camp A){suffixe_a} vs "
@@ -613,37 +676,57 @@ def afficher_rapport(resume: dict) -> None:
         print(f"    {niveau:15s} : moyenne {moyenne(temps) * 1000:.1f} ms, "
              f"max {max(temps) * 1000:.1f} ms, sur {len(temps)} tour(s)")
 
-    tours_expert = len(resume["temps_par_niveau"].get("Expert", []))
     if tours_expert:
-        replis = resume["replis_expert_total"]
-        replis_timeout = resume["replis_expert_timeout"]
-        print(f"  Replis d'Expert sur Avancé, toute cause : "
-             f"{replis}/{tours_expert} tour(s) ({replis / tours_expert * 100:.1f} %)")
-        print(f"    — dont faute de résultat dans le budget (#190, seule "
-             f"cause visée par l'accélération) : {replis_timeout}/{tours_expert} "
-             f"tour(s) ({replis_timeout / tours_expert * 100:.1f} %)")
-        print(f"    — dont coup légitimement impossible (aucun rapport "
-             f"avec la vitesse) : {replis - replis_timeout}/{tours_expert} "
-             f"tour(s) ({(replis - replis_timeout) / tours_expert * 100:.1f} %)")
+        budget_depasse = replis.get("budget_depasse", 0)
+        autre = replis.get("autre", 0)
+        total_replis = budget_depasse + replis_deps_absentes + autre
+        aucun_coup = resume.get("aucun_coup_expert", 0)
+        print(f"  Replis d'Expert sur la recherche arborescente, toute "
+             f"cause : {total_replis}/{tours_expert} tour(s) "
+             f"({total_replis / tours_expert * 100:.1f} %)")
+        print(f"    — dont budget de temps réellement dépassé (#190, seule "
+             f"cause visée par l'accélération) : {budget_depasse}/{tours_expert} "
+             f"tour(s) ({budget_depasse / tours_expert * 100:.1f} %)")
+        print(f"    — dont solveur exact indisponible (dépendances "
+             f"absentes) : {replis_deps_absentes}/{tours_expert} tour(s) "
+             f"({replis_deps_absentes / tours_expert * 100:.1f} %)")
+        if autre:
+            print(f"    — dont autre anomalie (résultat non valide ou "
+                 f"exception, PAS un coup légitimement impossible) : "
+                 f"{autre}/{tours_expert} tour(s) "
+                 f"({autre / tours_expert * 100:.1f} %)")
+        print(f"  Aucun coup possible (cas légitime, PAS un repli : le "
+             f"modèle exact a prouvé qu'il n'y avait rien à jouer) : "
+             f"{aucun_coup}/{tours_expert} tour(s) "
+             f"({aucun_coup / tours_expert * 100:.1f} %)")
 
     stats_verif = resume.get("stats_verif_finition") or {}
     statuts_verif = {k: v for k, v in stats_verif.items() if k != "appels_par_tour"}
     if statuts_verif:
-        tentes = sum(v for k, v in statuts_verif.items()
-                    if k != verification_finition.NON_APPLICABLE)
+        statuts_executes = (
+            verification_finition.BUDGET_EPUISE,
+            verification_finition.APPLIQUEE_MEILLEUR_SUFFIT,
+            verification_finition.APPLIQUEE_AUCUN_CANDIDAT,
+            verification_finition.APPLIQUEE_AUTRE_COUP,
+        )
+        tentes = sum(statuts_verif.get(c, 0) for c in statuts_executes)
         changes = statuts_verif.get(verification_finition.APPLIQUEE_AUTRE_COUP, 0)
         print("-" * 70)
-        print("  Vérification de finition en fin de partie (#221) :")
-        for code, libelle in (
-                (verification_finition.APPLIQUEE_AUTRE_COUP, "appliquée, autre coup"),
-                (verification_finition.APPLIQUEE_SANS_CHANGEMENT, "appliquée, sans changement"),
-                (verification_finition.NON_APPLICABLE, "non applicable"),
-                (verification_finition.BUDGET_EPUISE, "budget épuisé / repli")):
+        print("  Vérification de finition en fin de partie (#221, statuts "
+             "affinés par #223) :")
+        for code in (
+                verification_finition.NON_APPLICABLE,
+                verification_finition.PAS_DE_COUP_A_COMPARER,
+                verification_finition.SOLVEUR_NON_EXACT,
+                verification_finition.BUDGET_EPUISE,
+                verification_finition.APPLIQUEE_MEILLEUR_SUFFIT,
+                verification_finition.APPLIQUEE_AUCUN_CANDIDAT,
+                verification_finition.APPLIQUEE_AUTRE_COUP):
             n = statuts_verif.get(code, 0)
-            print(f"    {libelle:28s} : {n}")
+            print(f"    {verification_finition.LIBELLES[code]:52s} : {n}")
         if tentes:
-            print(f"    Fréquence d'activation (coup changé / tours de fin "
-                 f"de partie vérifiés) : {changes}/{tentes} "
+            print(f"    Fréquence d'activation (coup changé / tours où la "
+                 f"vérification a tourné jusqu'au bout) : {changes}/{tentes} "
                  f"({changes / tentes * 100:.1f} %)")
         appels = stats_verif.get("appels_par_tour") or []
         if appels:
@@ -728,6 +811,11 @@ def main(argv: list[str]) -> int:
     if args.manches < 1:
         parser.error("--manches doit être au moins 1")
 
+    # Échec franc sans solveur exact (issue #223, point 1) : AVANT toute
+    # autre validation, sauf désactivation volontaire et assumée
+    # (--sans-exact). Voir l'incident documenté dans _verif_solveur_exact.py.
+    exiger_solveur_exact_ou_quitter(sans_exact=args.sans_exact)
+
     if args.sans_exact:
         # Rejoue le comportement d'avant #206 : Expert n'utilise que la
         # recherche arborescente (modèle exact HiGHS désactivé globalement).
@@ -752,7 +840,8 @@ def main(argv: list[str]) -> int:
         resume = comparer(args.niveau_a, args.niveau_b, args.donnes, args.seed,
                           args.max_tours, nb_manches=args.manches,
                           preferer_simple=not args.sans_preferer_simple,
-                          eval_a=args.eval_a, eval_b=args.eval_b)
+                          eval_a=args.eval_a, eval_b=args.eval_b,
+                          sans_exact=args.sans_exact)
     duree = time.monotonic() - debut
 
     afficher_rapport(resume)

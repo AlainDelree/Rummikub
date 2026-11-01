@@ -26,13 +26,20 @@ solveur naturel se tromperait sans raison.
 
 import time
 
+import pytest
+
 from rummikub.moteur import ia, verification_finition as vf
 from rummikub.moteur import niveaux
+from rummikub.moteur import solveur_exact as se
 from rummikub.moteur.ia import (
-    jouer_niveau_bride, jouer_niveau_expert, _coup_sans_rearrangement,
+    jouer_ia, jouer_niveau_bride, jouer_niveau_expert, _coup_sans_rearrangement,
     _verifier_finition_fin_de_partie, SOLVEUR_EXACT, SOLVEUR_RECHERCHE,
     SOLVEUR_AVANCE,
 )
+
+besoin_exact = pytest.mark.skipif(
+    not se.DISPONIBLE,
+    reason="highspy/numpy absents (dépendances du modèle exact d'Expert)")
 
 
 def T(id_, v, c, j=False):
@@ -114,7 +121,7 @@ def test_aucun_candidat_naturel_ne_permet_de_finir():
     obtenu = jouer_niveau_bride(etat, 1, "Champion du Monde", rng=_Rng(0.999))
     assert obtenu["action"] == "jouer"
     assert set(obtenu["ids_tuiles"]) == set(attendu["ids_tuiles"])
-    assert obtenu.get("verif_finition") == vf.APPLIQUEE_SANS_CHANGEMENT
+    assert obtenu.get("verif_finition") == vf.APPLIQUEE_AUCUN_CANDIDAT
 
 
 def test_sans_joker_decision_verifiee():
@@ -133,7 +140,7 @@ def test_sans_joker_decision_verifiee():
 
     obtenu = jouer_niveau_bride(etat, 1, "Champion du Monde", rng=_Rng(0.999))
     assert set(obtenu["ids_tuiles"]) == {"rouge_7_a"}
-    assert obtenu.get("verif_finition") == vf.APPLIQUEE_SANS_CHANGEMENT
+    assert obtenu.get("verif_finition") == vf.APPLIQUEE_AUCUN_CANDIDAT
 
 
 # --------------------------------------------------------------------------- #
@@ -201,7 +208,7 @@ def test_verifier_garde_le_meilleur_coup_si_lui_seul_permet_de_finir(monkeypatch
     }))
     deadline = time.monotonic() + 5.0
     coup_choisi, statut = vf.verifier(etat, idx, [coup_a, coup_b], deadline)
-    assert statut == vf.APPLIQUEE_SANS_CHANGEMENT
+    assert statut == vf.APPLIQUEE_MEILLEUR_SUFFIT
     assert set(coup_choisi["ids_tuiles"]) == set(coup_a["ids_tuiles"])
 
 
@@ -223,7 +230,7 @@ def test_verifier_egalite_prefere_le_premier_candidat(monkeypatch):
     }))
     deadline = time.monotonic() + 5.0
     coup_choisi, statut = vf.verifier(etat, idx, [coup_a, coup_b], deadline)
-    assert statut == vf.APPLIQUEE_SANS_CHANGEMENT
+    assert statut == vf.APPLIQUEE_MEILLEUR_SUFFIT
     assert set(coup_choisi["ids_tuiles"]) == set(coup_a["ids_tuiles"])
 
 
@@ -280,7 +287,9 @@ def test_repli_sans_dependances_verif_finition(monkeypatch):
     assert coup["action"] in ("jouer", "piocher", "passer")
     if coup["action"] == "jouer":
         assert coup.get("solveur") in (SOLVEUR_RECHERCHE, SOLVEUR_AVANCE)
-        assert coup.get("verif_finition") == vf.BUDGET_EPUISE
+        assert coup.get("verif_finition") == vf.SOLVEUR_NON_EXACT
+    else:
+        assert coup.get("verif_finition") == vf.PAS_DE_COUP_A_COMPARER
 
 
 # --------------------------------------------------------------------------- #
@@ -307,6 +316,61 @@ def test_interrupteur_par_niveau(monkeypatch):
     obtenu = jouer_niveau_bride(etat, 1, "Champion du Monde", rng=_Rng(0.999))
     assert set(obtenu["ids_tuiles"]) == set(attendu["ids_tuiles"])
     assert "verif_finition" not in obtenu
+
+
+# --------------------------------------------------------------------------- #
+# 12. Statuts plus fins (issue #223, point 4/5) — vraie fin de partie à
+# travers ``jouer_ia`` (chemin de production complet), solveur exact requis.
+# --------------------------------------------------------------------------- #
+
+@besoin_exact
+def test_jouer_ia_vraie_fin_de_partie_statut_applique_jamais_budget_epuise():
+    """Reproduit une vraie fin de partie (chevalet <= 5 tuiles) à travers
+    ``jouer_ia`` — le point d'entrée du JEU, pas un appel direct au moteur —
+    avec le solveur exact RÉELLEMENT disponible : la vérification ne doit
+    jamais retourner ``BUDGET_EPUISE`` (aucune raison de manquer de budget
+    sur une position aussi petite, avec le budget de production) et doit
+    produire un des nouveaux statuts d'application (#223, point 5)."""
+    etat = _etat_sans_issue()
+    assert len(etat["joueurs"][1]["chevalet"]) <= niveaux.SEUIL_FIN_PARTIE_VERIF_FINITION
+    coup = jouer_ia(etat, 1)
+    assert coup["action"] == "jouer"
+    statut = coup.get("verif_finition")
+    assert statut != vf.BUDGET_EPUISE
+    assert statut in (vf.APPLIQUEE_MEILLEUR_SUFFIT, vf.APPLIQUEE_AUCUN_CANDIDAT,
+                      vf.APPLIQUEE_AUTRE_COUP)
+
+
+def test_statut_pas_de_coup_a_comparer_via_jouer_ia():
+    """Statut ``PAS_DE_COUP_A_COMPARER`` (#223, point 4) : Expert/Champion du
+    Monde sans AUCUN coup posable (chevalet qui ne forme aucune combinaison
+    valable) pioche ou passe, et c'est tracé comme tel plutôt que silencieux."""
+    etat = _etat(
+        plateau=[],
+        chevalet=[T("rouge_1_a", 1, "rouge")],  # mise initiale jamais faite, 30 pts requis
+    )
+    etat["joueurs"][1]["mise_initiale_faite"] = False
+    coup = jouer_ia(etat, 1)
+    assert coup["action"] in ("piocher", "passer")
+    assert coup.get("verif_finition") == vf.PAS_DE_COUP_A_COMPARER
+
+
+@besoin_exact
+def test_on_aucun_appele_quand_le_modele_exact_prouve_aucun_coup():
+    """``on_aucun`` (#223, point 2) : appelé quand le modèle exact PROUVE
+    qu'aucun coup n'est posable — jamais confondu avec un repli (``on_repli``
+    n'est lui jamais appelé dans ce cas)."""
+    etat = _etat(
+        plateau=[],
+        chevalet=[T("rouge_1_a", 1, "rouge")],
+    )
+    etat["joueurs"][1]["mise_initiale_faite"] = False
+    appels_aucun = []
+    appels_repli = []
+    jouer_niveau_expert(etat, 1, on_aucun=lambda: appels_aucun.append(True),
+                        on_repli=lambda t: appels_repli.append(t))
+    assert appels_aucun == [True]
+    assert appels_repli == []
 
 
 class _Rng:

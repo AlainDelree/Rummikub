@@ -60,6 +60,7 @@ from _limite_temps_ferme import (  # noqa: E402
     CODE_LIMITE_TEMPS, CODE_TERMINE, lancer_avec_limite_ferme,
 )
 from _rapport_duels import entete_machine, verdict_ecart  # noqa: E402
+from _verif_solveur_exact import exiger_solveur_exact_ou_quitter  # noqa: E402
 
 logger = logging.getLogger("valider_bas_echelle")
 
@@ -219,6 +220,12 @@ def main(argv: list[str]) -> int:
         parser.error("--budget-solveur doit être > 0")
     if args.donnes < 1:
         parser.error("--donnes doit être au moins 1")
+
+    # Échec franc sans solveur exact (issue #223, point 1) : Facile et
+    # Intermédiaire consultent aussi le modèle exact (voir
+    # ia._coup_selon_perturbation) — pas de ``--sans-exact`` ici, donc
+    # toujours requis. AVANT la relance surveillée ci-dessous.
+    exiger_solveur_exact_ou_quitter()
 
     if args._worker or args.limite_temps is None:
         return _executer(args)

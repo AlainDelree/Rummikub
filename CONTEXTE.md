@@ -952,22 +952,31 @@ répond à ce risque.
   anti-disparition de `jouer_tour` (§4) est compté à part et clairement
   signalé dans le rapport (ne doit normalement jamais arriver, puisque
   l'IA revalide ses propres coups avant de les proposer). **Depuis #190**,
-  le rapport affiche aussi le nombre de tours où Expert s'est replié sur
-  Avancé (`jouer_un_tour` appelle `jouer_niveau_expert(..., on_repli=...)`
-  directement pour le niveau Expert plutôt que le `jouer_ia` générique,
-  afin de compter ces replis sans dupliquer la logique de décision), **en
-  distinguant deux causes très différentes** : (1) le solveur dépasse son
-  budget sans avoir rien trouvé nulle part dans l'arbre
-  (`BudgetDepasse` — un problème de vitesse, la seule cause que
-  l'accélération de #190 peut réduire) et (2) le solveur conclut
-  légitimement qu'aucun réarrangement ne pose la moindre tuile (coup
-  impossible — Avancé ne fera pas mieux, aucun rapport avec la vitesse de
-  recherche). Les deux premières versions de ce compteur (avant la
-  distinction) les confondaient, ce qui rendait la mesure peu
-  interprétable : le taux de repli « toute cause » restait élevé et quasi
-  inchangé avant/après #190 (la plupart des replis étaient déjà, avant
-  tout correctif, de cause (2), sans rapport avec la vitesse) — voir
-  CHANGELOG-190 pour les chiffres corrigés. Première
+  le rapport affiche aussi le nombre de tours où Expert s'est replié sur la
+  recherche arborescente (`jouer_un_tour` appelle `ia.jouer_niveau_bride(...,
+  on_repli=..., on_aucun=...)` — le MÊME chemin de production que `jouer_ia`,
+  voir #223 ci-dessous — pour compter ces replis sans dupliquer la logique
+  de décision), **en distinguant, depuis #223, TROIS causes** (voir aussi
+  §13) : (1) budget de temps réellement dépassé sans rien trouvé
+  (`BudgetExactDepasse` — un problème de vitesse, la seule cause que
+  l'accélération de #190 peut réduire) ; (2) solveur exact indisponible
+  (`solveur_exact.DISPONIBLE` faux au moment de l'appel — dépendances
+  absentes) ; (3) toute autre anomalie (résultat non valide, exception —
+  ne devrait normalement jamais survenir puisque le script refuse de
+  démarrer sans solveur exact, voir §13). **Avant #223, les causes (2) et
+  (3) étaient confondues sous un seul bucket, étiqueté « coup légitimement
+  impossible, aucun rapport avec la vitesse »** — une étiquette FAUSSE
+  quand la cause réelle était (2), ce qui a fait perdre une campagne entière
+  (incident documenté en §13). Le cas réellement légitime, « aucun coup
+  possible » (le solveur exact PROUVE qu'il n'y a rien à jouer, via
+  `on_aucun`), n'est PAS un repli : compté séparément depuis #223. Les deux
+  premières versions du compteur de repli (avant #190) ne distinguaient
+  RIEN, ce qui rendait la mesure peu interprétable : le taux de repli
+  « toute cause » restait élevé et quasi inchangé avant/après #190 (la
+  plupart des replis étaient déjà, avant tout correctif, de cause
+  NON liée au budget de temps) — voir CHANGELOG-190 pour les chiffres
+  corrigés de l'époque (établis avec l'ancienne distinction à deux causes,
+  depuis affinée par #223 ci-dessus). Première
   campagne (#184, Avancé vs Expert avant le solveur de réarrangement
   global, 50 donnes) : écart non significatif à 95 % (53 % / 47 % sur
   100 parties). **#186** (Expert = solveur de réarrangement global,
@@ -2266,9 +2275,25 @@ une au fur et à mesure que de futures issues les testent/implémentent.
   (pas de budget séparé) ; si elle est épuisée, si `highspy`/`numpy` manquent,
   ou en cas d'erreur, l'IA joue comme avant #221, sans erreur visible — le
   journal de partie trace quand même ce qui s'est passé (clé `verif_finition`
-  de l'action : `appliquee_autre_coup` / `appliquee_sans_changement` /
-  `non_applicable` / `budget_epuise`, même esprit que la clé `solveur` de
-  #211). Module dédié : `moteur/verification_finition.py` ; intégration dans
+  de l'action, **sept statuts affinés par #223** — `verification_finition.
+  LIBELLES` pour les libellés exacts, même esprit que la clé `solveur` de
+  #211) :
+  - `non_applicable` : chevalet trop grand (> `SEUIL_FIN_PARTIE_VERIF_FINITION`) ;
+  - `pas_de_coup_a_comparer` : pas de coup « jouer » à comparer (pioche/passe) ;
+  - `solveur_non_exact` : coup du tour pas décidé par le modèle exact
+    (dépendances absentes, ou repli déjà survenu faute de budget) ;
+  - `budget_epuise` : budget de temps RÉELLEMENT épuisé pendant la vérification
+    elle-même (distinct de `solveur_non_exact` depuis #223) ;
+  - `appliquee_meilleur_suffit` : le meilleur coup du solveur permettait déjà
+    de finir au tour suivant (aucun changement, mais pas faute de candidat) ;
+  - `appliquee_aucun_candidat` : aucun candidat ne permet de finir (aucun
+    changement, faute de candidat — avant #223, confondu avec le statut
+    précédent sous `appliquee_sans_changement`, masquant deux situations très
+    différentes dans les rapports de campagne) ;
+  - `appliquee_autre_coup` : un autre candidat permet de finir là où le
+    meilleur coup du solveur ne le permettait pas (changement réel).
+
+  Module dédié : `moteur/verification_finition.py` ; intégration dans
   `moteur/ia.py` (`_verifier_finition_fin_de_partie`, `_candidats_finition`),
   branchée dans `jouer_niveau_bride` juste après le court-circuit « coup
   gagnant ». Le solveur lui-même, l'interface, et les niveaux Débutant à
@@ -2311,15 +2336,46 @@ une au fur et à mesure que de futures issues les testent/implémentent.
   `--sans-preferer-simple` ; nouvelles statistiques : fréquence d'activation,
   appels supplémentaires au solveur par tour concerné moyenne/maximum) —
   voir le rapport de clôture de #221 pour les chiffres (donnes, taux de
-  victoire avec IC, blocages par niveau). Le script appelle Expert
-  directement (`jouer_niveau_expert`, pas `jouer_niveau_bride`) pour ses
-  propres statistiques (`on_repli`, perturbation) : la vérification y est
-  donc appliquée manuellement dans `jouer_un_tour` via le MÊME appel de
-  production (`ia._verifier_finition_fin_de_partie`), sans dupliquer sa
-  logique de décision ; Champion du Monde, qui passe par `jouer_ia`, l'obtient
-  nativement. Le moteur détecte déjà un blocage par pioche épuisée
-  (`pioche_vide`, compté dans `fins` par la campagne) — **rien n'y est changé
-  par cette issue**, conformément à son périmètre (signaler seulement).
+  victoire avec IC, blocages par niveau). **Depuis #223, Expert ET Champion
+  du Monde jouent par le MÊME chemin que le jeu** (`ia.jouer_niveau_bride`,
+  ce que `jouer_ia` appelle aussi après résolution du niveau) : plus d'appel
+  manuel à la vérification de finition ni d'échéance propre au script —
+  seule différence avec `jouer_ia`, Expert reçoit `on_repli`/`on_aucun`/
+  `preferer_simple`/`eval_config` (points d'observation du moteur, pas une
+  logique dupliquée) pour que la campagne compte les replis et compare les
+  réglages d'évaluation. Le moteur détecte déjà un blocage par pioche
+  épuisée (`pioche_vide`, compté dans `fins` par la campagne) — **rien n'y
+  est changé par cette issue**, conformément à son périmètre (signaler
+  seulement).
+
+  **Incident à l'origine de #223, et garde-fou qui en résulte.** Une
+  campagne Avancé contre Expert, lancée pour mesurer #221, a tourné à vide :
+  le terminal d'Alain pointait par défaut vers un AUTRE interpréteur Python,
+  sans `highspy`/`numpy` — Expert s'est replié sur Avancé à CHAQUE tour
+  (766/766) sans que rien ne le signale, et le rapport a même étiqueté ces
+  replis « coup légitimement impossible, aucun rapport avec la vitesse »,
+  ce qui était faux (c'était en réalité un repli faute de dépendances).
+  **Conséquence (#223, point 1) : avant de lancer une campagne**, vérifier
+  que l'interpréteur Python du terminal courant a bien `highspy`/`numpy` :
+
+  ```
+  python3 -c "import highspy, numpy; print('OK', highspy, numpy)"
+  ```
+
+  `scripts/comparer_niveaux_ia.py`, `scripts/valider_bas_echelle.py` et
+  `scripts/echelle_niveaux.py` refusent maintenant de démarrer (code de
+  sortie non nul, message nommant l'interpréteur réellement utilisé) si ce
+  n'est pas le cas — sauf `--sans-exact` (désactivation volontaire et
+  assumée, uniquement disponible sur `comparer_niveaux_ia.py`), qui n'est
+  jamais concerné par ce garde-fou. Voir `scripts/_verif_solveur_exact.py`.
+  L'en-tête de chaque rapport/fichier de résultats indique l'interpréteur et
+  les versions de `highspy`/`numpy` (ou leur absence volontaire). Dans le
+  rapport de `comparer_niveaux_ia.py`, les causes de repli d'Expert sont
+  séparées (solveur exact indisponible / budget dépassé / autre anomalie),
+  avec un avertissement visible en tête de rapport si des replis par
+  indisponibilité ont eu lieu pendant la campagne ; le cas légitime
+  « aucun coup possible » (le modèle exact PROUVE qu'il n'y a rien à jouer)
+  est compté séparément, PAS comme un repli.
 
   **Deux idées d'Alain, consignées, non implémentées :**
   - **(a) Calcul pendant le tour de l'humain** : l'IA pourrait réfléchir

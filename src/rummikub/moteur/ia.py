@@ -897,7 +897,7 @@ def _marquer_solveur(coup, code):
 
 def jouer_niveau_expert(etat, idx, budget_temps=None, on_repli=None,
                         preferer_simple=None, utiliser_exact=None,
-                        eval_config=None):
+                        eval_config=None, on_aucun=None):
     """Niveau Expert : joue le coup qui pose le plus grand nombre de tuiles du
     chevalet, en conservant toutes les tuiles du plateau (#206).
 
@@ -914,8 +914,14 @@ def jouer_niveau_expert(etat, idx, budget_temps=None, on_repli=None,
     d'erreur, Expert se replie sur la recherche arborescente conservée
     (``solveur.py``), puis sur Avancé. ``on_repli(timeout)``, si fourni, est
     appelé une fois lorsque le modèle exact ne produit pas le coup (``timeout``
-    vrai si c'est un dépassement de budget) — uniquement pour la mesure (voir
-    ``scripts/comparer_niveaux_ia.py``), jamais utilisé en jeu normal.
+    vrai si c'est un dépassement de budget, FAUX pour toute autre cause —
+    dépendances absentes ou résultat/erreur invalide, voir
+    ``scripts/comparer_niveaux_ia.py`` pour la façon de les distinguer à partir
+    de ``solveur_exact.DISPONIBLE``) — uniquement pour la mesure, jamais
+    utilisé en jeu normal. ``on_aucun()``, si fourni (#223, point 2), est
+    appelé quand le modèle exact PROUVE qu'aucun coup n'est posable — cas
+    légitime, distinct d'un repli : Expert reste décidé par le modèle exact,
+    qui a simplement conclu qu'il n'y avait rien à jouer.
 
     ``utiliser_exact`` (``None`` → lit ``UTILISER_SOLVEUR_EXACT``) à ``False``
     rejoue l'ancien comportement (recherche seule) pour la comparaison
@@ -939,6 +945,8 @@ def jouer_niveau_expert(etat, idx, budget_temps=None, on_repli=None,
             # Optimum prouvé sans coup : pas de recherche redondante, Avancé
             # tranche directement entre pioche et passe (le modèle exact a
             # décidé qu'aucune pose n'était possible).
+            if on_aucun is not None:
+                on_aucun()
             return _marquer_solveur(jouer_niveau_avance(etat, idx), SOLVEUR_EXACT)
         # statut == "echec" : repli sur la recherche arborescente, puis Avancé.
         if on_repli is not None:
@@ -993,24 +1001,38 @@ def _coup_sans_rearrangement(etat, idx):
     return _marquer_solveur(coup, SOLVEUR_SANS_REARR)
 
 
-def _coup_selon_perturbation(etat, idx, perturbation_max, budget_temps, on_repli):
+def _coup_selon_perturbation(etat, idx, perturbation_max, budget_temps, on_repli,
+                             preferer_simple=None, eval_config=None,
+                             on_aucun=None):
     """Meilleur coup « vu » compte tenu de la perturbation autorisée.
 
     ``perturbation_max is None`` → solveur complet (Avancé/Expert/Champion).
     ``perturbation_max == 0`` → coup sans réarrangement (jamais de déplacement).
     ``perturbation_max > 0`` → coup complet s'il ne déplace pas plus de
     ``perturbation_max`` tuiles du plateau, sinon on retombe sur le coup sans
-    réarrangement (le joueur ne « voit » pas une recomposition plus ample)."""
+    réarrangement (le joueur ne « voit » pas une recomposition plus ample).
+
+    ``preferer_simple``/``eval_config``/``on_aucun`` (``None`` → réglages par
+    défaut, comportement inchangé) : simples relais vers
+    ``jouer_niveau_expert``, ajoutés par #223 pour que les scripts de mesure
+    puissent faire jouer Expert/Champion du Monde par CE chemin
+    (``jouer_niveau_bride``) plutôt que d'appeler ``jouer_niveau_expert``
+    directement en dupliquant la logique de vérification de finition."""
     if perturbation_max is None:
         return jouer_niveau_expert(etat, idx, budget_temps=budget_temps,
-                                   on_repli=on_repli)
+                                   on_repli=on_repli,
+                                   preferer_simple=preferer_simple,
+                                   eval_config=eval_config,
+                                   on_aucun=on_aucun)
 
     sans_rearr = _coup_sans_rearrangement(etat, idx)
     if perturbation_max <= 0:
         return sans_rearr
 
     complet = jouer_niveau_expert(etat, idx, budget_temps=budget_temps,
-                                  on_repli=on_repli)
+                                  on_repli=on_repli,
+                                  preferer_simple=preferer_simple,
+                                  eval_config=eval_config)
     if not (isinstance(complet, dict) and complet.get("action") == "jouer"):
         return sans_rearr if sans_rearr is not None else complet
     deplacees, _combos = mesurer_perturbation(etat.get("plateau", []),
@@ -1055,22 +1077,24 @@ def _verifier_finition_fin_de_partie(etat, idx, coup, taille_main, deadline):
     décidé par le modèle exact (``SOLVEUR_EXACT``) — si ce n'est pas le cas
     (dépendances absentes, repli déjà survenu pour ce tour faute de budget),
     la vérification, qui s'appuie sur CE MÊME solveur, ne peut de toute façon
-    pas s'exécuter non plus : même repli silencieux (``BUDGET_EPUISE``, qui
-    couvre ici aussi bien l'absence de highspy/numpy qu'un budget déjà
-    épuisé pour le coup normal — un seul code, comme listé par l'issue).
+    pas s'exécuter non plus : repli silencieux, statut ``SOLVEUR_NON_EXACT``
+    (distingué de ``BUDGET_EPUISE`` depuis #223 — un budget réellement épuisé
+    PENDANT la vérification est une situation différente, voir
+    ``verification_finition.verifier``).
 
     Retourne ``(coup, statut)`` — ``coup`` inchangé si la vérification ne
     s'applique pas ou n'aboutit à rien de nouveau."""
     if taille_main > _niveaux.SEUIL_FIN_PARTIE_VERIF_FINITION:
         return coup, verification_finition.NON_APPLICABLE
     if coup.get("solveur") != SOLVEUR_EXACT:
-        return coup, verification_finition.BUDGET_EPUISE
+        return coup, verification_finition.SOLVEUR_NON_EXACT
     candidats = _candidats_finition(etat, idx, coup)
     return verification_finition.verifier(etat, idx, candidats, deadline)
 
 
 def jouer_niveau_bride(etat, idx, nom_niveau, budget_temps=None, rng=None,
-                       on_repli=None):
+                       on_repli=None, preferer_simple=None, eval_config=None,
+                       on_aucun=None):
     """Joue le tour du niveau ``nom_niveau`` avec le moteur exact RÉGLÉ par les
     paramètres de ``moteur/niveaux.py`` (issue #213).
 
@@ -1084,7 +1108,16 @@ def jouer_niveau_bride(etat, idx, nom_niveau, budget_temps=None, rng=None,
 
     Le mécanisme ayant décidé le coup est annoté sur l'action (clé ``solveur``,
     journalisée) : le repli silencieux quand highspy/numpy manquent reste donc
-    traçable (``recherche``/``avance`` au lieu de ``exact``)."""
+    traçable (``recherche``/``avance`` au lieu de ``exact``).
+
+    ``preferer_simple``/``eval_config`` (``None`` → réglages par défaut,
+    comportement inchangé pour ``jouer_ia`` et tout appelant existant) : relais
+    vers ``_coup_selon_perturbation``, ajoutés par #223 (point 3) pour que
+    ``scripts/comparer_niveaux_ia.py`` fasse jouer Expert par ce MÊME chemin
+    de production que le jeu, sans dupliquer la logique de vérification de
+    finition ci-dessous avec sa propre échéance. ``on_aucun`` : voir
+    ``jouer_niveau_expert`` — cas légitime (aucun coup posable, prouvé par le
+    modèle exact), distinct d'un repli."""
     bridage = _niveaux.bridage_pour(nom_niveau)
     if rng is None:
         rng = _rng_oubli(etat, idx)
@@ -1092,11 +1125,20 @@ def jouer_niveau_bride(etat, idx, nom_niveau, budget_temps=None, rng=None,
 
     debut_tour = time.monotonic()
     coup = _coup_selon_perturbation(
-        etat, idx, bridage.perturbation_max, budget_temps, on_repli)
+        etat, idx, bridage.perturbation_max, budget_temps, on_repli,
+        preferer_simple=preferer_simple, eval_config=eval_config,
+        on_aucun=on_aucun)
 
     if not (isinstance(coup, dict) and coup.get("action") == "jouer"):
-        # Aucun coup posable : pioche/passe (déjà décidé par le moteur).
-        return coup if isinstance(coup, dict) else _piocher_ou_passer(etat)
+        # Aucun coup posable : pioche/passe (déjà décidé par le moteur). Tracé
+        # comme « pas de coup à comparer » (#223, point 4) uniquement pour les
+        # niveaux où la vérification de finition est active, dans le même
+        # esprit que l'annotation ``solveur`` : un repli silencieux, mais
+        # traçable pour les rapports de campagne — jamais utilisé par le jeu.
+        repli = coup if isinstance(coup, dict) else _piocher_ou_passer(etat)
+        if bridage.verif_finition and isinstance(repli, dict):
+            repli["verif_finition"] = verification_finition.PAS_DE_COUP_A_COMPARER
+        return repli
 
     # Un coup qui vide la main gagne : jamais oublié (§13), et JAMAIS soumis
     # à la vérification de finition ci-dessous (issue #221, point 4 : « si le

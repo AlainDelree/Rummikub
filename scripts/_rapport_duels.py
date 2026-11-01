@@ -12,6 +12,8 @@ from __future__ import annotations
 
 import platform
 
+from _verif_solveur_exact import entete_dependances
+
 # Seuils d'un écart « net » entre deux niveaux voisins (issue #220 : 60–75 %,
 # resserré depuis le 60–80 % d'origine de #213).
 SEUIL_NET_BAS = 0.60
@@ -19,11 +21,15 @@ SEUIL_NET_HAUT = 0.75
 
 
 def entete_machine() -> list[str]:
-    """Lignes d'en-tête identifiant la machine et la version de Python, pour
-    comparer des tournois lancés sur des machines différentes (issue #220,
-    point 3 : ces tournois tournent désormais aussi sur un PC Windows plus
-    lent qu'Alain utilise par ailleurs pendant ce temps)."""
-    return [f"Machine : {platform.node()}  —  Python {platform.python_version()}"]
+    """Lignes d'en-tête identifiant la machine, la version de Python, et le
+    solveur exact disponible (issue #220, point 3 : ces tournois tournent
+    désormais aussi sur un PC Windows plus lent qu'Alain utilise par ailleurs
+    pendant ce temps ; dépendances ajoutées par #223, point 1 — ces deux
+    scripts font jouer Avancé/Expert/Débutant-Facile-Intermédiaire via le
+    solveur exact SANS option ``--sans-exact``, ``main`` refuse de démarrer
+    s'il est indisponible, voir ``_verif_solveur_exact.py``)."""
+    return [f"Machine : {platform.node()}  —  Python {platform.python_version()}",
+           *entete_dependances()]
 
 
 def verdict_ecart(taux: float, marge: float, identiques: bool = False) -> str:
