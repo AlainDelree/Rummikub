@@ -51,9 +51,16 @@ SRC = RACINE / "src"
 if SRC.is_dir() and str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
+import contextlib  # noqa: E402
+
 from rummikub.config import NIVEAUX  # noqa: E402
-from rummikub.moteur.ia import jouer_ia, jouer_niveau_expert  # noqa: E402
+from rummikub.moteur.ia import (  # noqa: E402
+    jouer_ia, jouer_niveau_expert, _verifier_finition_fin_de_partie,
+    BUDGET_TEMPS_EXPERT,
+)
 from rummikub.moteur import evaluation_main  # noqa: E402
+from rummikub.moteur import niveaux  # noqa: E402
+from rummikub.moteur import verification_finition  # noqa: E402
 from rummikub.moteur.partie import (  # noqa: E402
     annuler_tour,
     backup_debut_tour,
@@ -67,6 +74,47 @@ from rummikub.moteur.solveur import mesurer_perturbation  # noqa: E402
 from rummikub.moteur.tuiles import creer_sac  # noqa: E402
 
 logger = logging.getLogger("comparer_niveaux_ia")
+
+
+@contextlib.contextmanager
+def _verif_finition_desactivee():
+    """Désactive temporairement la vérification de finition en fin de
+    partie (#221) pour Expert ET Champion du Monde — pour la campagne
+    « avant / après » demandée par l'issue (``--sans-verif-finition``),
+    dans le même esprit que ``--sans-exact``/``--sans-preferer-simple``.
+    Restaure les réglages d'origine à la sortie, même en cas d'exception."""
+    originaux = {}
+    for nom in ("Expert", "Champion du Monde"):
+        b = niveaux.BRIDAGES[nom]
+        originaux[nom] = b
+        niveaux.BRIDAGES[nom] = niveaux.Bridage(
+            perturbation_max=b.perturbation_max, taux_oubli=b.taux_oubli,
+            verif_finition=False)
+    try:
+        yield
+    finally:
+        niveaux.BRIDAGES.update(originaux)
+
+
+@contextlib.contextmanager
+def _compter_appels_solveur_verif(compteur: list):
+    """Compte, dans ``compteur`` (liste à un seul élément, mutable), le
+    nombre d'appels à ``resoudre_exact`` faits DEPUIS ``verification_
+    finition.py`` (donc les appels SUPPLÉMENTAIRES de la vérification de
+    finition, #221 point 7 — jamais l'appel normal du coup du tour, qui
+    passe par ``moteur/ia.py`` et n'est pas concerné par ce compteur)."""
+    original = verification_finition.resoudre_exact
+
+    def _compte(*args, **kwargs):
+        compteur[0] += 1
+        return original(*args, **kwargs)
+
+    verification_finition.resoudre_exact = _compte
+    try:
+        yield
+    finally:
+        verification_finition.resoudre_exact = original
+
 
 # Les 106 IDs de référence (#187) : utilisés pour vérifier, à chaque coup,
 # qu'aucune tuile n'a disparu ni n'a été dupliquée entre les mains, le
@@ -108,7 +156,9 @@ def _anomalies_conservation(etat: dict) -> list[str]:
 def jouer_un_tour(etat: dict, idx: int, temps_par_niveau: dict,
                   replis_expert: list, preferer_simple: bool,
                   perturbations_expert: list,
-                  eval_configs: list = None) -> tuple[dict, bool, bool]:
+                  eval_configs: list = None,
+                  stats_verif_finition: dict = None,
+                  appels_solveur_verif: list = None) -> tuple[dict, bool, bool]:
     """Joue le tour de l'IA à l'index ``idx``.
 
     Chronomètre l'appel à ``jouer_ia`` et l'ajoute à
@@ -133,16 +183,28 @@ def jouer_un_tour(etat: dict, idx: int, temps_par_niveau: dict,
     expert`` ; quand Expert pose effectivement un coup, sa perturbation du
     plateau (``mesurer_perturbation``, voir ``moteur/solveur.py``) est
     ajoutée à ``perturbations_expert`` pour la mesure de campagne.
-    """
+
+    ``stats_verif_finition``/``appels_solveur_verif`` (issue #221, point 7) :
+    pour Champion du Monde, ``jouer_ia`` applique déjà la vérification de
+    finition via ``jouer_niveau_bride`` — son statut (clé ``verif_finition``
+    du coup renvoyé) est simplement lu ici. **Expert est appelé directement**
+    (ligne ci-dessus, pour ``on_repli``) et NE PASSE PAS par
+    ``jouer_niveau_bride`` : la vérification y est donc appliquée ICI
+    manuellement, par le MÊME appel que la production
+    (``ia._verifier_finition_fin_de_partie``), pour que la mesure couvre
+    aussi Expert, comme demandé par l'issue — sans dupliquer sa logique de
+    décision."""
     niveau = etat["joueurs"][idx]["niveau"]
     backup_debut_tour(etat)
     plateau_avant = etat["plateau"]
+    taille_main_avant = len(etat["joueurs"][idx]["chevalet"])
 
     def _compter_repli(timeout):
         replis_expert[0] += 1
         if timeout:
             replis_expert[1] += 1
 
+    avant_appels = appels_solveur_verif[0] if appels_solveur_verif else 0
     debut = time.monotonic()
     try:
         if niveau == "Expert":
@@ -150,6 +212,13 @@ def jouer_un_tour(etat: dict, idx: int, temps_par_niveau: dict,
             res_ia = jouer_niveau_expert(
                 etat, idx, on_repli=_compter_repli,
                 preferer_simple=preferer_simple, eval_config=eval_config)
+            if (res_ia.get("action") == "jouer"
+                    and niveaux.bridage_pour("Expert").verif_finition
+                    and (taille_main_avant - len(res_ia.get("ids_tuiles") or [])) > 0):
+                deadline = time.monotonic() + BUDGET_TEMPS_EXPERT
+                res_ia, statut_verif = _verifier_finition_fin_de_partie(
+                    etat, idx, res_ia, taille_main_avant, deadline)
+                res_ia["verif_finition"] = statut_verif
         else:
             res_ia = jouer_ia(etat, idx)
     except Exception:
@@ -158,6 +227,17 @@ def jouer_un_tour(etat: dict, idx: int, temps_par_niveau: dict,
         annuler_tour(etat)
         return piocher(etat)["etat"], True, False
     temps_par_niveau.setdefault(niveau, []).append(time.monotonic() - debut)
+
+    if stats_verif_finition is not None and res_ia.get("verif_finition") is not None:
+        statut_verif = res_ia["verif_finition"]
+        stats_verif_finition.setdefault(statut_verif, 0)
+        stats_verif_finition[statut_verif] += 1
+        # Nombre d'appels supplémentaires au solveur : seulement sur les
+        # tours où la vérification a été réellement TENTÉE (exclut
+        # ``non_applicable``, qui ne consulte jamais le solveur).
+        if appels_solveur_verif and statut_verif != verification_finition.NON_APPLICABLE:
+            stats_verif_finition.setdefault("appels_par_tour", []).append(
+                appels_solveur_verif[0] - avant_appels)
 
     if niveau == "Expert" and res_ia.get("action") == "jouer":
         perturbations_expert.append(
@@ -196,7 +276,9 @@ def jouer_un_tour(etat: dict, idx: int, temps_par_niveau: dict,
 def _jouer_une_manche(etat: dict, max_tours: int, temps_par_niveau: dict,
                       replis_expert: list, preferer_simple: bool,
                       perturbations_expert: list,
-                      eval_configs: list = None) -> dict:
+                      eval_configs: list = None,
+                      stats_verif_finition: dict = None,
+                      appels_solveur_verif: list = None) -> dict:
     """Joue la manche courante de ``etat`` jusqu'à sa fin naturelle (chevalet
     vidé ou pioche épuisée) ou jusqu'au garde-fou ``max_tours``. Retourne les
     statistiques de CETTE manche ; ``etat`` est muté en place."""
@@ -214,7 +296,8 @@ def _jouer_une_manche(etat: dict, max_tours: int, temps_par_niveau: dict,
         idx = etat["index_joueur_actuel"]
         etat, invalide, tuiles_disparues = jouer_un_tour(
             etat, idx, temps_par_niveau, replis_expert, preferer_simple,
-            perturbations_expert, eval_configs)
+            perturbations_expert, eval_configs,
+            stats_verif_finition, appels_solveur_verif)
         if invalide:
             coups_invalides += 1
         if tuiles_disparues:
@@ -245,7 +328,9 @@ def _jouer_une_manche(etat: dict, max_tours: int, temps_par_niveau: dict,
 def jouer_match(config_joueurs: list[dict], nb_manches: int, max_tours: int,
                 temps_par_niveau: dict, replis_expert: list,
                 preferer_simple: bool, perturbations_expert: list,
-                eval_configs: list = None, graine_ia=None) -> dict:
+                eval_configs: list = None, graine_ia=None,
+                stats_verif_finition: dict = None,
+                appels_solveur_verif: list = None) -> dict:
     """Joue un MATCH complet à 2 joueurs de ``nb_manches`` manches (issue
     #203). Les manches s'enchaînent via ``nouvelle_manche`` (score cumulé
     conservé, nouvelle donne et mise initiale remise à zéro à chaque manche).
@@ -266,7 +351,8 @@ def jouer_match(config_joueurs: list[dict], nb_manches: int, max_tours: int,
     for numero in range(1, nb_manches + 1):
         res = _jouer_une_manche(etat, max_tours, temps_par_niveau,
                                 replis_expert, preferer_simple,
-                                perturbations_expert, eval_configs)
+                                perturbations_expert, eval_configs,
+                                stats_verif_finition, appels_solveur_verif)
         coups_invalides += res["coups_invalides"]
         coups_tuiles_disparues += res["coups_tuiles_disparues"]
         anomalies_conservation += res["anomalies_conservation"]
@@ -343,6 +429,14 @@ def comparer(niveau_a: str, niveau_b: str, nb_donnes: int, seed: int,
     # liste de ``(tuiles_deplacees, combos_modifiees)`` (voir
     # ``mesurer_perturbation``, ``moteur/solveur.py``).
     perturbations_expert: list[tuple[int, int]] = []
+    # Vérification de finition en fin de partie (#221, point 7) : compte des
+    # statuts (``appliquee_autre_coup``/``appliquee_sans_changement``/
+    # ``non_applicable``/``budget_epuise``) + nombre d'appels SUPPLÉMENTAIRES
+    # au solveur par tour concerné (clé ``"appels_par_tour"``, liste).
+    stats_verif_finition: dict = {}
+    appels_solveur_verif = [0]
+    pile_appels = contextlib.ExitStack()
+    pile_appels.enter_context(_compter_appels_solveur_verif(appels_solveur_verif))
 
     for i, graine in enumerate(graines):
         for ordre, camps in enumerate((("A", "B"), ("B", "A"))):
@@ -358,7 +452,9 @@ def comparer(niveau_a: str, niveau_b: str, nb_donnes: int, seed: int,
             resultat = jouer_match(config_joueurs, nb_manches, max_tours,
                                    temps_par_niveau, replis_expert,
                                    preferer_simple, perturbations_expert,
-                                   eval_configs, graine_ia=graine)
+                                   eval_configs, graine_ia=graine,
+                                   stats_verif_finition=stats_verif_finition,
+                                   appels_solveur_verif=appels_solveur_verif)
             coups_invalides_total += resultat["coups_invalides"]
             coups_tuiles_disparues_total += resultat["coups_tuiles_disparues"]
             anomalies_conservation_total += resultat["anomalies_conservation"]
@@ -403,10 +499,12 @@ def comparer(niveau_a: str, niveau_b: str, nb_donnes: int, seed: int,
                     else f"gagné par {camp_gagnant} ({niveau_camp[camp_gagnant]})",
                     len(resultat["manches"]), cumul_a, cumul_b)
 
+    pile_appels.close()
     return {
         "niveau_a": niveau_a,
         "niveau_b": niveau_b,
         "nb_manches": nb_manches,
+        "stats_verif_finition": stats_verif_finition,
         "victoires": victoires,
         "matchs_nuls": matchs_nuls,
         "matchs_decides": matchs_decides,
@@ -528,6 +626,31 @@ def afficher_rapport(resume: dict) -> None:
              f"avec la vitesse) : {replis - replis_timeout}/{tours_expert} "
              f"tour(s) ({(replis - replis_timeout) / tours_expert * 100:.1f} %)")
 
+    stats_verif = resume.get("stats_verif_finition") or {}
+    statuts_verif = {k: v for k, v in stats_verif.items() if k != "appels_par_tour"}
+    if statuts_verif:
+        tentes = sum(v for k, v in statuts_verif.items()
+                    if k != verification_finition.NON_APPLICABLE)
+        changes = statuts_verif.get(verification_finition.APPLIQUEE_AUTRE_COUP, 0)
+        print("-" * 70)
+        print("  Vérification de finition en fin de partie (#221) :")
+        for code, libelle in (
+                (verification_finition.APPLIQUEE_AUTRE_COUP, "appliquée, autre coup"),
+                (verification_finition.APPLIQUEE_SANS_CHANGEMENT, "appliquée, sans changement"),
+                (verification_finition.NON_APPLICABLE, "non applicable"),
+                (verification_finition.BUDGET_EPUISE, "budget épuisé / repli")):
+            n = statuts_verif.get(code, 0)
+            print(f"    {libelle:28s} : {n}")
+        if tentes:
+            print(f"    Fréquence d'activation (coup changé / tours de fin "
+                 f"de partie vérifiés) : {changes}/{tentes} "
+                 f"({changes / tentes * 100:.1f} %)")
+        appels = stats_verif.get("appels_par_tour") or []
+        if appels:
+            print(f"    Appels supplémentaires au solveur par tour concerné : "
+                 f"moyenne {moyenne(appels):.2f}, maximum {max(appels)}, "
+                 f"sur {len(appels)} tour(s).")
+
     perturbations = resume["perturbations_expert"]
     if perturbations:
         deplacees = [d for d, _ in perturbations]
@@ -583,6 +706,13 @@ def main(argv: list[str]) -> int:
                              "modèle exact HiGHS (#206) — pour la campagne "
                              "« avant / après » (relancer la même commande "
                              "avec et sans ce drapeau, même --seed).")
+    parser.add_argument("--sans-verif-finition", action="store_true",
+                        help="Désactive la vérification de finition en fin "
+                             "de partie (#221, activée par défaut pour "
+                             "Expert et Champion du Monde) — pour la "
+                             "campagne « avant / après » (relancer la même "
+                             "commande avec et sans ce drapeau, même "
+                             "--seed).")
     parser.add_argument("-v", "--verbose", action="store_true",
                         help="Journalise chaque partie jouée.")
     args = parser.parse_args(argv[1:])
@@ -612,11 +742,17 @@ def main(argv: list[str]) -> int:
     except ValueError as exc:
         parser.error(str(exc))
 
+    if args.sans_verif_finition:
+        print("[#221] Vérification de finition en fin de partie DÉSACTIVÉE "
+             "(Expert/Champion du Monde).")
+
     debut = time.monotonic()
-    resume = comparer(args.niveau_a, args.niveau_b, args.donnes, args.seed,
-                      args.max_tours, nb_manches=args.manches,
-                      preferer_simple=not args.sans_preferer_simple,
-                      eval_a=args.eval_a, eval_b=args.eval_b)
+    with (_verif_finition_desactivee() if args.sans_verif_finition
+          else contextlib.nullcontext()):
+        resume = comparer(args.niveau_a, args.niveau_b, args.donnes, args.seed,
+                          args.max_tours, nb_manches=args.manches,
+                          preferer_simple=not args.sans_preferer_simple,
+                          eval_a=args.eval_a, eval_b=args.eval_b)
     duree = time.monotonic() - debut
 
     afficher_rapport(resume)

@@ -154,7 +154,8 @@ def _creer_journal(etat: dict) -> dict:
 
 def logger_action(etat: dict, action: str, *,
                    auteur_index: int = None, nb_tuiles_posees: int = 0,
-                   nb_tuiles_deplacees: int = 0, solveur: str = None) -> None:
+                   nb_tuiles_deplacees: int = 0, solveur: str = None,
+                   verif_finition: str = None) -> None:
     """Enregistre une action de jeu dans le journal de la partie courante.
 
     ``action`` : type de décision prise (``"pose"``, ``"pioche"``, ``"passe"``
@@ -175,6 +176,12 @@ def logger_action(etat: dict, action: str, *,
     ``moteur/ia.LIBELLES_SOLVEUR``). ``None`` (défaut) pour les humains et les
     autres niveaux d'IA ; **clé omise** du journal dans ce cas (rétrocompatible :
     les journaux antérieurs n'ont pas cette clé).
+    ``verif_finition`` (issue #221, point 5) : pour un coup d'Expert ou
+    Champion du Monde en fin de partie, résultat de la vérification de
+    finition — ``"appliquee_autre_coup"``, ``"appliquee_sans_changement"``,
+    ``"non_applicable"`` ou ``"budget_epuise"`` (voir
+    ``moteur/verification_finition.py``). ``None`` (défaut) sinon ; **clé
+    omise** du journal dans ce cas, dans le même esprit que ``solveur``.
 
     No-op immédiat si ``config.LOG_PARTIES`` est ``False``. Toute erreur d'écriture
     est silencieusement ignorée : le journal ne doit jamais interrompre le jeu.
@@ -223,6 +230,9 @@ def logger_action(etat: dict, action: str, *,
         # coup d'Expert, pour lequel elle indique le mécanisme décideur.
         if solveur is not None:
             entree["solveur"] = solveur
+        # Idem pour la vérification de finition (#221, point 5).
+        if verif_finition is not None:
+            entree["verif_finition"] = verif_finition
         journal["data"]["actions"].append(entree)
         with open(journal["chemin"], "w", encoding="utf-8") as f:
             json.dump(journal["data"], f, ensure_ascii=False, indent=2)

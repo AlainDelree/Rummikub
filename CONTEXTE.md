@@ -51,6 +51,8 @@ src/rummikub/
     niveaux.py              Paramètres d'affaiblissement des niveaux (§16).
     solveur.py              Solveur de réarrangement global du plateau,
                             utilisé par Expert (voir §8bis, #186).
+    verification_finition.py  Vérification de finition en fin de partie,
+                            Expert/Champion du Monde (§13, issue #221).
     description_coup.py     Résumé écrit + étapes du rejeu pas-à-pas d'un
                             coup de l'IA, à partir du plateau avant/après
                             (voir §12, #189).
@@ -2217,6 +2219,123 @@ une au fur et à mesure que de futures issues les testent/implémentent.
   au-dessus de cette brique, dans des issues séparées — y compris la
   modification de la finition en fin de partie.
 
+- [x] **Réalisée (#221) — brique « Deux tours », étape 1 : vérification de
+  finition en fin de partie.**
+
+  **Arbre des stratégies multi-tours et dépendances** (vue d'ensemble, pour
+  resituer chaque brique) :
+
+  ```
+  Inconnues (#219, fait)
+    └─ Indices (affiner les probabilités par l'observation — PAS FAIT)
+  Deux tours
+    ├─ étape 1 : vérification de finition en fin de partie (#221, FAIT)
+    └─ Deux tours NOTÉS (évaluer chaque candidat par une fonction de score
+       du plateau à deux tours, pas seulement « peut finir » — PAS FAIT ;
+       dépend de l'étape 1 et d'Indices pour évaluer la main adverse)
+  Main restante (évaluation fine de la main restante au-delà du simple
+    décompte — PAS FAIT, déjà amorcée par l'évaluation #211 désactivée)
+  Course (estimer qui finira le premier — PAS FAIT ; dépend d'Inconnues et de
+    Main restante)
+  Rétention (piste 9, §13 — PAS FAIT ; dépend d'Inconnues, Indices, Deux
+    tours ET Course)
+  Ouverture (probabilité qu'une tuile d'ouverture soit encore disponible —
+    PAS FAIT ; dépend de Main restante, Deux tours, Course ET Inconnues)
+  Joker et réserve (piste 8, §13 — PAS FAIT ; dépend d'Inconnues)
+  ```
+
+  **Ce que fait l'étape 1 (#221)** : pour **Expert et Champion du Monde
+  seulement**, et **seulement en fin de partie** (chevalet d'au plus
+  `niveaux.SEUIL_FIN_PARTIE_VERIF_FINITION` tuiles, **5** par défaut — seul
+  endroit à régler, avec l'interrupteur par niveau `Bridage.verif_finition`,
+  `moteur/niveaux.py`) : si le meilleur coup du solveur exact ne vide pas
+  déjà le chevalet, on construit jusqu'à deux candidats — ce meilleur coup, et
+  le meilleur coup SANS réarrangement du plateau (`ia._coup_sans_
+  rearrangement`, qui ne reprend jamais un joker déjà posé — approximation
+  documentée de « laisser les jokers en place », voir plus restrictive que
+  nécessaire mais sans jamais risquer l'inverse) — et on demande au MÊME
+  solveur exact si l'un d'eux permettrait de vider ENTIÈREMENT le chevalet
+  restant au tour suivant, en supposant le tapis inchangé par l'adversaire
+  entre les deux tours (hypothèse optimiste assumée, voir ci-dessous). Le
+  premier candidat qui permet de finir est joué (le meilleur coup du solveur
+  toujours vérifié en premier, donc préféré à égalité) ; si aucun ne permet
+  de finir, le meilleur coup du solveur est joué comme avant #221. **Priorité
+  absolue, qui prime sur tout** (§13) : un coup qui vide déjà le chevalet CE
+  tour-ci n'est jamais soumis à la vérification. Les appels supplémentaires
+  au solveur partagent la MÊME échéance de temps que le coup normal du tour
+  (pas de budget séparé) ; si elle est épuisée, si `highspy`/`numpy` manquent,
+  ou en cas d'erreur, l'IA joue comme avant #221, sans erreur visible — le
+  journal de partie trace quand même ce qui s'est passé (clé `verif_finition`
+  de l'action : `appliquee_autre_coup` / `appliquee_sans_changement` /
+  `non_applicable` / `budget_epuise`, même esprit que la clé `solveur` de
+  #211). Module dédié : `moteur/verification_finition.py` ; intégration dans
+  `moteur/ia.py` (`_verifier_finition_fin_de_partie`, `_candidats_finition`),
+  branchée dans `jouer_niveau_bride` juste après le court-circuit « coup
+  gagnant ». Le solveur lui-même, l'interface, et les niveaux Débutant à
+  Avancé ne sont PAS modifiés.
+
+  **Hypothèse optimiste assumée (limite connue)** : l'adversaire ne touche
+  pas au tapis entre les deux tours — faux en général, mais nécessaire pour
+  rester calculable sans les briques « Indices »/« Main restante » (ci-dessus,
+  pas encore faites). Ne peut jamais DÉGRADER le jeu (la règle de priorité au
+  coup gagnant protège toujours le cas réellement important), seulement
+  manquer parfois une occasion de mieux jouer si l'adversaire modifie
+  effectivement le tapis entre les deux tours.
+
+  **Constat mathématique inattendu, découvert en construisant les positions
+  de test de cette issue** : dans ce moteur, un coup peut librement
+  recomposer la TOTALITÉ du plateau en un seul tour (seule contrainte :
+  aucune tuile déjà posée ne disparaît, voir §4). Il en découle qu'un coup
+  PROUVÉ optimal (nombre de tuiles posées maximal, prouvé par le modèle
+  exact) qui ne vide pas le chevalet ne peut JAMAIS avoir de candidat qui
+  permette de finir au tour suivant sous l'hypothèse ci-dessus — sans quoi ce
+  coup aurait lui-même déjà pu finir CE tour en combinant les deux coups en
+  un seul (même conservation, même validité, un coup direct existerait donc
+  déjà et le solveur, cherchant le MAXIMUM, l'aurait trouvé). Vérifié par
+  construction sur plus d'une dizaine de positions pendant cette issue
+  (§ tests). **Conséquence pratique** : le mécanisme ne peut réellement
+  changer le coup joué (`appliquee_autre_coup`) que lorsque le coup marqué
+  comme venant du modèle exact n'a PAS été prouvé optimal (budget de temps
+  serré, cas rare mais réel) — pas dans le cas général qui a motivé l'exemple
+  d'Alain (« 3 jaune coincé »), qui suppose implicitement qu'un joueur humain
+  ne calcule PAS déjà le maximum global d'un coup, contrairement à ce solveur.
+  Documenté dans `moteur/verification_finition.py` et dans les tests
+  (`tests/test_verification_finition.py`), qui testent donc la DÉCISION (au
+  moins dix positions fixes, dont plusieurs avec l'oracle « peut finir »
+  contrôlé directement, puisqu'une position réelle où le solveur prouvé
+  optimal se tromperait sans raison n'existe pas dans ce moteur) plutôt que
+  d'imposer une position « naturelle » introuvable.
+
+  **Mesure par simulation** (`scripts/comparer_niveaux_ia.py`, nouveau
+  drapeau `--sans-verif-finition` dans le même esprit que `--sans-exact`/
+  `--sans-preferer-simple` ; nouvelles statistiques : fréquence d'activation,
+  appels supplémentaires au solveur par tour concerné moyenne/maximum) —
+  voir le rapport de clôture de #221 pour les chiffres (donnes, taux de
+  victoire avec IC, blocages par niveau). Le script appelle Expert
+  directement (`jouer_niveau_expert`, pas `jouer_niveau_bride`) pour ses
+  propres statistiques (`on_repli`, perturbation) : la vérification y est
+  donc appliquée manuellement dans `jouer_un_tour` via le MÊME appel de
+  production (`ia._verifier_finition_fin_de_partie`), sans dupliquer sa
+  logique de décision ; Champion du Monde, qui passe par `jouer_ia`, l'obtient
+  nativement. Le moteur détecte déjà un blocage par pioche épuisée
+  (`pioche_vide`, compté dans `fins` par la campagne) — **rien n'y est changé
+  par cette issue**, conformément à son périmètre (signaler seulement).
+
+  **Deux idées d'Alain, consignées, non implémentées :**
+  - **(a) Calcul pendant le tour de l'humain** : l'IA pourrait réfléchir
+    pendant que l'humain joue plutôt qu'à son propre tour seulement. Distinguo
+    important : pendant une PIOCHE de l'humain, le tapis ne change pas — un
+    calcul plus profond (plus de temps, éventuellement plusieurs coups à
+    l'avance) reste valable, avec sa main qui comptera une tuile de plus au
+    tour suivant ; pendant une POSE de l'humain, le tapis change — il faudrait
+    relancer le calcul (et, une fois les probabilités en place, les mettre à
+    jour d'après ce qu'il vient de poser). Lié à la brique Indices.
+  - **(b) Pioche vide** : ne pas s'en préoccuper pour l'instant (aucune
+    stratégie dédiée) — seulement la signaler lors des tournois/campagnes de
+    simulation (déjà fait par `comparer_niveaux_ia.py`, voir ci-dessus et
+    §9). Pas de piste à développer ici, juste une non-régression à vérifier :
+    le moteur approxime déjà « tous bloqués » par « pioche épuisée », voir §5.
+
 ## 14. Solveur exact de vérification — bibliothèque `rummikub-solver` (licence MIT, issue #204, suite de #201)
 
 Notre solveur d'Expert (`moteur/solveur.py`) est à la fois le joueur **et** le
@@ -2433,6 +2552,13 @@ niveau le plus fort : c'est le niveau **Avancé**.
 > ATTENDU, pas un défaut. Repère voulu par Alain : son propre niveau doit
 > correspondre à **Intermédiaire**, ou entre Intermédiaire et Avancé (à ajuster
 > par les mesures — voir « calibrage » ci-dessous).
+>
+> **Mise à jour #221** : Expert et Champion du Monde gagnent la première
+> brique multi-tours réelle (vérification de finition en fin de partie,
+> §13) — ils ne sont donc plus strictement identiques à Avancé en toute fin
+> de partie, même si l'écart mesuré reste faible (voir §13 et le rapport de
+> clôture de #221) : le reste de l'échelle et le plateau statistique
+> Avancé ≈ Expert ≈ Champion décrits ci-dessus restent valables ailleurs.
 
 ### Recalibrage #216 — échelle à écarts réguliers (suite de #213)
 

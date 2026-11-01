@@ -279,7 +279,8 @@ class Api:
         # (clé omise du journal).
         logger_action(self._app.etat_jeu, action_journal, auteur_index=idx,
                      nb_tuiles_posees=nb_posees,
-                     solveur=res_ia.get("solveur"))
+                     solveur=res_ia.get("solveur"),
+                     verif_finition=res_ia.get("verif_finition"))
         return {"ok": True, "etat": self._app.etat_jeu}
 
     def jeu_retour_accueil(self):

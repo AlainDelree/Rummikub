@@ -19,6 +19,7 @@ jamais (ce qui, côté UI, provoquerait une boucle infinie du tour IA).
 """
 
 import random
+import time
 from itertools import combinations
 
 from rummikub.config import VALEUR_MIN, VALEUR_MAX
@@ -37,6 +38,7 @@ from rummikub.moteur.solveur_exact import (
 )
 from rummikub.moteur import evaluation_main
 from rummikub.moteur import niveaux as _niveaux
+from rummikub.moteur import verification_finition
 
 
 # --------------------------------------------------------------------------- #
@@ -1018,6 +1020,55 @@ def _coup_selon_perturbation(etat, idx, perturbation_max, budget_temps, on_repli
     return sans_rearr if sans_rearr is not None else _piocher_ou_passer(etat)
 
 
+def _candidats_finition(etat, idx, coup_solveur):
+    """Coups candidats pour la vérification de finition (#221, point 2) :
+    toujours ``coup_solveur`` (le meilleur coup du solveur, en premier — voir
+    ``verification_finition.verifier``) et, s'il existe et diffère, le
+    meilleur coup SANS réarrangement du plateau (``_coup_sans_rearrangement``) —
+    qui, ne déplaçant AUCUNE tuile du plateau, ne reprend jamais un joker déjà
+    posé. Approximation documentée du point 2 de l'issue (« le meilleur coup
+    qui laisse en place les jokers du tapis ») : plus restrictive qu'exigé
+    (elle exclut aussi les coups qui déplaceraient des tuiles RÉELLES sans
+    toucher aux jokers), mais réutilise un mécanisme déjà existant et testé
+    (``ia._coup_sans_rearrangement``) sans dupliquer de logique, et ne peut
+    jamais, par construction, proposer un coup qui reprend un joker. Troisième
+    candidat (point 2, « éventuellement ») délibérément omis : la recherche
+    arborescente de repli (``solveur.py``) consommerait elle-même une part du
+    budget partagé pour un gain non démontré — voir CONTEXTE.md §13."""
+    candidats = [coup_solveur]
+    sans_rearr = _coup_sans_rearrangement(etat, idx)
+    if (isinstance(sans_rearr, dict) and sans_rearr.get("action") == "jouer"
+            and sans_rearr.get("ids_tuiles")
+            and verification_finition.coups_differents(sans_rearr, coup_solveur)):
+        candidats.append(sans_rearr)
+    return candidats
+
+
+def _verifier_finition_fin_de_partie(etat, idx, coup, taille_main, deadline):
+    """Vérification de finition en fin de partie (issue #221, étape 1 de la
+    brique « Deux tours » — voir ``moteur/verification_finition.py``).
+
+    Ne s'applique (appelée uniquement pour Expert/Champion du Monde, et
+    seulement si le coup du solveur ne vide pas déjà le chevalet — voir
+    ``jouer_niveau_bride``) que si le chevalet compte au plus
+    ``niveaux.SEUIL_FIN_PARTIE_VERIF_FINITION`` tuiles ET que ``coup`` a été
+    décidé par le modèle exact (``SOLVEUR_EXACT``) — si ce n'est pas le cas
+    (dépendances absentes, repli déjà survenu pour ce tour faute de budget),
+    la vérification, qui s'appuie sur CE MÊME solveur, ne peut de toute façon
+    pas s'exécuter non plus : même repli silencieux (``BUDGET_EPUISE``, qui
+    couvre ici aussi bien l'absence de highspy/numpy qu'un budget déjà
+    épuisé pour le coup normal — un seul code, comme listé par l'issue).
+
+    Retourne ``(coup, statut)`` — ``coup`` inchangé si la vérification ne
+    s'applique pas ou n'aboutit à rien de nouveau."""
+    if taille_main > _niveaux.SEUIL_FIN_PARTIE_VERIF_FINITION:
+        return coup, verification_finition.NON_APPLICABLE
+    if coup.get("solveur") != SOLVEUR_EXACT:
+        return coup, verification_finition.BUDGET_EPUISE
+    candidats = _candidats_finition(etat, idx, coup)
+    return verification_finition.verifier(etat, idx, candidats, deadline)
+
+
 def jouer_niveau_bride(etat, idx, nom_niveau, budget_temps=None, rng=None,
                        on_repli=None):
     """Joue le tour du niveau ``nom_niveau`` avec le moteur exact RÉGLÉ par les
@@ -1039,6 +1090,7 @@ def jouer_niveau_bride(etat, idx, nom_niveau, budget_temps=None, rng=None,
         rng = _rng_oubli(etat, idx)
     taille_main = len(etat["joueurs"][idx]["chevalet"])
 
+    debut_tour = time.monotonic()
     coup = _coup_selon_perturbation(
         etat, idx, bridage.perturbation_max, budget_temps, on_repli)
 
@@ -1046,10 +1098,25 @@ def jouer_niveau_bride(etat, idx, nom_niveau, budget_temps=None, rng=None,
         # Aucun coup posable : pioche/passe (déjà décidé par le moteur).
         return coup if isinstance(coup, dict) else _piocher_ou_passer(etat)
 
-    # Un coup qui vide la main gagne : jamais oublié (§13).
+    # Un coup qui vide la main gagne : jamais oublié (§13), et JAMAIS soumis
+    # à la vérification de finition ci-dessous (issue #221, point 4 : « si le
+    # meilleur coup du solveur vide déjà le chevalet, il est joué, sans
+    # aucune vérification »).
     vide_la_main = (taille_main - len(coup.get("ids_tuiles") or [])) <= 0
     if vide_la_main:
         return coup
+
+    if bridage.verif_finition:
+        # Limite de calcul PARTAGÉE avec le coup normal (#221, point 5) :
+        # une seule échéance pour tout le tour, pas un budget séparé pour la
+        # vérification — ``debut_tour`` a été relevé avant le calcul du coup
+        # normal ci-dessus, qui en a donc déjà consommé une partie.
+        budget_total = budget_temps if budget_temps is not None \
+            else BUDGET_TEMPS_EXPERT
+        deadline = debut_tour + budget_total
+        coup, statut_verif = _verifier_finition_fin_de_partie(
+            etat, idx, coup, taille_main, deadline)
+        coup["verif_finition"] = statut_verif
 
     p = _niveaux.taux_oubli_effectif(bridage.taux_oubli, taille_main)
     if p > 0 and rng.random() < p:
