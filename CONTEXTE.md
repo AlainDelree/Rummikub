@@ -2508,6 +2508,10 @@ croissant `[0.42,0.30,0.08,0,0,0]`), test `test_bridages_monotones…` au vert.
       --donnes-profil 20 --sortie resultats_bas_echelle_217.txt
   ```
 
+  *(commande historique de #217 : `--donnes-profil` a depuis été RETIRÉE par
+  #220, voir « Critère de force depuis #220 » ci-dessous pour la commande à
+  jour.)*
+
 - **Nouvel outil `scripts/valider_bas_echelle.py` (#217) :** tournoi de
   validation CIBLÉ du bas de l'échelle (Débutant vs Facile, Facile vs
   Intermédiaire) + tuiles restantes en défaite par niveau, **résultats partiels
@@ -2534,6 +2538,50 @@ croissant `[0.42,0.30,0.08,0,0,0]`), test `test_bridages_monotones…` au vert.
   `--cible` marque le plus proche). `scripts/echelle_niveaux.py` gagne
   `--budget-solveur` et `--donnes-profil` (tuiles restantes par niveau **dans le
   rapport**). Test ajouté : `test_bridages_monotones_du_plus_faible_au_plus_fort`.
+
+> **⚠️ Cibles OBSOLÈTES depuis #220 (conservées ci-dessus pour l'historique,
+> à NE PLUS utiliser) :** les cibles en tuiles restantes en défaite de #216
+> (Débutant ≈ 9, Facile ≈ 7, Intermédiaire ≈ 4,5) et de #217 (Facile entre
+> 6,0 et 6,3) reposaient sur le relevé en miroir retiré ci-dessous — voir la
+> section suivante pour le critère qui les remplace.
+
+### Critère de force depuis #220 : duels entre niveaux voisins (fin du relevé en auto-partie)
+
+**#216 et #217 ont montré que le relevé des tuiles restantes en défaite EN
+MIROIR (un niveau contre lui-même) n'est pas un bon critère de force.** Il
+mesure surtout la **longueur des parties** (dépend de la vitesse de
+l'adversaire, donc pas comparable à un joueur humain, qui affronte des
+niveaux différents) ; dès que `perturbation_max >= 1`, les deux joueurs
+réarrangent le plateau sans jamais vraiment progresser, si bien que beaucoup
+de manches n'atteignent leur fin naturelle que par le garde-fou de tours — ce
+qui biaise la moyenne (14 manches sur 40 exclues dans #217). Il a de plus
+consommé TOUT le temps imparti des tournois de #216 (2 h) et #217 (1 h 30)
+sans que les DUELS entre niveaux voisins — pourtant le vrai test de l'échelle
+— n'aient jamais été joués, et sa limite de temps n'était pas ferme (#217 l'a
+dépassée de 244 s, puis le processus est resté vivant 30 minutes de plus,
+machine au repos, sans rien calculer, jusqu'à l'arrêt manuel d'Alain).
+
+**Décision d'Alain (#220) : le critère de force des niveaux est désormais
+EXCLUSIVEMENT le duel entre niveaux VOISINS** — la même donne jouée DEUX fois,
+mains des deux IA échangées (le miroir « utile », qui annule l'avantage de la
+main et de l'ordre de passage) — avec, pour chaque paire adjacente, un taux
+de victoire du niveau le plus fort visé **entre 60 et 75 %**. `scripts/
+echelle_niveaux.py` et `scripts/valider_bas_echelle.py` ne mesurent plus que
+cela : l'option `--donnes-profil` et tout ce qui en dépendait (fonctions de
+mesure, verdicts, textes d'aide) ont été retirés des deux outils. Leur limite
+de temps est désormais réellement FERME (garde-fou externe par
+sous-processus, voir `scripts/_limite_temps_ferme.py`) et leurs résultats
+partiels indiquent toujours, pour chaque paire, les donnes terminées sur le
+nombre prévu (marque « partiel » tant qu'elle n'est pas finie), ainsi que le
+nom de la machine et la version de Python en en-tête.
+
+**`scripts/calibrer_niveaux.py` et le relevé de `scripts/profil_joueur.py`
+reposent ENCORE sur le critère des tuiles restantes en défaite** — hors
+périmètre de #220, qui ne retire ce relevé que des deux outils de TOURNOI
+ci-dessus. À reconsidérer dans une issue ultérieure si le critère par duels
+les rend obsolètes à leur tour. Le **profil humain** exprimé en tuiles
+restantes (`profil_joueur.py --journaux …`) reste utile mais **seulement
+INDICATIF** — ce n'est pas une mesure de force comparable entre niveaux d'IA.
 
 ### Les deux paramètres d'affaiblissement (`moteur/niveaux.py`, le SEUL endroit)
 
@@ -2588,29 +2636,53 @@ espaces en tirets).
   `--limite-temps`), `--budget-solveur` réglable. Sert à régler Débutant /
   Facile / Intermédiaire dans `moteur/niveaux.BRIDAGES`.
 
-- **`scripts/valider_bas_echelle.py`** (#217) — TOURNOI DE VALIDATION CIBLÉ du
-  bas de l'échelle (Débutant vs Facile, Facile vs Intermédiaire) + tuiles
-  restantes en défaite par niveau. Résultats PARTIELS écrits en continu
-  (`--sortie`), limite de temps ferme (`--limite-temps`), `--budget-solveur`
+- **`scripts/valider_bas_echelle.py`** (#217, critère resserré par #220) —
+  TOURNOI DE VALIDATION CIBLÉ du bas de l'échelle, par DUELS uniquement
+  (Débutant vs Facile, Facile vs Intermédiaire — le relevé des tuiles
+  restantes en défaite par niveau a été RETIRÉ par #220, avec l'option
+  `--donnes-profil`). Résultats PARTIELS écrits en continu (`--sortie`),
+  marque « partiel » par paire tant qu'elle n'est pas finie, en-tête
+  machine/version Python, limite de temps RÉELLEMENT ferme (`--limite-temps` :
+  garde-fou externe par sous-processus, voir ci-dessous), `--budget-solveur`
   réglable, filtre `--paire`, et override candidat de Facile
   (`--facile-perturbation` / `--facile-oubli`) pour comparer sans figer
   `niveaux.py`. Pensé pour le temps imparti serré des issues de calibrage.
 
-- **`scripts/echelle_niveaux.py`** — TOURNOI D'ÉCHELLE. Depuis #216,
-  `--budget-solveur` (réduire le budget du solveur exact pour tenir une limite
-  de temps ferme — à signaler, la force d'Avancé en dépend) et `--donnes-profil`
-  (mesure des tuiles restantes en défaite par niveau, **incluse dans le
-  rapport**). Parties à deux en miroir
-  entre tous les niveaux voisins (+ quelques paires non voisines), ≥ 40 donnes
-  par paire, tableau des taux de victoire + IC 95 % (Wilson). Vérifie que
-  l'échelle est strictement croissante et que l'écart entre voisins est net
-  (~60–80 %). Premier plan, **limite de temps ferme** (`--limite-temps`),
-  résultats partiels, durée indiquée. Réutilise `comparer()` de
+- **`scripts/echelle_niveaux.py`** — TOURNOI D'ÉCHELLE, par DUELS entre
+  niveaux voisins (le relevé des tuiles restantes en défaite par niveau et
+  l'option `--donnes-profil` ont été RETIRÉS par #220). `--budget-solveur`
+  réduit le budget du solveur exact pour tenir une limite de temps ferme — à
+  signaler, la force d'Avancé en dépend. Parties à deux en miroir entre tous
+  les niveaux voisins (+ quelques paires non voisines), ≥ 40 donnes par paire,
+  tableau des taux de victoire + IC 95 % (Wilson). Vérifie que l'échelle est
+  strictement croissante et que l'écart entre voisins est net (**60–75 %**,
+  resserré de 60–80 % par #220). Résultats PARTIELS écrits en continu avec
+  `--sortie` (nouveauté #220, même format que `valider_bas_echelle.py` :
+  marque « partiel », en-tête machine/version Python), limite de temps
+  RÉELLEMENT ferme (`--limite-temps`, garde-fou externe par sous-processus,
+  voir ci-dessous), durée indiquée. Réutilise `comparer()` de
   `comparer_niveaux_ia.py`. Ex. :
 
   ```
-  python scripts/echelle_niveaux.py --donnes 40 --seed 0 --limite-temps 3600
+  python scripts/echelle_niveaux.py --donnes 40 --seed 0 --limite-temps 3600 \
+      --sortie resultats_echelle.txt
   ```
+
+- **Limite de temps RÉELLEMENT ferme (`scripts/_limite_temps_ferme.py`,
+  #220) :** les deux tournois ci-dessus s'arrêtaient déjà PROPREMENT d'eux-
+  mêmes dès `--limite-temps` dépassée (aucune nouvelle donne lancée), mais une
+  donne déjà EN COURS pouvait dépasser cette limite sans aucune borne (#217 :
+  dépassement de 244 s, puis processus resté vivant 30 minutes de plus sans
+  rien calculer). Les deux scripts se relancent désormais eux-mêmes dans un
+  SOUS-PROCESSUS (argument interne `--_worker`) surveillé par le processus
+  parent : si `limite_temps` + une marge bornée (10 s) est dépassée malgré
+  tout, le parent TERMINE ce sous-processus — et l'arbre de processus qu'il
+  aurait créé — sur Linux (groupe de processus POSIX, `SIGTERM` puis
+  `SIGKILL`) comme sous Windows (`taskkill /PID <pid> /T /F`, jamais `/IM` par
+  motif de nom). Code de sortie : `0` terminé normalement, `3` arrêté sur la
+  limite de temps, `1` erreur — utile pour qu'Alain, sur la machine Windows
+  plus lente qui exécute désormais ces campagnes, puisse distinguer les deux
+  cas sans relire le fichier de résultats.
 
 - **`scripts/profil_joueur.py`** — PROFIL DE JOUEUR, côte à côte. Pour un
   **humain** (à partir des journaux, fichiers d'une même partie reliés par

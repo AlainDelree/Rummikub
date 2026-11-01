@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Tournoi « en échelle » des six niveaux d'IA Rummikub (issue #213).
+"""Tournoi « en échelle » des six niveaux d'IA Rummikub, par DUELS entre
+niveaux voisins (issue #213, critère resserré par #220).
 
 Vérifie que l'échelle des niveaux (``config.NIVEAUX`` : Débutant → Facile →
 Intermédiaire → Avancé → Expert → Champion du Monde, voir ``moteur/niveaux.py``)
@@ -27,8 +28,26 @@ donc ATTENDUES à ~50 % / égalité statistique : ce n'est PAS un échec de
 l'échelle, c'est le comportement documenté tant que ces stratégies n'existent
 pas. Le script le signale explicitement pour chaque paire concernée.
 
+**#220 retire le relevé des tuiles restantes en défaite** (miroir d'un niveau
+contre lui-même, option ``--donnes-profil``) : voir CONTEXTE.md §16 pour les
+raisons (mesure non comparable à un humain, parties qui ne finissent plus dès
+que ``perturbation_max >= 1``, tout le temps imparti consommé sans que les
+duels ne soient jamais joués — #216/#217). Le seul critère de force retenu est
+désormais le duel entre niveaux voisins ci-dessus.
+
 Ce script RÉUTILISE ``comparer`` de ``scripts/comparer_niveaux_ia.py`` (logique
 de match miroir déjà reproductible et éprouvée) plutôt que de la réimplémenter.
+
+Limite de temps FERME (``--limite-temps``) : en plus de l'arrêt propre interne
+(aucune nouvelle paire/donne lancée au-delà), un garde-fou EXTERNE
+(sous-processus surveillé, voir ``scripts/_limite_temps_ferme.py``) termine le
+tournoi — et tout sous-processus qu'il aurait créé — si la limite est dépassée
+d'une marge bornée. Code de sortie : ``0`` terminé normalement, ``3`` arrêté
+sur la limite de temps, ``1`` erreur.
+
+Résultats PARTIELS, avec ``--sortie``, écrits en continu (après chaque donne) :
+chaque paire affiche victoires/parties jouées, taux ± marge, et donnes
+terminées/prévues — marquée « partiel » tant qu'elle n'est pas finie.
 
 Usage :
 
@@ -44,10 +63,15 @@ Options :
     --seed N            Graine aléatoire, campagne reproductible (défaut 0).
     --max-tours N       Garde-fou anti-blocage par manche (défaut 300).
     --limite-temps S    Limite de temps FERME, en secondes, pour tout le
-                        tournoi (comme ``scripts/match_solveurs.py``) : on ne
-                        LANCE plus de nouvelle paire une fois la limite
-                        dépassée, et on affiche les résultats PARTIELS déjà
-                        obtenus. Sans elle, toutes les paires sont jouées.
+                        tournoi : on ne LANCE plus de nouvelle paire une fois
+                        la limite dépassée, et un garde-fou externe termine le
+                        processus (et tout sous-processus) si elle est quand
+                        même dépassée.
+    --sortie FICHIER    Fichier où écrire les résultats PARTIELS en continu
+                        (après chaque donne).
+    --budget-solveur S  Budget du solveur exact par tour, en secondes (défaut
+                        production = 1.5 s). À signaler si réduit (la force
+                        d'Avancé en dépend).
     -v, --verbose       Journalise le détail de chaque paire.
 """
 
@@ -69,16 +93,15 @@ from rummikub.moteur import niveaux as _niveaux  # noqa: E402
 from rummikub.moteur import ia as _ia  # noqa: E402
 
 # Réutilisation directe de la logique de match miroir, reproductible, de #213.
-from comparer_niveaux_ia import (  # noqa: E402
-    comparer, intervalle_confiance_95, moyenne,
+from comparer_niveaux_ia import comparer, intervalle_confiance_95  # noqa: E402
+from _limite_temps_ferme import (  # noqa: E402
+    CODE_LIMITE_TEMPS, CODE_TERMINE, lancer_avec_limite_ferme,
+)
+from _rapport_duels import (  # noqa: E402
+    SEUIL_NET_BAS, SEUIL_NET_HAUT, entete_machine, verdict_ecart,
 )
 
 logger = logging.getLogger("echelle_niveaux")
-
-# Seuils d'un écart « net » attendu entre deux niveaux adjacents distincts
-# (issue #213 §2 : un niveau plus fort gagne « nettement », visé 60–80 %).
-SEUIL_NET_BAS = 0.60
-SEUIL_NET_HAUT = 0.80
 
 
 def _paires_tournoi() -> list[tuple[str, str]]:
@@ -108,7 +131,8 @@ def _niveaux_identiques(niveau_a: str, niveau_b: str) -> bool:
 
 
 def jouer_paire(niveau_faible: str, niveau_fort: str, nb_donnes: int,
-                seed: int, max_tours: int, deadline: float | None) -> dict:
+                seed: int, max_tours: int, deadline: float | None,
+                on_donne=None) -> dict:
     """Joue une paire (niveau_faible en camp A, niveau_fort en camp B), DONNE
     PAR DONNE, en vérifiant ``deadline`` (instant monotone) avant CHAQUE donne —
     une donne du solveur complet pouvant durer des dizaines de secondes, c'est
@@ -117,12 +141,17 @@ def jouer_paire(niveau_faible: str, niveau_fort: str, nb_donnes: int,
     des donnes effectivement jouées et renvoie un résumé centré sur le niveau
     FORT : victoires, matchs décidés, taux et IC 95 %.
 
+    ``on_donne``, si fourni, est appelé après CHAQUE donne avec le résumé
+    PARTIEL accumulé jusque-là (mêmes clés que le résultat final) — permet
+    d'écrire les résultats partiels en continu (issue #220).
+
     Chaque donne ``i`` utilise ``seed + i`` : toutes les paires jouent ainsi la
     MÊME suite de donnes (comparables entre elles) et la campagne reste
     reproductible."""
     victoires_fort = matchs_decides = nuls = 0
     donnes_jouees = 0
     fins = {"chevalet_vide": 0, "pioche_vide": 0, "garde_fou": 0}
+    identiques = _niveaux_identiques(niveau_faible, niveau_fort)
     for i in range(nb_donnes):
         if deadline is not None and time.monotonic() >= deadline:
             break
@@ -134,12 +163,21 @@ def jouer_paire(niveau_faible: str, niveau_fort: str, nb_donnes: int,
         for cle in fins:
             fins[cle] += resume["fins"][cle]
         donnes_jouees += 1
+        if on_donne is not None:
+            taux, marge = intervalle_confiance_95(victoires_fort, matchs_decides)
+            on_donne({
+                "niveau_faible": niveau_faible, "niveau_fort": niveau_fort,
+                "identiques": identiques, "donnes_demandees": nb_donnes,
+                "donnes_jouees": donnes_jouees, "matchs_decides": matchs_decides,
+                "victoires_fort": victoires_fort, "nuls": nuls,
+                "taux_fort": taux, "marge": marge, "fins": dict(fins),
+            })
 
     taux, marge = intervalle_confiance_95(victoires_fort, matchs_decides)
     return {
         "niveau_faible": niveau_faible,
         "niveau_fort": niveau_fort,
-        "identiques": _niveaux_identiques(niveau_faible, niveau_fort),
+        "identiques": identiques,
         "donnes_demandees": nb_donnes,
         "donnes_jouees": donnes_jouees,
         "matchs_decides": matchs_decides,
@@ -151,140 +189,146 @@ def jouer_paire(niveau_faible: str, niveau_fort: str, nb_donnes: int,
     }
 
 
-def mesurer_tuiles_restantes(niveau: str, nb_donnes: int, seed: int,
-                             max_tours: int, deadline: float | None) -> dict:
-    """Mesure les **tuiles restantes en défaite** d'un niveau sur le BON critère
-    de force (issue #216, suite #213) : on joue ``nb_donnes`` donnes EN MIROIR
-    du niveau CONTRE LUI-MÊME (chacune rejouée places échangées) et on relève la
-    moyenne des tuiles qu'il reste en main au perdant. Plus ce nombre est bas,
-    plus le niveau finit près de la sortie, donc plus il est fort — c'est la
-    mesure qui justifie le calibrage de l'échelle (voir
-    ``scripts/calibrer_niveaux.py`` et ``scripts/profil_joueur.py``).
+# --------------------------------------------------------------------------- #
+# Résultats partiels écrits en continu (issue #220)
+# --------------------------------------------------------------------------- #
 
-    DONNE PAR DONNE pour respecter ``deadline``. ``seed + i`` pour chaque donne :
-    reproductible et comparable d'un niveau à l'autre."""
-    tuiles: list[int] = []
-    donnes_jouees = garde_fou = 0
-    for i in range(nb_donnes):
-        if deadline is not None and time.monotonic() >= deadline:
-            break
-        resume = comparer(niveau, niveau, 1, seed + i, max_tours,
-                          nb_manches=1, preferer_simple=True)
-        tuiles.extend(resume["tuiles_perdant"])
-        garde_fou += resume["fins"]["garde_fou"]
-        donnes_jouees += 1
-    return {
-        "niveau": niveau,
-        "tuiles_restantes": moyenne(tuiles) if tuiles else None,
-        "manches": len(tuiles),
-        "donnes_jouees": donnes_jouees,
-        "garde_fou": garde_fou,
-    }
+def _ecrire(sortie, lignes: list[str]) -> None:
+    """Réécrit INTÉGRALEMENT le fichier de sortie (résultats partiels), comme
+    ``scripts/valider_bas_echelle.py``."""
+    if sortie is None:
+        return
+    Path(sortie).write_text("\n".join(lignes) + "\n", encoding="utf-8")
 
 
-def jouer_profils(nb_donnes: int, seed: int, max_tours: int,
-                  deadline: float | None) -> list[dict]:
-    """Mesure les tuiles restantes en défaite de chaque niveau DISTINCT de
-    l'échelle (Avancé/Expert/Champion du Monde sont identiques tant que le
-    multi-tours n'existe pas : un seul représentant mesuré, « Avancé »)."""
-    vus: set = set()
-    profils: list[dict] = []
-    for niveau in NIVEAUX:
-        cle = _niveaux.bridage_pour(niveau)
-        if cle in vus:
-            continue
-        vus.add(cle)
-        if deadline is not None and time.monotonic() >= deadline:
-            break
-        logger.info("Profil tuiles restantes : %s...", niveau)
-        profils.append(mesurer_tuiles_restantes(niveau, nb_donnes, seed,
-                                                 max_tours, deadline))
-    return profils
+def _entete_rapport(nb_donnes: int, seed: int, max_tours: int,
+                    limite_temps: float | None,
+                    budget_solveur: float | None) -> list[str]:
+    lignes = ["=" * 78,
+              "TOURNOI EN ÉCHELLE PAR DUELS ENTRE NIVEAUX VOISINS (issue #213, "
+              "critère #220)"]
+    lignes.extend(entete_machine())
+    budget_txt = (f"{budget_solveur:.2f} s/tour" if budget_solveur is not None
+                  else "production (1.50 s)")
+    lignes.append(f"donnes={nb_donnes} seed={seed} max_tours={max_tours} "
+                  f"budget_solveur={budget_txt}"
+                  + (f" limite_temps={limite_temps:.0f}s"
+                     if limite_temps is not None else ""))
+    lignes.append("=" * 78)
+    return lignes
 
 
 def jouer_tournoi(nb_donnes: int, seed: int, max_tours: int,
-                  limite_temps: float | None, donnes_profil: int = 20) -> dict:
+                  limite_temps: float | None = None, sortie=None,
+                  budget_solveur: float | None = None) -> dict:
     """Joue toutes les paires (adjacentes puis contrôles non adjacents) sous la
     limite de temps FERME ``limite_temps`` (secondes). La limite est vérifiée
     avant chaque DONNE (voir :func:`jouer_paire`) : on arrête de lancer du
     travail dès qu'elle est dépassée et on exploite les résultats partiels. Une
     paire peut donc n'être jouée que sur une partie de ses donnes (ou pas du
-    tout)."""
+    tout). Si ``sortie`` est fourni, les résultats partiels y sont écrits en
+    continu, après chaque donne (issue #220)."""
     debut = time.monotonic()
     deadline = (debut + limite_temps) if limite_temps is not None else None
     adjacentes, non_adjacentes = _paires_tournoi()
     resultats = {"adjacentes": [], "non_adjacentes": []}
     interrompu = False
+    paires_incompletes: list[tuple[str, str, int, int]] = []
 
-    # (0) Profil de force de chaque niveau distinct AVANT le tournoi (tuiles
-    # restantes en défaite, mesure qui justifie le calibrage #216) : fait en
-    # premier pour qu'il figure au rapport même si le tournoi est écourté.
-    profils = (jouer_profils(donnes_profil, seed, max_tours, deadline)
-               if donnes_profil > 0 else [])
+    lignes = _entete_rapport(nb_donnes, seed, max_tours, limite_temps,
+                             budget_solveur)
+    _ecrire(sortie, lignes)
 
-    for categorie, paires in (("adjacentes", adjacentes),
-                              ("non_adjacentes", non_adjacentes)):
+    groupes = (("adjacentes", "PAIRES ADJACENTES", adjacentes),
+              ("non_adjacentes", "PAIRES DE CONTRÔLE (non adjacentes)",
+               non_adjacentes))
+    for categorie, libelle, paires in groupes:
+        if not paires:
+            continue
+        lignes.append("")
+        lignes.append(f"{libelle} :")
+        _ecrire(sortie, lignes)
         for faible, fort in paires:
             if deadline is not None and time.monotonic() >= deadline:
                 interrompu = True
+                paires_incompletes.append((faible, fort, 0, nb_donnes))
+                lignes.append(f"    {faible} vs {fort}: non jouée "
+                              "(limite de temps) [partiel]")
+                _ecrire(sortie, lignes)
                 break
             logger.info("Paire %s vs %s...", faible, fort)
-            res = jouer_paire(faible, fort, nb_donnes, seed, max_tours, deadline)
+            lignes.append("")
+            idx_ligne = len(lignes) - 1
+
+            def _maj(res_partiel, idx_ligne=idx_ligne):
+                lignes[idx_ligne] = _ligne_paire(res_partiel)
+                _ecrire(sortie, lignes)
+
+            res = jouer_paire(faible, fort, nb_donnes, seed, max_tours,
+                              deadline, on_donne=_maj)
             resultats[categorie].append(res)
             if res["donnes_jouees"] < nb_donnes:
                 interrompu = True
+                paires_incompletes.append(
+                    (faible, fort, res["donnes_jouees"], nb_donnes))
                 break
         if interrompu:
             break
 
+    duree = time.monotonic() - debut
+    lignes.append("")
+    lignes.append(f"Temps total : {duree:.1f} s.")
+    if interrompu:
+        lignes.append("(!) ARRÊTÉ SUR LA LIMITE DE TEMPS : tournoi INCOMPLET.")
+        for faible, fort, jouees, demandees in paires_incompletes:
+            lignes.append(f"    Paire incomplète : {faible} vs {fort} "
+                          f"({jouees}/{demandees} donnes).")
+    else:
+        lignes.append("TERMINÉ NORMALEMENT (toutes les paires/donnes jouées).")
+    lignes.append("=" * 78)
+    _ecrire(sortie, lignes)
+
     return {
         "resultats": resultats,
-        "profils": profils,
         "interrompu": interrompu,
-        "duree_s": time.monotonic() - debut,
+        "paires_incompletes": paires_incompletes,
+        "duree_s": duree,
         "nb_donnes": nb_donnes,
-        "donnes_profil": donnes_profil,
         "seed": seed,
         "max_tours": max_tours,
     }
 
 
 # --------------------------------------------------------------------------- #
-# Affichage
+# Affichage (stdout, rapport détaillé avec verdicts)
 # --------------------------------------------------------------------------- #
 
 def _ligne_paire(res: dict) -> str:
     paire = f"{res['niveau_faible']} vs {res['niveau_fort']}"
     if res["donnes_jouees"] == 0:
-        return f"  {paire:<40s} non jouée (limite de temps)"
+        return f"  {paire:<40s} non jouée (limite de temps) [partiel]"
+    partiel = " [partiel]" if res["donnes_jouees"] < res["donnes_demandees"] else ""
     if res["matchs_decides"] == 0:
         return (f"  {paire:<40s} aucun match décidé "
-                f"({res['donnes_jouees']}/{res['donnes_demandees']} donne(s))")
+                f"({res['donnes_jouees']}/{res['donnes_demandees']} donne(s))"
+                f"{partiel}")
     taux = res["taux_fort"] * 100
     marge = res["marge"] * 100
     cote = (f"{res['victoires_fort']}/{res['matchs_decides']}")
-    ecart_signif = abs(res["taux_fort"] - 0.5) > res["marge"]
-    if res["identiques"]:
-        verdict = "ÉGALITÉ ATTENDUE (solveur identique, #213 §2)"
-    elif not ecart_signif:
-        verdict = "non significatif"
-    elif SEUIL_NET_BAS <= res["taux_fort"] <= SEUIL_NET_HAUT:
-        verdict = "net (60–80 %)"
-    elif res["taux_fort"] > SEUIL_NET_HAUT:
-        verdict = "très net (>80 %)"
-    else:
-        verdict = "significatif mais faible (<60 %)"
+    verdict = verdict_ecart(res["taux_fort"], res["marge"], res["identiques"])
     donnes = f"[{res['donnes_jouees']}/{res['donnes_demandees']}d]"
     return (f"  {paire:<40s} {res['niveau_fort']:<18s} "
-            f"{cote:>9s}  {taux:5.1f} % ± {marge:4.1f} pt  {donnes:<8s} {verdict}")
+            f"{cote:>9s}  {taux:5.1f} % ± {marge:4.1f} pt  "
+            f"{donnes:<8s}{partiel} {verdict}")
 
 
 def afficher_rapport(rapport: dict) -> None:
     res = rapport["resultats"]
     print("=" * 78)
-    print("TOURNOI EN ÉCHELLE DES SIX NIVEAUX D'IA (issue #213)")
+    print("TOURNOI EN ÉCHELLE DES SIX NIVEAUX D'IA, PAR DUELS (issue #213, "
+          "critère #220)")
     print(f"{rapport['nb_donnes']} donne(s) x 2 (miroir) par paire — "
-          f"graine {rapport['seed']}, max_tours {rapport['max_tours']}")
+         f"graine {rapport['seed']}, max_tours {rapport['max_tours']}")
     budget = rapport.get("budget_solveur")
     if budget is not None:
         print(f"  Budget solveur exact : {budget:.2f} s/tour "
@@ -296,23 +340,6 @@ def afficher_rapport(rapport: dict) -> None:
     print(f"  {'Paire':<40s} {'Plus fort':<18s} {'V/N':>9s}  "
           f"{'Taux (IC 95 %)':>16s}  Verdict")
     print("-" * 78)
-
-    profils = rapport.get("profils") or []
-    if profils:
-        print("  TUILES RESTANTES EN DÉFAITE PAR NIVEAU "
-              f"(miroir, {rapport.get('donnes_profil')} donne(s), plus bas = "
-              "plus fort) :")
-        for p in profils:
-            if p["tuiles_restantes"] is None:
-                mesure = "n/a (aucune manche décidée)"
-            else:
-                mesure = (f"{p['tuiles_restantes']:.2f} tuile(s) "
-                          f"({p['manches']} manche(s))")
-            gf = f" [garde-fou×{p['garde_fou']}]" if p["garde_fou"] else ""
-            print(f"    {p['niveau']:<18s} {mesure}{gf}")
-        print("    (Avancé représente aussi Expert et Champion du Monde, "
-              "réglages identiques — #213 §2.)")
-        print("-" * 78)
 
     print("  PAIRES ADJACENTES :")
     for r in res["adjacentes"]:
@@ -331,7 +358,7 @@ def afficher_rapport(rapport: dict) -> None:
 def _afficher_verdicts(res: dict) -> None:
     """Deux vérifications demandées par l'issue : (a) l'échelle est-elle
     strictement croissante sur les paires adjacentes ? (b) chaque écart
-    adjacent est-il « net » (60–80 %) ? — en excluant explicitement les paires
+    adjacent est-il « net » (60–75 %) ? — en excluant explicitement les paires
     du trio identique Avancé/Expert/Champion du Monde (égalité ATTENDUE)."""
     adjacentes = res["adjacentes"]
     distinctes = [r for r in adjacentes
@@ -355,10 +382,11 @@ def _afficher_verdicts(res: dict) -> None:
     else:
         print("  (a) Aucune paire adjacente distincte jouée pour conclure.")
 
-    # (b) Écart « net » (60–80 %) pour chaque paire adjacente distincte.
+    # (b) Écart « net » (60–75 %) pour chaque paire adjacente distincte.
     nets = [SEUIL_NET_BAS <= r["taux_fort"] <= SEUIL_NET_HAUT for r in distinctes]
     if distinctes:
-        print(f"  (b) Écart adjacent « net » (60–80 %) : "
+        print(f"  (b) Écart adjacent « net » "
+              f"({int(SEUIL_NET_BAS * 100)}–{int(SEUIL_NET_HAUT * 100)} %) : "
               f"{sum(nets)}/{len(distinctes)} paire(s) distincte(s) dans la "
               f"cible visée par l'issue.")
 
@@ -377,10 +405,10 @@ def _afficher_verdicts(res: dict) -> None:
 # CLI
 # --------------------------------------------------------------------------- #
 
-def main(argv: list[str]) -> int:
+def _construire_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Tournoi en échelle des six niveaux d'IA Rummikub "
-                    "(issue #213).")
+        description="Tournoi en échelle des six niveaux d'IA Rummikub, par "
+                    "duels entre niveaux voisins (issue #213, critère #220).")
     parser.add_argument("--donnes", type=int, default=40,
                         help="Donnes distinctes par paire (défaut 40 ; "
                              "chacune jouée 2 fois en miroir).")
@@ -390,42 +418,63 @@ def main(argv: list[str]) -> int:
                         help="Garde-fou anti-blocage par manche (défaut 300).")
     parser.add_argument("--limite-temps", type=float, default=None,
                         help="Limite de temps FERME, en secondes, pour tout le "
-                             "tournoi (résultats partiels exploités).")
-    parser.add_argument("--donnes-profil", type=int, default=20,
-                        help="Donnes par niveau pour la mesure des tuiles "
-                             "restantes en défaite (miroir ; défaut 20 ; 0 pour "
-                             "ne pas mesurer).")
+                             "tournoi : aucune nouvelle paire/donne lancée "
+                             "au-delà, et un garde-fou externe termine le "
+                             "processus (et tout sous-processus) si elle est "
+                             "quand même dépassée.")
+    parser.add_argument("--sortie", default=None,
+                        help="Fichier où écrire les résultats PARTIELS en "
+                             "continu (après chaque donne).")
     parser.add_argument("--budget-solveur", type=float, default=None,
                         help="Budget du solveur exact par tour, en secondes "
                              "(défaut : production = 1.5). Le réduire accélère "
                              "une campagne longue ; à signaler dans le rapport.")
     parser.add_argument("-v", "--verbose", action="store_true",
                         help="Journalise le détail de chaque paire.")
-    args = parser.parse_args(argv[1:])
+    parser.add_argument("--_worker", action="store_true", help=argparse.SUPPRESS)
+    return parser
 
+
+def _executer(args) -> int:
+    """Logique réelle du tournoi — appelée en sous-processus (``--_worker``)
+    quand ``--limite-temps`` est fourni, ou en direct sinon (voir ``main``)."""
     logging.basicConfig(
         level=logging.INFO if args.verbose else logging.WARNING,
         format="%(asctime)s %(levelname)-8s %(message)s",
         datefmt="%H:%M:%S",
     )
-
-    if args.donnes < 1:
-        parser.error("--donnes doit être au moins 1")
-    if args.donnes_profil < 0:
-        parser.error("--donnes-profil doit être >= 0")
+    if args.verbose:
+        logger.setLevel(logging.INFO)
 
     if args.budget_solveur is not None:
-        if args.budget_solveur <= 0:
-            parser.error("--budget-solveur doit être > 0")
         # Budget du solveur exact pour TOUTE la campagne (accélère un tournoi
         # long ; à signaler dans le rapport car la force d'Avancé en dépend).
         _ia.BUDGET_TEMPS_EXPERT = args.budget_solveur
 
     rapport = jouer_tournoi(args.donnes, args.seed, args.max_tours,
-                            args.limite_temps, args.donnes_profil)
+                            args.limite_temps, sortie=args.sortie,
+                            budget_solveur=args.budget_solveur)
     rapport["budget_solveur"] = args.budget_solveur
     afficher_rapport(rapport)
-    return 0
+    return CODE_LIMITE_TEMPS if rapport["interrompu"] else CODE_TERMINE
+
+
+def main(argv: list[str]) -> int:
+    parser = _construire_parser()
+    args = parser.parse_args(argv[1:])
+
+    if args.donnes < 1:
+        parser.error("--donnes doit être au moins 1")
+    if args.budget_solveur is not None and args.budget_solveur <= 0:
+        parser.error("--budget-solveur doit être > 0")
+
+    if args._worker or args.limite_temps is None:
+        return _executer(args)
+
+    # Relance surveillée (garde-fou externe, #220) : plus de limite de temps
+    # qui ne soit pas ferme — voir scripts/_limite_temps_ferme.py.
+    return lancer_avec_limite_ferme(Path(__file__), list(argv[1:]),
+                                    args.limite_temps)
 
 
 if __name__ == "__main__":

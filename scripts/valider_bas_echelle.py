@@ -1,28 +1,43 @@
 #!/usr/bin/env python3
-"""Tournoi de validation CIBLÉ du BAS de l'échelle (issue #217, suite #216).
+"""Tournoi de validation CIBLÉ du BAS de l'échelle, par DUELS uniquement
+(issue #220, suite de #216/#217).
 
 Ne joue que les deux paires du bas de l'échelle — **Débutant vs Facile** et
-**Facile vs Intermédiaire** — plus la mesure des **tuiles restantes en défaite**
-(miroir) de Débutant, Facile et Intermédiaire. Objectif : vérifier, après le
-recalibrage de Facile (#217), que
+**Facile vs Intermédiaire** — chaque donne jouée DEUX fois en miroir (mains
+des deux IA échangées). Objectif : vérifier que
 
-  * Facile bat désormais Débutant dans une fourchette nette (visé 60–75 %) et
-    qu'il lui reste MOINS de tuiles que Débutant (Débutant redevient le plus
-    faible) ;
-  * Facile vs Intermédiaire est redescendu SOUS 80 %.
+  * Facile bat Débutant dans une fourchette nette (visée 60–75 %) ;
+  * Facile vs Intermédiaire reste dans une fourchette nette (60–75 %).
 
-Pensé pour tenir dans un temps imparti serré : limite de temps FERME
-(``--limite-temps``), **résultats partiels écrits en continu** dans
-``--sortie`` (après CHAQUE donne), budget du solveur exact réglable
-(``--budget-solveur``, défaut production 1,5 s). Réutilise ``comparer`` de
-``scripts/comparer_niveaux_ia.py`` (match miroir reproductible de #213), comme
-``scripts/echelle_niveaux.py``.
+**#220 retire le relevé des tuiles restantes en défaite** (miroir d'un niveau
+contre lui-même, option ``--donnes-profil``) : ce critère mesurait surtout la
+longueur des parties (dépend de la vitesse de l'adversaire, pas comparable à
+un joueur humain), les manches ne finissent plus naturellement dès que
+``perturbation_max >= 1`` (les deux joueurs réarrangent le plateau sans
+avancer), et il consommait TOUT le temps imparti des tournois de #216/#217
+sans que les duels ci-dessus ne soient jamais joués. Voir CONTEXTE.md §16.
+``scripts/calibrer_niveaux.py`` et le relevé de ``scripts/profil_joueur.py``
+reposent ENCORE sur ce critère (hors périmètre de #220).
+
+Limite de temps FERME (``--limite-temps``) : en plus de l'arrêt propre interne
+(aucune nouvelle donne lancée au-delà de la limite), un garde-fou EXTERNE
+(sous-processus surveillé, voir ``scripts/_limite_temps_ferme.py``) termine le
+tournoi — et tout sous-processus qu'il aurait créé — si la limite est
+dépassée d'une marge bornée, quoi qu'il arrive à l'intérieur (donne bloquée
+ou non). Code de sortie : ``0`` terminé normalement, ``3`` arrêté sur la
+limite de temps, ``1`` erreur.
+
+Résultats PARTIELS écrits en continu dans ``--sortie`` (après CHAQUE donne) :
+chaque paire affiche victoires/parties jouées, taux ± marge, et donnes
+terminées/prévues — marquée « partiel » tant qu'elle n'est pas finie. La fin
+du fichier indique si le tournoi est allé au bout ou s'est arrêté sur la
+limite de temps, et liste les paires incomplètes.
 
 Usage (commande à relancer par Alain hors contrainte de temps) :
 
     python scripts/valider_bas_echelle.py --donnes 40 --seed 0 \
         --budget-solveur 1.5 --max-tours 300 --limite-temps 5400 \
-        --sortie resultats_bas_echelle_217.txt
+        --sortie resultats_bas_echelle_220.txt
 """
 
 import argparse
@@ -40,14 +55,15 @@ for _p in (SRC, SCRIPTS):
 
 from rummikub.moteur import ia as _ia  # noqa: E402
 from rummikub.moteur import niveaux as _niveaux  # noqa: E402
-from comparer_niveaux_ia import (  # noqa: E402
-    comparer, intervalle_confiance_95, moyenne,
+from comparer_niveaux_ia import comparer, intervalle_confiance_95  # noqa: E402
+from _limite_temps_ferme import (  # noqa: E402
+    CODE_LIMITE_TEMPS, CODE_TERMINE, lancer_avec_limite_ferme,
 )
+from _rapport_duels import entete_machine, verdict_ecart  # noqa: E402
 
 logger = logging.getLogger("valider_bas_echelle")
 
 PAIRES = [("Débutant", "Facile"), ("Facile", "Intermédiaire")]
-NIVEAUX_PROFIL = ["Débutant", "Facile", "Intermédiaire"]
 
 
 def _ecrire(sortie, lignes: list[str]) -> None:
@@ -58,36 +74,9 @@ def _ecrire(sortie, lignes: list[str]) -> None:
     Path(sortie).write_text("\n".join(lignes) + "\n", encoding="utf-8")
 
 
-def main(argv: list[str]) -> int:
-    parser = argparse.ArgumentParser(
-        description="Tournoi de validation ciblé du bas de l'échelle "
-                    "(Débutant/Facile/Intermédiaire, issue #217).")
-    parser.add_argument("--donnes", type=int, default=40)
-    parser.add_argument("--seed", type=int, default=0)
-    parser.add_argument("--max-tours", type=int, default=300)
-    parser.add_argument("--donnes-profil", type=int, default=20,
-                        help="Donnes par niveau pour les tuiles restantes en "
-                             "défaite (miroir ; 0 pour ne pas mesurer).")
-    parser.add_argument("--budget-solveur", type=float, default=None,
-                        help="Budget du solveur exact par tour (défaut "
-                             "production = 1.5 s). À signaler si réduit.")
-    parser.add_argument("--limite-temps", type=float, default=None,
-                        help="Limite de temps FERME (s) pour tout le tournoi.")
-    parser.add_argument("--sortie", default=None,
-                        help="Fichier où écrire les résultats PARTIELS en "
-                             "continu (après chaque donne).")
-    parser.add_argument("--facile-perturbation", default=None,
-                        help="Override TEMPORAIRE de la perturbation de Facile "
-                             "(entier >= 0, ou inf) pour tester un réglage "
-                             "candidat sans toucher niveaux.py.")
-    parser.add_argument("--facile-oubli", type=float, default=None,
-                        help="Override TEMPORAIRE du taux d'oubli de Facile.")
-    parser.add_argument("--paire", choices=("toutes", "deb-fac", "fac-int"),
-                        default="toutes",
-                        help="Restreindre aux paires jouées (défaut : les deux).")
-    parser.add_argument("-v", "--verbose", action="store_true")
-    args = parser.parse_args(argv[1:])
-
+def _executer(args) -> int:
+    """Logique réelle du tournoi — appelée en sous-processus (``--_worker``)
+    quand ``--limite-temps`` est fourni, ou en direct sinon (voir ``main``)."""
     paires = {"deb-fac": [PAIRES[0]], "fac-int": [PAIRES[1]]}.get(
         args.paire, PAIRES)
 
@@ -112,8 +101,6 @@ def main(argv: list[str]) -> int:
     logger.setLevel(logging.INFO)
 
     if args.budget_solveur is not None:
-        if args.budget_solveur <= 0:
-            parser.error("--budget-solveur doit être > 0")
         _ia.BUDGET_TEMPS_EXPERT = args.budget_solveur
 
     debut = time.monotonic()
@@ -123,46 +110,26 @@ def main(argv: list[str]) -> int:
     budget_txt = (f"{args.budget_solveur:.2f} s/tour"
                   if args.budget_solveur is not None else "production (1.50 s)")
     lignes.append("=" * 72)
-    lignes.append("VALIDATION DU BAS DE L'ÉCHELLE (issue #217)")
+    lignes.append("VALIDATION DU BAS DE L'ÉCHELLE PAR DUELS (issue #220, "
+                  "suite #216/#217)")
+    lignes.extend(entete_machine())
     _bf = _niveaux.BRIDAGES["Facile"]
     _pf = "∞" if _bf.perturbation_max is None else str(_bf.perturbation_max)
     lignes.append(f"donnes={args.donnes} seed={args.seed} "
                   f"max_tours={args.max_tours} budget_solveur={budget_txt}")
     lignes.append(f"Réglage Facile testé : perturbation={_pf} "
                   f"oubli={_bf.taux_oubli:.2f}")
-    lignes.append("Critère force : tuiles restantes en défaite (plus bas = "
-                  "plus fort).")
+    lignes.append("Critère force : duel entre niveaux voisins (même donne "
+                  "jouée 2x, mains échangées) ; visé 60-75 % pour le niveau "
+                  "le plus fort.")
     lignes.append("=" * 72)
     _ecrire(args.sortie, lignes)
 
-    # (0) Profil tuiles restantes par niveau (fait en premier pour figurer au
-    # rapport même si le tournoi est écourté).
     lignes.append("")
-    lignes.append("TUILES RESTANTES EN DÉFAITE PAR NIVEAU (miroir) :")
-    _ecrire(args.sortie, lignes)
-    if args.donnes_profil > 0:
-        for niveau in NIVEAUX_PROFIL:
-            tuiles: list[int] = []
-            gf = 0
-            lignes.append(f"    {niveau:<14s} (en cours...)")
-            idx_ligne = len(lignes) - 1
-            for i in range(args.donnes_profil):
-                if deadline is not None and time.monotonic() >= deadline:
-                    break
-                r = comparer(niveau, niveau, 1, args.seed + i, args.max_tours,
-                             nb_manches=1, preferer_simple=True)
-                tuiles.extend(r["tuiles_perdant"])
-                gf += r["fins"]["garde_fou"]
-                moy = moyenne(tuiles) if tuiles else float("nan")
-                lignes[idx_ligne] = (
-                    f"    {niveau:<14s} ~{moy:.2f} tuile(s) "
-                    f"[{len(tuiles)} manche(s), {i + 1} donne(s)"
-                    f"{f', garde-fou×{gf}' if gf else ''}]")
-                _ecrire(args.sortie, lignes)
-
-    # (1) Les deux paires du bas.
     lignes.append("PAIRES DU BAS (taux de victoire du niveau le PLUS FORT) :")
     _ecrire(args.sortie, lignes)
+
+    paires_incompletes: list[tuple[str, str, int, int]] = []
     for faible, fort in paires:
         victoires = decides = 0
         donnes_jouees = 0
@@ -176,26 +143,90 @@ def main(argv: list[str]) -> int:
             victoires += r["victoires"]["B"]
             decides += r["matchs_decides"]
             donnes_jouees += 1
+            partiel = " [partiel]" if donnes_jouees < args.donnes else ""
             if decides:
                 taux, marge = intervalle_confiance_95(victoires, decides)
+                verdict = verdict_ecart(taux, marge)
                 lignes[idx_ligne] = (
                     f"    {faible} vs {fort}: {fort} "
                     f"{victoires}/{decides} = {taux * 100:.1f} % "
                     f"± {marge * 100:.1f} pt "
-                    f"[{donnes_jouees}/{args.donnes} donnes]")
+                    f"[{donnes_jouees}/{args.donnes} donnes]{partiel} {verdict}")
             else:
                 lignes[idx_ligne] = (
                     f"    {faible} vs {fort}: aucun match décidé "
-                    f"[{donnes_jouees}/{args.donnes} donnes]")
+                    f"[{donnes_jouees}/{args.donnes} donnes]{partiel}")
             _ecrire(args.sortie, lignes)
+        if donnes_jouees < args.donnes:
+            paires_incompletes.append((faible, fort, donnes_jouees, args.donnes))
         lignes.append("")
         _ecrire(args.sortie, lignes)
 
-    lignes.append(f"Temps total : {time.monotonic() - debut:.1f} s.")
+    interrompu = bool(paires_incompletes)
+    duree = time.monotonic() - debut
+    lignes.append(f"Temps total : {duree:.1f} s.")
+    if interrompu:
+        lignes.append("(!) ARRÊTÉ SUR LA LIMITE DE TEMPS : tournoi INCOMPLET.")
+        for faible, fort, jouees, demandees in paires_incompletes:
+            lignes.append(f"    Paire incomplète : {faible} vs {fort} "
+                          f"({jouees}/{demandees} donnes).")
+    else:
+        lignes.append("TERMINÉ NORMALEMENT (toutes les donnes demandées jouées).")
     lignes.append("=" * 72)
     _ecrire(args.sortie, lignes)
     print("\n".join(lignes))
-    return 0
+    return CODE_LIMITE_TEMPS if interrompu else CODE_TERMINE
+
+
+def _construire_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        description="Tournoi de validation ciblé du bas de l'échelle par "
+                    "DUELS (Débutant/Facile/Intermédiaire, issue #220).")
+    parser.add_argument("--donnes", type=int, default=40)
+    parser.add_argument("--seed", type=int, default=0)
+    parser.add_argument("--max-tours", type=int, default=300)
+    parser.add_argument("--budget-solveur", type=float, default=None,
+                        help="Budget du solveur exact par tour (défaut "
+                             "production = 1.5 s). À signaler si réduit.")
+    parser.add_argument("--limite-temps", type=float, default=None,
+                        help="Limite de temps FERME (s) pour tout le "
+                             "tournoi : aucune nouvelle donne lancée au-delà, "
+                             "et un garde-fou externe termine le processus "
+                             "(et tout sous-processus) si elle est quand "
+                             "même dépassée.")
+    parser.add_argument("--sortie", default=None,
+                        help="Fichier où écrire les résultats PARTIELS en "
+                             "continu (après chaque donne).")
+    parser.add_argument("--facile-perturbation", default=None,
+                        help="Override TEMPORAIRE de la perturbation de Facile "
+                             "(entier >= 0, ou inf) pour tester un réglage "
+                             "candidat sans toucher niveaux.py.")
+    parser.add_argument("--facile-oubli", type=float, default=None,
+                        help="Override TEMPORAIRE du taux d'oubli de Facile.")
+    parser.add_argument("--paire", choices=("toutes", "deb-fac", "fac-int"),
+                        default="toutes",
+                        help="Restreindre aux paires jouées (défaut : les deux).")
+    parser.add_argument("-v", "--verbose", action="store_true")
+    parser.add_argument("--_worker", action="store_true", help=argparse.SUPPRESS)
+    return parser
+
+
+def main(argv: list[str]) -> int:
+    parser = _construire_parser()
+    args = parser.parse_args(argv[1:])
+
+    if args.budget_solveur is not None and args.budget_solveur <= 0:
+        parser.error("--budget-solveur doit être > 0")
+    if args.donnes < 1:
+        parser.error("--donnes doit être au moins 1")
+
+    if args._worker or args.limite_temps is None:
+        return _executer(args)
+
+    # Relance surveillée (garde-fou externe, #220) : plus de limite de temps
+    # qui ne soit pas ferme — voir scripts/_limite_temps_ferme.py.
+    return lancer_avec_limite_ferme(Path(__file__), list(argv[1:]),
+                                    args.limite_temps)
 
 
 if __name__ == "__main__":
