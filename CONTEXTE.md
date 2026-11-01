@@ -2161,6 +2161,62 @@ une au fur et à mesure que de futures issues les testent/implémentent.
 > niveaux du bas et les outils de calibrage) : Expert et Champion du Monde y
 > restent provisoirement calés sur le solveur un-tour complet (= Avancé).
 
+- [x] **Réalisée (#219) — brique « Inconnues »** : la précision de la piste 9
+  (« l'IA connaît les 106 tuiles, les siennes et celles du tapis ; par
+  soustraction, elle connaît l'ensemble exact des tuiles ailleurs ») est
+  désormais un **module de calcul autonome**, `moteur/inconnues.py`,
+  indépendant du solveur, des niveaux et de l'interface — il ne modifie AUCUN
+  comportement de jeu, c'est une pure brique de lecture.
+
+  **Ce que fournit le module** :
+  - `calculer_inconnues(plateau, main, tailles_mains_adversaires,
+    taille_pioche)` : cœur du calcul, à partir du tapis, de sa propre main et
+    des TAILLES (jamais le contenu) des mains adverses + de la pioche.
+    Retourne un `Inconnues` (tuiles inconnues avec leur nombre d'exemplaires
+    restants — 0, 1 ou 2 ; 2 pour les jokers, traités comme un seul type).
+  - `calculer_inconnues_depuis_etat(etat, index_joueur)` : raccourci depuis
+    l'état de partie complet (`moteur/partie.py`) — n'appelle que `len(...)`
+    sur les chevalets adverses, jamais leur contenu (garde-fou anti-triche
+    vérifié par un test dédié : changer le contenu d'une main adverse sans
+    changer sa taille ne change aucun résultat).
+  - Probabilités uniformes (sans historique, sans « Indices ») :
+    `proba_instance_chez_adversaire`/`proba_instance_dans_pioche` (une tuile
+    inconnue prise au hasard — taille de la main / nombre d'inconnues) ;
+    `proba_tuile_chez_adversaire`/`_chez_un_adversaire_quelconque`/
+    `_dans_pioche` (au moins un exemplaire d'une tuile donnée — formule
+    hypergéométrique exacte, qui se réduit à la formule uniforme simple de
+    l'issue quand il ne reste qu'un seul exemplaire) ; `proba_joker_*` pour
+    les jokers spécifiquement.
+  - `Inconnues.exemplaires_restants(cle_ou_tuile)` : nombre d'exemplaires
+    encore possibles d'une tuile (sert à détecter qu'elle n'a plus de
+    voisines utilisables, voir « Tuiles vivantes » ci-dessous).
+  - `diagnostiquer_coherence(...)` : liste des anomalies (tuile vue en trop,
+    total incohérent) sans jamais lever d'exception — utilisé pour passer en
+    revue des journaux de parties réels potentiellement corrompus.
+
+  **Vérification** (`tests/test_inconnues.py`, pas de journaux réels dans ce
+  worktree isolé — `data/logs_parties` vide, test dédié qui s'ignore
+  proprement dans ce cas et s'activera de lui-même sur la machine d'Alain) :
+  5 parties simulées (2 à 4 IA, niveaux variés), 254 tours, 686 vérifications
+  par-joueur, **0 anomalie** — nombre de tuiles inconnues = mains adverses +
+  pioche, somme des probabilités d'un adversaire = taille de sa main, aucune
+  tuile comptée en trop. **Performance** (indicatif, aucun seuil bloquant) :
+  ≈ 0,12 ms par appel sur la machine de développement — négligeable devant le
+  solveur (≈ 180–215 ms par tour, voir §16).
+
+  **Stratégies qui s'appuieront sur cette brique (aucune implémentée ici)** :
+  « Indices » (affiner ces probabilités uniformes à partir du comportement
+  observé de l'adversaire — ce qu'il pose, ce qu'il garde) ; « Tuiles
+  vivantes » (`exemplaires_restants == 0` → plus de voisines possibles pour
+  une suite/un groupe) ; « Joker et réserve » (probabilité qu'un joker
+  récupérable soit encore disponible à l'adversaire, piste 8) ; « Course »
+  (estimer qui finira le premier à partir des tailles de main et des
+  probabilités de pioche) ; « Rétention » (piste 9 : probabilité qu'une tuile
+  retenue prive réellement l'adversaire) ; « Ouverture » (probabilité qu'une
+  tuile d'ouverture soit encore disponible). Toutes restent à construire
+  au-dessus de cette brique, dans des issues séparées — y compris la
+  modification de la finition en fin de partie.
+
 ## 14. Solveur exact de vérification — bibliothèque `rummikub-solver` (licence MIT, issue #204, suite de #201)
 
 Notre solveur d'Expert (`moteur/solveur.py`) est à la fois le joueur **et** le
