@@ -127,3 +127,61 @@ def test_frequence_activation_exclut_les_statuts_non_executes():
     sortie = buf.getvalue()
     # tentés = 3 + 7 = 10 (exclut les 170 replis amont) ; changés = 3.
     assert "3/10" in sortie
+
+
+# --------------------------------------------------------------------------- #
+# Issue #225 : « garder un joker en main » — drapeau --sans-garde-joker et
+# compteurs du rapport
+# --------------------------------------------------------------------------- #
+
+from rummikub.moteur import niveaux  # noqa: E402
+
+
+def test_sans_garde_joker_desactive_puis_restaure():
+    """Le drapeau ``--sans-garde-joker`` désactive bien la stratégie pour
+    Champion du Monde SEUL, et restaure le réglage d'origine à la sortie
+    (même esprit que ``_verif_finition_desactivee``, #221)."""
+    original = niveaux.BRIDAGES["Champion du Monde"]
+    assert original.garder_joker_fin_partie is True
+    with M._garde_joker_desactive():
+        assert niveaux.BRIDAGES["Champion du Monde"].garder_joker_fin_partie is False
+        # Les autres réglages (perturbation, oubli, verif_finition) restent
+        # inchangés : seule la nouvelle stratégie est coupée.
+        assert niveaux.BRIDAGES["Champion du Monde"].verif_finition is True
+    assert niveaux.BRIDAGES["Champion du Monde"] == original
+
+
+def test_sans_garde_joker_naffecte_pas_expert():
+    """Expert n'a jamais eu ce réglage actif : le désactiver pour Champion du
+    Monde ne doit rien changer au réglage d'Expert."""
+    original_expert = niveaux.BRIDAGES["Expert"]
+    with M._garde_joker_desactive():
+        assert niveaux.BRIDAGES["Expert"] == original_expert
+        assert niveaux.BRIDAGES["Expert"].garder_joker_fin_partie is False
+
+
+def test_rapport_affiche_les_compteurs_garde_joker(capsys):
+    resume = _resume_minimal(
+        stats_garde_joker={"tours_joker_en_main": 12, "candidat_existe": 5,
+                           "permet_de_finir": 2, "choisi": 2},
+        parties_garde_joker=[{"donne": 3, "ordre": ["A", "B"],
+                              "vainqueur_niveau": "Champion du Monde"}],
+        valeur_joker_penalite=30)
+    M.afficher_rapport(resume)
+    sortie = capsys.readouterr().out
+    assert "Garder un joker en main en fin de partie" in sortie
+    assert "Tours de fin de partie avec un joker en main : 12" in sortie
+    assert "5/12" in sortie  # candidat construit
+    assert "2/12" in sortie  # permet de finir ET choisi (même compte ici)
+    assert "30 point(s)" in sortie
+    assert "Champion du Monde : 1" in sortie
+
+
+def test_rapport_sans_stats_garde_joker_pas_de_section(capsys):
+    """Un résumé SANS la clé ``stats_garde_joker`` (ancien format, ou aucun
+    tour de fin de partie avec joker en main) ne doit jamais faire planter
+    l'affichage ni montrer la section."""
+    resume = _resume_minimal()
+    M.afficher_rapport(resume)
+    sortie = capsys.readouterr().out
+    assert "Garder un joker en main en fin de partie" not in sortie

@@ -2239,6 +2239,7 @@ une au fur et à mesure que de futures issues les testent/implémentent.
     └─ Indices (affiner les probabilités par l'observation — PAS FAIT)
   Deux tours
     ├─ étape 1 : vérification de finition en fin de partie (#221, FAIT)
+    ├─ étape 2 : garder un joker en main (#225, FAIT, Champion du Monde SEUL)
     └─ Deux tours NOTÉS (évaluer chaque candidat par une fonction de score
        du plateau à deux tours, pas seulement « peut finir » — PAS FAIT ;
        dépend de l'étape 1 et d'Indices pour évaluer la main adverse)
@@ -2424,6 +2425,189 @@ une au fur et à mesure que de futures issues les testent/implémentent.
     simulation (déjà fait par `comparer_niveaux_ia.py`, voir ci-dessus et
     §9). Pas de piste à développer ici, juste une non-régression à vérifier :
     le moteur approxime déjà « tous bloqués » par « pioche épuisée », voir §5.
+
+- [x] **Réalisée (#225) — brique « Deux tours », étape 2 : garder un joker en
+  main, Champion du Monde SEUL.**
+
+  Troisième candidat de la vérification de finition (§13, #221/#223
+  ci-dessus) : Alain a observé qu'un joueur avec un joker en main et peu de
+  tuiles peut avoir intérêt à NE PAS le jouer tout de suite, pour le garder
+  jusqu'au tour où il permettra de tout poser d'un coup. Sur la campagne de
+  mesure de #223 (200 parties Avancé/Expert, 100 donnes en miroir), la
+  vérification de finition a tourné jusqu'au bout 901 fois sans jamais
+  changer un coup dans 881 cas — ce cas précis (joker gardé) n'avait jamais
+  été testé, d'où cette issue.
+
+  **Contrairement à l'étape 1 (#221), réservée à Expert ET Champion du
+  Monde, cette étape 2 est réservée à Champion du Monde SEUL** —
+  `Bridage.garder_joker_fin_partie` (`moteur/niveaux.py`), `False` par
+  défaut, `True` uniquement pour `"Champion du Monde"`. **Expert reste donc
+  le niveau de RÉFÉRENCE, strictement inchangé** par cette issue — le test
+  de mesure attendu est un duel Expert/Champion du Monde (et non plus
+  Avancé/Expert comme pour #221), plus une comparaison de Champion du Monde
+  avec et sans la stratégie (voir plus bas).
+
+  **Deux réglages, au même endroit que `SEUIL_FIN_PARTIE_VERIF_FINITION`
+  (`moteur/niveaux.py`)** :
+  - `SEUIL_FIN_PARTIE_VERIF_FINITION` (réutilisé tel quel, pas de second
+    seuil de taille de chevalet) ;
+  - `SEUIL_PRUDENCE_ADVERSAIRE_GARDE_JOKER` (valeur de départ **3**) : en
+    dessous de ce nombre de tuiles dans la main d'un adversaire, Champion du
+    Monde ne tente PAS de garder son joker — l'adversaire pourrait finir
+    avant que ça ne paie. Information **publique** (le nombre de tuiles
+    restantes de chaque joueur est visible de tous dans ce jeu) : ce réglage
+    ne lit **jamais** le contenu de la main adverse, seulement sa taille
+    (`len(joueur["chevalet"])`).
+
+  **Le troisième candidat** (`moteur/ia._coup_sans_joker_chevalet`, appelé
+  depuis `_candidats_finition` quand `garder_joker` est actif ET que
+  `_peut_tenter_garde_joker` donne son accord — joker en main ET aucun
+  adversaire sous le seuil de prudence) : résout la position avec UN joker
+  du chevalet **retiré pour ce seul calcul**, via le même modèle exact
+  (`_coup_exact`). Ce candidat ne vaut (n'est ajouté à la liste) que s'il
+  pose au moins une tuile et diffère du meilleur coup du solveur
+  (`verification_finition.coups_differents`, déjà utilisé par le candidat
+  « sans réarrangement » de #221). **Pour savoir s'il permet de finir au
+  tour suivant, la vérification utilise le chevalet restant AVEC le
+  joker** : le joker retiré ne l'était que pour calculer QUEL coup jouer ce
+  tour-ci ; comme ce coup ne pose jamais le joker (par construction), celui-
+  ci reste dans le chevalet d'origine que `verification_finition.
+  _etat_apres_coup` réduit ensuite des seules tuiles réellement posées —
+  c'est donc bien le joker qui doit permettre de finir au tour suivant.
+  **Règle de décision inchangée** (point 4 de #221) : un coup qui vide déjà
+  le chevalet n'est jamais soumis à la vérification ; sinon le premier
+  candidat qui permet de finir au tour suivant est joué, dans l'ordre
+  [meilleur coup du solveur, sans réarrangement, garde le joker] — le
+  meilleur coup du solveur toujours préféré à égalité.
+
+  **Nouveau statut, 8e de `verification_finition.LIBELLES`** —
+  `appliquee_garde_joker` (« appliquée : un coup qui garde le joker a été
+  choisi ») : cas particulier d'`appliquee_autre_coup` (#221), distingué
+  pour les compteurs de campagne ci-dessous. Compte comme un coup
+  « changé » dans la fréquence d'activation du rapport, au même titre
+  qu'`appliquee_autre_coup`.
+
+  **Compteurs** (journal de partie, clé `garde_joker` de `logger_action`
+  — voir `persistance/journal.py` — et rapport de
+  `scripts/comparer_niveaux_ia.py`), portés par chaque coup de Champion du
+  Monde en fin de partie avec un joker en main (`coup["garde_joker_info"]`,
+  posée par `ia._verifier_finition_fin_de_partie`, **jamais** pour
+  Expert/Avancé puisque `garder_joker` y est toujours `False`) :
+  - `joker_en_main` : ce tour comptait un joker dans le chevalet (fin de
+    partie, Champion du Monde) ;
+  - `candidat_existe` : le troisième candidat a pu être construit (joker
+    présent, adversaire pas trop proche, coup valide et différent) ;
+  - `permet_de_finir` : `True`/`False` si la question a été **effectivement
+    tranchée** par `verifier` (elle ne l'est que si ce candidat a été
+    atteint — ni `candidats[0]` ni le candidat sans réarrangement ne
+    suffisaient déjà, et le budget de temps n'a pas été épuisé avant de
+    l'atteindre), `None` sinon (compté NI comme « permet » NI comme « ne
+    permet pas » — limite assumée du court-circuit de `verifier`, qui
+    s'arrête au premier candidat qui finit) ;
+  - `choisi` : ce candidat a été le coup réellement joué
+    (`appliquee_garde_joker`).
+
+  Pour les **parties où la stratégie a été CHOISIE au moins une fois**
+  (`comparer_niveaux_ia.comparer`, liste `parties_garde_joker`), le rapport
+  indique **qui a gagné** chacune (niveau vainqueur, ou « nulle ») — plus
+  informatif qu'un taux de victoire global noyé dans les parties où la
+  stratégie ne s'est jamais appliquée (rare par construction, voir
+  l'incitatif chiffré de #223/#221 ci-dessus).
+
+  **Nombre de manches** : le coût d'un joker resté en main en fin de manche
+  est lu depuis le moteur (`score._penalite_tuile`, réglage
+  `valeur_joker_penalite` — **30 points par défaut**, configurable,
+  `reglages.DEFAUTS`) et rapporté par `comparer_niveaux_ia.py`. **Première
+  version** : la règle du troisième candidat ci-dessus s'applique à
+  l'identique quel que soit `--manches` (le seul réglage de prudence est le
+  seuil sur l'adversaire, tâche 1) — **non implémenté, piste pour une
+  future issue** : en plusieurs manches, une manche perdue à cause d'un
+  joker resté en main coûte des points qui s'accumulent au score cumulé
+  (voir piste 7, §13 plus haut) ; le seuil de prudence sur l'adversaire
+  devrait sans doute être **relevé** quand une manche perdue coûte cher
+  (`nb_manches` élevé et/ou score déjà serré), pour ne risquer de garder le
+  joker que lorsque le gain probable dépasse largement ce risque. Alain
+  tranchera une fois les compteurs ci-dessus mesurés sur de vraies
+  campagnes à 1 et plusieurs manches.
+
+  **Comparaison « avec / sans »** : nouveau drapeau
+  `--sans-garde-joker` de `scripts/comparer_niveaux_ia.py` (même esprit que
+  `--sans-verif-finition`), qui désactive la stratégie pour Champion du
+  Monde SEUL (`comparer_niveaux_ia._garde_joker_desactive`) — permet de
+  lancer Champion du Monde contre lui-même, une fois avec et une fois sans,
+  même graine, pour isoler l'effet de cette seule stratégie.
+
+  **Comparaison appariée, plus sensible qu'un taux de victoire global**
+  (`--export-resultats FICHIER` de `comparer_niveaux_ia.py` +
+  `scripts/comparer_campagnes_appariees.py`, point 5bis) : à la même
+  graine, deux campagnes (avec/sans la stratégie) jouent EXACTEMENT les
+  mêmes donnes dans le même ordre, donc un match ne peut différer entre les
+  deux fichiers QUE si un coup a réellement changé en cours de route —
+  beaucoup plus sensible que de comparer deux taux de victoire globaux
+  noyés dans les parties (la grande majorité) jamais concernées par la
+  stratégie. `--export-resultats` écrit un fichier JSON Lines (un match par
+  ligne : donne, ordre des joueurs, vainqueur, scores) ;
+  `comparer_campagnes_appariees.py` lit deux fichiers et rapporte le nombre
+  de parties identiques, le nombre de parties dont le vainqueur diffère
+  dans chaque sens, et un **test des signes** (sans dépendance externe —
+  somme exacte des deux queues de la loi binomiale(n, 0,5)) sur les seules
+  parties qui divergent avec une direction nette. **Avertissement du
+  rapport, à ne jamais oublier** : une partie peut aussi diverger entre deux
+  campagnes à la même graine pour une raison SANS AUCUN LIEN avec la
+  stratégie testée — une simple variation du budget de temps réellement
+  consommé par le solveur exact (charge de la machine au moment de
+  l'exécution) peut faire basculer un coup d'un tour entre deux exécutions
+  par ailleurs identiques. Une partie divergente est un CANDIDAT à
+  inspecter (journal de la partie), pas une preuve.
+
+  **Essai attendu, deux donnes au premier plan, sans simulation longue**
+  (point 7 de l'issue) — commandes prêtes à copier (`/usr/bin/python3`
+  requis par le garde-fou de #223/#224, `nice -n 19` pour ne pas geler la
+  machine, sortie hors dépôt, notification en fin de commande) :
+
+  ```
+  nice -n 19 /usr/bin/python3 scripts/comparer_niveaux_ia.py \
+      --niveau-a Expert --niveau-b "Champion du Monde" \
+      --donnes 300 --seed 1 --manches 1 \
+      2>&1 | tee /tmp/rummikub_225_expert_vs_champion_1manche.log \
+      && (command -v notify-send >/dev/null && notify-send "Campagne #225 (1 manche) terminée")
+
+  nice -n 19 /usr/bin/python3 scripts/comparer_niveaux_ia.py \
+      --niveau-a Expert --niveau-b "Champion du Monde" \
+      --donnes 300 --seed 1 --manches 3 \
+      2>&1 | tee /tmp/rummikub_225_expert_vs_champion_3manches.log \
+      && (command -v notify-send >/dev/null && notify-send "Campagne #225 (3 manches) terminée")
+
+  nice -n 19 /usr/bin/python3 scripts/comparer_niveaux_ia.py \
+      --niveau-a "Champion du Monde" --niveau-b "Champion du Monde" \
+      --donnes 300 --seed 2 --export-resultats /tmp/rummikub_225_avec.jsonl \
+      2>&1 | tee /tmp/rummikub_225_champion_avec.log \
+      && (command -v notify-send >/dev/null && notify-send "Campagne #225 AVEC terminée")
+
+  nice -n 19 /usr/bin/python3 scripts/comparer_niveaux_ia.py \
+      --niveau-a "Champion du Monde" --niveau-b "Champion du Monde" \
+      --donnes 300 --seed 2 --sans-garde-joker \
+      --export-resultats /tmp/rummikub_225_sans.jsonl \
+      2>&1 | tee /tmp/rummikub_225_champion_sans.log \
+      && (command -v notify-send >/dev/null && notify-send "Campagne #225 SANS terminée")
+
+  /usr/bin/python3 scripts/comparer_campagnes_appariees.py \
+      /tmp/rummikub_225_avec.jsonl /tmp/rummikub_225_sans.jsonl
+  ```
+
+  **Ce que diront les COMPTEURS, plus que le taux de victoire** : vu la
+  rareté déjà mesurée par #223 (881/901 tours de vérification sans aucun
+  changement, toutes stratégies confondues), le taux de victoire Expert
+  contre Champion du Monde ne bougera probablement PAS de façon
+  significative à l'échelle de 300 donnes (±300 à 600 matchs). Les
+  compteurs `tours_joker_en_main`/`candidat_existe`/`permet_de_finir`/
+  `choisi` du rapport, et la liste des parties où la stratégie a été
+  choisie (avec son vainqueur), sont la mesure qui dira si cette stratégie
+  change réellement quelque chose, bien avant qu'un écart de taux de
+  victoire ne devienne statistiquement visible — **ne jamais conclure
+  d'une campagne de cette taille sur le seul taux de victoire** : une
+  campagne plus grande (voir piste 4, §13) resterait nécessaire pour
+  trancher si un effet existe mais reste sous le bruit.
 
 ## 14. Solveur exact de vérification — bibliothèque `rummikub-solver` (licence MIT, issue #204, suite de #201)
 

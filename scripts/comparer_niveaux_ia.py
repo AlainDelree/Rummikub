@@ -36,10 +36,23 @@ Options :
                         Expert (#199, activé par défaut) — relancer la
                         même commande (même --seed) avec et sans ce
                         drapeau pour comparer les deux versions.
+    --sans-verif-finition
+                        Désactive la vérification de finition en fin de
+                        partie (#221, Expert/Champion du Monde).
+    --sans-garde-joker  Désactive « garder un joker en main » en fin de
+                        partie (#225, Champion du Monde SEUL) — relancer
+                        la même commande (même --seed) avec et sans ce
+                        drapeau pour comparer Champion du Monde avec et
+                        sans la stratégie.
+    --export-resultats FICHIER
+                        Écrit un fichier JSON Lines (un match par ligne)
+                        pour la comparaison appariée de deux campagnes
+                        (voir scripts/comparer_campagnes_appariees.py).
     -v, --verbose       Journalise chaque partie jouée.
 """
 
 import argparse
+import json
 import logging
 import random
 import sys
@@ -56,6 +69,7 @@ for _p in (SRC, SCRIPTS):
 import contextlib  # noqa: E402
 
 from rummikub.config import NIVEAUX  # noqa: E402
+from rummikub import reglages  # noqa: E402
 from rummikub.moteur.ia import jouer_ia, jouer_niveau_bride  # noqa: E402
 from rummikub.moteur import evaluation_main  # noqa: E402
 from rummikub.moteur import niveaux  # noqa: E402
@@ -100,6 +114,26 @@ def _verif_finition_desactivee():
 
 
 @contextlib.contextmanager
+def _garde_joker_desactive():
+    """Désactive temporairement « garder un joker en main » (#225) pour
+    Champion du Monde SEUL (Expert n'y a jamais eu droit) — pour la campagne
+    « avec / sans » demandée par l'issue (``--sans-garde-joker``), dans le
+    même esprit que ``--sans-verif-finition``. Restaure le réglage d'origine
+    à la sortie, même en cas d'exception."""
+    nom = "Champion du Monde"
+    original = niveaux.BRIDAGES[nom]
+    niveaux.BRIDAGES[nom] = niveaux.Bridage(
+        perturbation_max=original.perturbation_max,
+        taux_oubli=original.taux_oubli,
+        verif_finition=original.verif_finition,
+        garder_joker_fin_partie=False)
+    try:
+        yield
+    finally:
+        niveaux.BRIDAGES[nom] = original
+
+
+@contextlib.contextmanager
 def _compter_appels_solveur_verif(compteur: list):
     """Compte, dans ``compteur`` (liste à un seul élément, mutable), le
     nombre d'appels à ``resoudre_exact`` faits DEPUIS ``verification_
@@ -133,6 +167,7 @@ _STATUTS_VERIFIES = frozenset((
     verification_finition.APPLIQUEE_MEILLEUR_SUFFIT,
     verification_finition.APPLIQUEE_AUCUN_CANDIDAT,
     verification_finition.APPLIQUEE_AUTRE_COUP,
+    verification_finition.APPLIQUEE_GARDE_JOKER,
 ))
 
 
@@ -173,7 +208,8 @@ def jouer_un_tour(etat: dict, idx: int, temps_par_niveau: dict,
                   eval_configs: list = None,
                   stats_verif_finition: dict = None,
                   appels_solveur_verif: list = None,
-                  aucun_coup_expert: list = None) -> tuple[dict, bool, bool]:
+                  aucun_coup_expert: list = None,
+                  stats_garde_joker: dict = None) -> tuple[dict, bool, bool]:
     """Joue le tour de l'IA à l'index ``idx``.
 
     Chronomètre l'appel à ``jouer_ia`` et l'ajoute à
@@ -267,6 +303,20 @@ def jouer_un_tour(etat: dict, idx: int, temps_par_niveau: dict,
             stats_verif_finition.setdefault("appels_par_tour", []).append(
                 appels_solveur_verif[0] - avant_appels)
 
+    if stats_garde_joker is not None and res_ia.get("garde_joker_info") is not None:
+        info = res_ia["garde_joker_info"]
+        if info.get("joker_en_main"):
+            stats_garde_joker["tours_joker_en_main"] = (
+                stats_garde_joker.get("tours_joker_en_main", 0) + 1)
+        if info.get("candidat_existe"):
+            stats_garde_joker["candidat_existe"] = (
+                stats_garde_joker.get("candidat_existe", 0) + 1)
+        if info.get("permet_de_finir"):
+            stats_garde_joker["permet_de_finir"] = (
+                stats_garde_joker.get("permet_de_finir", 0) + 1)
+        if info.get("choisi"):
+            stats_garde_joker["choisi"] = stats_garde_joker.get("choisi", 0) + 1
+
     if niveau == "Expert" and res_ia.get("action") == "jouer":
         perturbations_expert.append(
             mesurer_perturbation(plateau_avant, res_ia["nouveau_plateau"]))
@@ -307,7 +357,8 @@ def _jouer_une_manche(etat: dict, max_tours: int, temps_par_niveau: dict,
                       eval_configs: list = None,
                       stats_verif_finition: dict = None,
                       appels_solveur_verif: list = None,
-                      aucun_coup_expert: list = None) -> dict:
+                      aucun_coup_expert: list = None,
+                      stats_garde_joker: dict = None) -> dict:
     """Joue la manche courante de ``etat`` jusqu'à sa fin naturelle (chevalet
     vidé ou pioche épuisée) ou jusqu'au garde-fou ``max_tours``. Retourne les
     statistiques de CETTE manche ; ``etat`` est muté en place."""
@@ -326,7 +377,8 @@ def _jouer_une_manche(etat: dict, max_tours: int, temps_par_niveau: dict,
         etat, invalide, tuiles_disparues = jouer_un_tour(
             etat, idx, temps_par_niveau, replis_expert, preferer_simple,
             perturbations_expert, eval_configs,
-            stats_verif_finition, appels_solveur_verif, aucun_coup_expert)
+            stats_verif_finition, appels_solveur_verif, aucun_coup_expert,
+            stats_garde_joker)
         if invalide:
             coups_invalides += 1
         if tuiles_disparues:
@@ -360,13 +412,19 @@ def jouer_match(config_joueurs: list[dict], nb_manches: int, max_tours: int,
                 eval_configs: list = None, graine_ia=None,
                 stats_verif_finition: dict = None,
                 appels_solveur_verif: list = None,
-                aucun_coup_expert: list = None) -> dict:
+                aucun_coup_expert: list = None,
+                stats_garde_joker: dict = None) -> dict:
     """Joue un MATCH complet à 2 joueurs de ``nb_manches`` manches (issue
     #203). Les manches s'enchaînent via ``nouvelle_manche`` (score cumulé
     conservé, nouvelle donne et mise initiale remise à zéro à chaque manche).
     Si une manche est arrêtée par le garde-fou ``max_tours``, le match entier
     est marqué comme arrêté (``arretee_garde_fou``) et abandonné.
-    """
+
+    ``garde_joker_applique`` (issue #225, point 3), dans le résultat : vrai si
+    « garder un joker en main » a été CHOISI au moins une fois pendant ce
+    match (détecté par la variation de ``stats_garde_joker["choisi"]`` avant/
+    après) — permet à ``comparer`` d'enregistrer qui a gagné les parties où la
+    stratégie a réellement changé un coup."""
     # graine_ia (#213) : rend reproductible l'affaiblissement des niveaux bridés
     # (tirage d'oubli) — sans elle, l'oubli tire sur l'entropie système et la
     # campagne n'est pas reproductible. Dérivée de la graine de la donne.
@@ -377,13 +435,14 @@ def jouer_match(config_joueurs: list[dict], nb_manches: int, max_tours: int,
     manches = []
     coups_invalides = coups_tuiles_disparues = anomalies_conservation = 0
     arretee_garde_fou = False
+    choisi_avant = stats_garde_joker.get("choisi", 0) if stats_garde_joker else 0
 
     for numero in range(1, nb_manches + 1):
         res = _jouer_une_manche(etat, max_tours, temps_par_niveau,
                                 replis_expert, preferer_simple,
                                 perturbations_expert, eval_configs,
                                 stats_verif_finition, appels_solveur_verif,
-                                aucun_coup_expert)
+                                aucun_coup_expert, stats_garde_joker)
         coups_invalides += res["coups_invalides"]
         coups_tuiles_disparues += res["coups_tuiles_disparues"]
         anomalies_conservation += res["anomalies_conservation"]
@@ -396,6 +455,9 @@ def jouer_match(config_joueurs: list[dict], nb_manches: int, max_tours: int,
             etat = nouvelle_manche(etat)
             backup_debut_tour(etat)
 
+    garde_joker_applique = (stats_garde_joker is not None
+                            and stats_garde_joker.get("choisi", 0) > choisi_avant)
+
     return {
         "etat": etat,
         "manches": manches,
@@ -403,6 +465,7 @@ def jouer_match(config_joueurs: list[dict], nb_manches: int, max_tours: int,
         "coups_invalides": coups_invalides,
         "coups_tuiles_disparues": coups_tuiles_disparues,
         "anomalies_conservation": anomalies_conservation,
+        "garde_joker_applique": garde_joker_applique,
     }
 
 
@@ -414,7 +477,8 @@ def comparer(niveau_a: str, niveau_b: str, nb_donnes: int, seed: int,
             max_tours: int, nb_manches: int = 1,
             preferer_simple: bool = True,
             eval_a: str = "off", eval_b: str = "off",
-            sans_exact: bool = False) -> dict:
+            sans_exact: bool = False,
+            export_resultats: str = None) -> dict:
     """``nb_manches`` (#203) : nombre de manches par match — chaque donne est
     jouée en miroir (places échangées) sur un match complet, le vainqueur du
     match étant le joueur au plus haut score cumulé. Les résultats sont donnés
@@ -436,11 +500,18 @@ def comparer(niveau_a: str, niveau_b: str, nb_donnes: int, seed: int,
     le global ``ia.UTILISER_SOLVEUR_EXACT``, positionné par ``main`` avant
     l'appel) — reporté tel quel dans le résultat pour que l'en-tête du
     rapport indique honnêtement si le solveur exact était actif (#223,
-    point 1)."""
+    point 1).
+
+    ``export_resultats`` (issue #225, point 5bis) : chemin d'un fichier où
+    écrire UNE ligne JSON par match joué (donne, ordre des joueurs, vainqueur,
+    scores) — pour la comparaison appariée de deux campagnes identiques (même
+    seed), voir ``scripts/comparer_campagnes_appariees.py``."""
     cfg_eval = {"A": evaluation_main.depuis_preset(eval_a, nb_manches),
                 "B": evaluation_main.depuis_preset(eval_b, nb_manches)}
     rng_graines = random.Random(seed)
     graines = [rng_graines.randrange(2**32) for _ in range(nb_donnes)]
+    fichier_export = (open(export_resultats, "w", encoding="utf-8")
+                      if export_resultats else None)
 
     # Niveau MATCH (issue #203) : victoire par score cumulé, nuls comptés à
     # part ; score cumulé moyen de chaque camp.
@@ -478,6 +549,13 @@ def comparer(niveau_a: str, niveau_b: str, nb_donnes: int, seed: int,
     # tour concerné (clé ``"appels_par_tour"``, liste).
     stats_verif_finition: dict = {}
     appels_solveur_verif = [0]
+    # « Garder un joker en main » (#225, point 3) : compteurs bruts (voir
+    # ``jouer_un_tour``) + liste des parties où la stratégie a CHOISI un coup
+    # au moins une fois, avec le niveau vainqueur de CETTE partie (ou ``None``
+    # si nulle) — pour répondre à « qui a gagné quand la stratégie s'est
+    # appliquée ? ».
+    stats_garde_joker: dict = {}
+    parties_garde_joker: list = []
     pile_appels = contextlib.ExitStack()
     pile_appels.enter_context(_compter_appels_solveur_verif(appels_solveur_verif))
 
@@ -498,7 +576,8 @@ def comparer(niveau_a: str, niveau_b: str, nb_donnes: int, seed: int,
                                    eval_configs, graine_ia=graine,
                                    stats_verif_finition=stats_verif_finition,
                                    appels_solveur_verif=appels_solveur_verif,
-                                   aucun_coup_expert=aucun_coup_expert)
+                                   aucun_coup_expert=aucun_coup_expert,
+                                   stats_garde_joker=stats_garde_joker)
             coups_invalides_total += resultat["coups_invalides"]
             coups_tuiles_disparues_total += resultat["coups_tuiles_disparues"]
             anomalies_conservation_total += resultat["anomalies_conservation"]
@@ -508,6 +587,13 @@ def comparer(niveau_a: str, niveau_b: str, nb_donnes: int, seed: int,
                 logger.warning(
                     "Donne %d (ordre %s) : match arrêté par le garde-fou",
                     i + 1, camps)
+                if fichier_export:
+                    fichier_export.write(json.dumps({
+                        "donne": i + 1, "ordre": list(camps),
+                        "niveau_a": niveau_a, "niveau_b": niveau_b,
+                        "vainqueur_camp": None, "arretee_garde_fou": True,
+                        "score_a": None, "score_b": None,
+                    }, ensure_ascii=False) + "\n")
                 continue
 
             etat = resultat["etat"]
@@ -534,6 +620,21 @@ def comparer(niveau_a: str, niveau_b: str, nb_donnes: int, seed: int,
                 camp_gagnant = "A" if cumul_a > cumul_b else "B"
                 victoires[camp_gagnant] += 1
 
+            if fichier_export:
+                fichier_export.write(json.dumps({
+                    "donne": i + 1, "ordre": list(camps),
+                    "niveau_a": niveau_a, "niveau_b": niveau_b,
+                    "vainqueur_camp": camp_gagnant, "arretee_garde_fou": False,
+                    "score_a": cumul_a, "score_b": cumul_b,
+                }, ensure_ascii=False) + "\n")
+
+            if resultat["garde_joker_applique"]:
+                parties_garde_joker.append({
+                    "donne": i + 1, "ordre": list(camps),
+                    "vainqueur_niveau": (None if camp_gagnant is None
+                                        else niveau_camp[camp_gagnant]),
+                })
+
             if logger.isEnabledFor(logging.INFO):
                 logger.info(
                     "Donne %d (ordre %s) : match %s (%d manche(s)) — "
@@ -544,11 +645,15 @@ def comparer(niveau_a: str, niveau_b: str, nb_donnes: int, seed: int,
                     len(resultat["manches"]), cumul_a, cumul_b)
 
     pile_appels.close()
+    if fichier_export:
+        fichier_export.close()
     return {
         "niveau_a": niveau_a,
         "niveau_b": niveau_b,
         "nb_manches": nb_manches,
         "stats_verif_finition": stats_verif_finition,
+        "stats_garde_joker": stats_garde_joker,
+        "parties_garde_joker": parties_garde_joker,
         "victoires": victoires,
         "matchs_nuls": matchs_nuls,
         "matchs_decides": matchs_decides,
@@ -570,6 +675,12 @@ def comparer(niveau_a: str, niveau_b: str, nb_donnes: int, seed: int,
         "nb_donnes": nb_donnes,
         "nb_parties": 2 * nb_donnes,
         "sans_exact": sans_exact,
+        # Coût d'un joker resté en main en fin de manche (issue #225, point
+        # 4) : lu depuis les réglages par défaut du moteur (``valeur_joker_
+        # penalite``, ``reglages.DEFAUTS``) — les campagnes ne passent jamais
+        # de config personnalisée pour ce réglage (voir ``jouer_match`` /
+        # ``creer_partie``).
+        "valeur_joker_penalite": reglages.DEFAUTS.get("valeur_joker_penalite", 30),
     }
 
 
@@ -708,12 +819,14 @@ def afficher_rapport(resume: dict) -> None:
             verification_finition.APPLIQUEE_MEILLEUR_SUFFIT,
             verification_finition.APPLIQUEE_AUCUN_CANDIDAT,
             verification_finition.APPLIQUEE_AUTRE_COUP,
+            verification_finition.APPLIQUEE_GARDE_JOKER,
         )
         tentes = sum(statuts_verif.get(c, 0) for c in statuts_executes)
-        changes = statuts_verif.get(verification_finition.APPLIQUEE_AUTRE_COUP, 0)
+        changes = (statuts_verif.get(verification_finition.APPLIQUEE_AUTRE_COUP, 0)
+                  + statuts_verif.get(verification_finition.APPLIQUEE_GARDE_JOKER, 0))
         print("-" * 70)
         print("  Vérification de finition en fin de partie (#221, statuts "
-             "affinés par #223) :")
+             "affinés par #223, #225) :")
         for code in (
                 verification_finition.NON_APPLICABLE,
                 verification_finition.PAS_DE_COUP_A_COMPARER,
@@ -721,7 +834,8 @@ def afficher_rapport(resume: dict) -> None:
                 verification_finition.BUDGET_EPUISE,
                 verification_finition.APPLIQUEE_MEILLEUR_SUFFIT,
                 verification_finition.APPLIQUEE_AUCUN_CANDIDAT,
-                verification_finition.APPLIQUEE_AUTRE_COUP):
+                verification_finition.APPLIQUEE_AUTRE_COUP,
+                verification_finition.APPLIQUEE_GARDE_JOKER):
             n = statuts_verif.get(code, 0)
             print(f"    {verification_finition.LIBELLES[code]:52s} : {n}")
         if tentes:
@@ -733,6 +847,34 @@ def afficher_rapport(resume: dict) -> None:
             print(f"    Appels supplémentaires au solveur par tour concerné : "
                  f"moyenne {moyenne(appels):.2f}, maximum {max(appels)}, "
                  f"sur {len(appels)} tour(s).")
+
+    stats_gj = resume.get("stats_garde_joker") or {}
+    if stats_gj.get("tours_joker_en_main"):
+        tours_joker = stats_gj["tours_joker_en_main"]
+        existe = stats_gj.get("candidat_existe", 0)
+        permet = stats_gj.get("permet_de_finir", 0)
+        choisi = stats_gj.get("choisi", 0)
+        parties_gj = resume.get("parties_garde_joker") or []
+        print("-" * 70)
+        print("  Garder un joker en main en fin de partie (#225, Champion du "
+             "Monde seul) :")
+        print(f"    Coût d'un joker resté en main en fin de manche : "
+             f"{resume.get('valeur_joker_penalite')} point(s) (réglage "
+             f"\"valeur_joker_penalite\", défaut 30, configurable).")
+        print(f"    Tours de fin de partie avec un joker en main : {tours_joker}")
+        print(f"    Troisième candidat (garder le joker) construit : "
+             f"{existe}/{tours_joker} tour(s)")
+        print(f"    ... permettant de finir au tour suivant (évalué jusqu'au "
+             f"bout seulement) : {permet}/{tours_joker} tour(s)")
+        print(f"    ... choisi : {choisi}/{tours_joker} tour(s)")
+        if parties_gj:
+            gagnees = {}
+            for p in parties_gj:
+                v = p["vainqueur_niveau"] or "nulle"
+                gagnees[v] = gagnees.get(v, 0) + 1
+            detail = ", ".join(f"{v} : {n}" for v, n in sorted(gagnees.items()))
+            print(f"    Parties où la stratégie a été CHOISIE au moins une "
+                 f"fois : {len(parties_gj)} ({detail})")
 
     perturbations = resume["perturbations_expert"]
     if perturbations:
@@ -796,6 +938,21 @@ def main(argv: list[str]) -> int:
                              "campagne « avant / après » (relancer la même "
                              "commande avec et sans ce drapeau, même "
                              "--seed).")
+    parser.add_argument("--sans-garde-joker", action="store_true",
+                        help="Désactive « garder un joker en main » en fin "
+                             "de partie (#225, activée par défaut pour "
+                             "Champion du Monde SEUL — Expert n'y a jamais "
+                             "eu droit) — pour comparer Champion du Monde "
+                             "avec et sans cette stratégie (relancer la "
+                             "même commande avec et sans ce drapeau, même "
+                             "--seed).")
+    parser.add_argument("--export-resultats",
+                        help="Écrit un fichier JSON Lines (une ligne par "
+                             "match : donne, ordre, vainqueur, scores) — "
+                             "pour comparer deux campagnes identiques (même "
+                             "--seed) avec "
+                             "scripts/comparer_campagnes_appariees.py (#225, "
+                             "point 5bis).")
     parser.add_argument("-v", "--verbose", action="store_true",
                         help="Journalise chaque partie jouée.")
     args = parser.parse_args(argv[1:])
@@ -833,15 +990,21 @@ def main(argv: list[str]) -> int:
     if args.sans_verif_finition:
         print("[#221] Vérification de finition en fin de partie DÉSACTIVÉE "
              "(Expert/Champion du Monde).")
+    if args.sans_garde_joker:
+        print("[#225] « Garder un joker en main » DÉSACTIVÉE (Champion du "
+             "Monde).")
 
     debut = time.monotonic()
     with (_verif_finition_desactivee() if args.sans_verif_finition
+          else contextlib.nullcontext()), \
+         (_garde_joker_desactive() if args.sans_garde_joker
           else contextlib.nullcontext()):
         resume = comparer(args.niveau_a, args.niveau_b, args.donnes, args.seed,
                           args.max_tours, nb_manches=args.manches,
                           preferer_simple=not args.sans_preferer_simple,
                           eval_a=args.eval_a, eval_b=args.eval_b,
-                          sans_exact=args.sans_exact)
+                          sans_exact=args.sans_exact,
+                          export_resultats=args.export_resultats)
     duree = time.monotonic() - debut
 
     afficher_rapport(resume)

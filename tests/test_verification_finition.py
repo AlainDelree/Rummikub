@@ -46,11 +46,12 @@ def T(id_, v, c, j=False):
     return {"id": id_, "valeur": v, "couleur": c, "est_joker": j}
 
 
-def _etat(plateau, chevalet, niveau="Champion du Monde"):
+def _etat(plateau, chevalet, niveau="Champion du Monde", chevalet_adversaire=None):
     return {
         "joueurs": [
             {"nom": "Humain", "est_ia": False, "niveau": None,
-             "chevalet": [], "mise_initiale_faite": True},
+             "chevalet": chevalet_adversaire if chevalet_adversaire is not None else [],
+             "mise_initiale_faite": True},
             {"nom": "Bot", "est_ia": True, "niveau": niveau,
              "chevalet": chevalet, "mise_initiale_faite": True},
         ],
@@ -380,3 +381,195 @@ class _Rng:
 
     def random(self):
         return self.valeur
+
+
+# --------------------------------------------------------------------------- #
+# Issue #225 : « garder un joker en main » — troisième candidat de la
+# vérification de finition, Champion du Monde SEUL.
+# --------------------------------------------------------------------------- #
+
+def test_verifier_choisit_le_candidat_garde_joker(monkeypatch):
+    """Logique pure de ``verifier`` avec ``idx_garde_joker`` (#225, point 2) :
+    même méthodologie que les tests 4/5/6 ci-dessus (oracle contrôlé) — le
+    candidat « garder un joker en main », à l'index 1, est choisi quand lui
+    seul permet de finir, avec le statut DISTINCT ``APPLIQUEE_GARDE_JOKER``."""
+    etat = _etat_quatre_candidats()
+    idx = 1
+    coup_a = {"action": "jouer", "ids_tuiles": ["rouge_7_a", "bleu_7_a"],
+             "nouveau_plateau": [[T("rouge_7_a", 7, "rouge"),
+                                  T("bleu_7_a", 7, "bleu"),
+                                  T("noir_7_a", 7, "noir")]]}
+    coup_garde_joker = {"action": "jouer", "ids_tuiles": ["jaune_5_a"],
+                        "nouveau_plateau": [[T("jaune_5_a", 5, "jaune")]]}
+    monkeypatch.setattr(vf, "_peut_finir_au_tour_suivant", _oracle_fixe({
+        frozenset(coup_a["ids_tuiles"]): False,
+        frozenset(coup_garde_joker["ids_tuiles"]): True,
+    }))
+    deadline = time.monotonic() + 5.0
+    coup_choisi, statut = vf.verifier(etat, idx, [coup_a, coup_garde_joker],
+                                      deadline, idx_garde_joker=1)
+    assert statut == vf.APPLIQUEE_GARDE_JOKER
+    assert set(coup_choisi["ids_tuiles"]) == set(coup_garde_joker["ids_tuiles"])
+
+
+def test_verifier_prefere_meilleur_coup_sur_garde_joker_en_cas_egalite(monkeypatch):
+    """Si le meilleur coup du solveur ET le candidat « garde joker »
+    permettent tous les deux de finir, le meilleur coup du solveur reste
+    préféré (point 4 de #221, inchangé par #225)."""
+    etat = _etat_quatre_candidats()
+    idx = 1
+    coup_a = {"action": "jouer", "ids_tuiles": ["rouge_7_a", "bleu_7_a"],
+             "nouveau_plateau": [[T("rouge_7_a", 7, "rouge"),
+                                  T("bleu_7_a", 7, "bleu"),
+                                  T("noir_7_a", 7, "noir")]]}
+    coup_garde_joker = {"action": "jouer", "ids_tuiles": ["jaune_5_a"],
+                        "nouveau_plateau": [[T("jaune_5_a", 5, "jaune")]]}
+    monkeypatch.setattr(vf, "_peut_finir_au_tour_suivant", _oracle_fixe({
+        frozenset(coup_a["ids_tuiles"]): True,
+        frozenset(coup_garde_joker["ids_tuiles"]): True,
+    }))
+    deadline = time.monotonic() + 5.0
+    coup_choisi, statut = vf.verifier(etat, idx, [coup_a, coup_garde_joker],
+                                      deadline, idx_garde_joker=1)
+    assert statut == vf.APPLIQUEE_MEILLEUR_SUFFIT
+    assert set(coup_choisi["ids_tuiles"]) == set(coup_a["ids_tuiles"])
+
+
+def _etat_avec_joker_en_main(taille_adversaire=10, niveau="Champion du Monde"):
+    """Chevalet (Bot, idx 1) avec un joker : groupe complet de 3 (7 rouge/
+    bleu/noir) + le joker (qui en fait un groupe de 4 valide, 4e « couleur »)
+    + une tuile isolée (10 jaune, injouable seule) — le meilleur coup du
+    solveur pose donc le groupe de 4 AVEC le joker (4 tuiles), sans vider le
+    chevalet (il reste le 10 jaune). Sans le joker, le meilleur coup possible
+    est le groupe de 3 SANS lui (``_coup_sans_joker_chevalet``, #225) — un
+    candidat réel et différent, pas un faux simulé. ``taille_adversaire``
+    (tuiles de « Humain », idx 0) pilote la porte de prudence (#225, point 1,
+    ``SEUIL_PRUDENCE_ADVERSAIRE_GARDE_JOKER``)."""
+    chevalet_adversaire = [T(f"noir_{v}_a", v, "noir")
+                           for v in range(1, taille_adversaire + 1)]
+    return _etat(
+        plateau=[],
+        chevalet=[T("rouge_7_a", 7, "rouge"), T("bleu_7_a", 7, "bleu"),
+                 T("noir_7_a", 7, "noir"), T("joker_1", None, None, True),
+                 T("jaune_10_a", 10, "jaune")],
+        niveau=niveau,
+        chevalet_adversaire=chevalet_adversaire,
+    )
+
+
+@besoin_exact
+def test_garde_joker_choisi_quand_il_permet_de_finir(monkeypatch):
+    """Cas nominal demandé par #225, point 6 : un chevalet de quelques
+    tuiles avec un joker pour lequel garder le joker permet de finir au tour
+    suivant — le coup qui garde le joker est choisi. Adversaire loin de finir
+    (10 tuiles) : la porte de prudence ne bloque pas la tentative."""
+    etat = _etat_avec_joker_en_main(taille_adversaire=10)
+    idx = 1
+    coup_exact = jouer_niveau_expert(etat, idx)
+    assert coup_exact.get("solveur") == SOLVEUR_EXACT
+    assert "joker_1" in coup_exact["ids_tuiles"]  # utilise bien le joker
+
+    coup_sans_joker = ia._coup_sans_joker_chevalet(etat, idx, 5.0)
+    assert coup_sans_joker is not None
+    assert "joker_1" not in coup_sans_joker["ids_tuiles"]
+    assert vf.coups_differents(coup_sans_joker, coup_exact)
+
+    monkeypatch.setattr(vf, "_peut_finir_au_tour_suivant", _oracle_fixe({
+        frozenset(coup_exact["ids_tuiles"]): False,
+        frozenset(coup_sans_joker["ids_tuiles"]): True,
+    }))
+
+    coup = jouer_niveau_bride(etat, idx, "Champion du Monde", rng=_Rng(0.999))
+    assert coup["action"] == "jouer"
+    assert coup.get("verif_finition") == vf.APPLIQUEE_GARDE_JOKER
+    assert set(coup["ids_tuiles"]) == set(coup_sans_joker["ids_tuiles"])
+    assert "joker_1" not in coup["ids_tuiles"]
+    info = coup.get("garde_joker_info")
+    assert info == {"joker_en_main": True, "candidat_existe": True,
+                    "permet_de_finir": True, "choisi": True}
+
+
+@besoin_exact
+@pytest.mark.parametrize("taille_adversaire", [1, 2])
+def test_garde_joker_pas_garde_si_adversaire_trop_proche(monkeypatch, taille_adversaire):
+    """Même position, mais un adversaire à 1 ou 2 tuiles (sous le seuil de
+    prudence, 3 par défaut) : le joker n'est PAS gardé, même si l'oracle dit
+    que le candidat « garde joker » permettrait de finir — la porte de
+    prudence empêche de même CONSTRUIRE ce candidat."""
+    etat = _etat_avec_joker_en_main(taille_adversaire=taille_adversaire)
+    idx = 1
+    assert taille_adversaire < niveaux.SEUIL_PRUDENCE_ADVERSAIRE_GARDE_JOKER
+
+    coup_exact = jouer_niveau_expert(etat, idx)
+    coup_sans_joker = ia._coup_sans_joker_chevalet(etat, idx, 5.0)
+
+    appels = []
+
+    def _espion(*a, **kw):
+        appels.append(True)
+        return coup_sans_joker
+
+    monkeypatch.setattr(ia, "_coup_sans_joker_chevalet", _espion)
+    monkeypatch.setattr(vf, "_peut_finir_au_tour_suivant", _oracle_fixe({
+        frozenset(coup_exact["ids_tuiles"]): False,
+        frozenset(coup_sans_joker["ids_tuiles"]): True,
+    }))
+
+    coup = jouer_niveau_bride(etat, idx, "Champion du Monde", rng=_Rng(0.999))
+    assert appels == []  # jamais tenté : porte de prudence fermée
+    assert coup.get("verif_finition") == vf.APPLIQUEE_AUCUN_CANDIDAT
+    assert set(coup["ids_tuiles"]) == set(coup_exact["ids_tuiles"])
+    assert "joker_1" in coup["ids_tuiles"]  # le joker a bien été joué
+
+
+@besoin_exact
+def test_chevalet_sans_joker_garde_joker_sans_effet():
+    """Un chevalet SANS joker, même avec le réglage actif (Champion du
+    Monde) : décision identique à avant #225 (voir ``test_aucun_candidat_
+    naturel_ne_permet_de_finir``) et aucune clé ``garde_joker_info`` posée."""
+    etat = _etat_sans_issue()
+    coup = jouer_niveau_bride(etat, 1, "Champion du Monde", rng=_Rng(0.999))
+    assert coup.get("verif_finition") == vf.APPLIQUEE_AUCUN_CANDIDAT
+    assert "garde_joker_info" not in coup
+
+
+@besoin_exact
+def test_coup_gagnant_avec_joker_jamais_verifie():
+    """Un coup qui vide la main (même en utilisant le joker) est joué SANS
+    vérification — ni ``verif_finition`` ni ``garde_joker_info`` (#225,
+    même règle que #221 point 4)."""
+    etat = _etat(
+        plateau=[],
+        chevalet=[T("rouge_7_a", 7, "rouge"), T("bleu_7_a", 7, "bleu"),
+                 T("noir_7_a", 7, "noir"), T("joker_1", None, None, True)],
+        chevalet_adversaire=[T(f"noir_{v}_a", v, "noir") for v in range(1, 11)],
+    )
+    coup = jouer_niveau_bride(etat, 1, "Champion du Monde", rng=_Rng(0.0))
+    assert coup["action"] == "jouer"
+    assert len(coup["ids_tuiles"]) == 4
+    assert "verif_finition" not in coup
+    assert "garde_joker_info" not in coup
+
+
+@besoin_exact
+def test_expert_et_niveaux_inferieurs_non_affectes_par_garde_joker(monkeypatch):
+    """Expert (et les niveaux inférieurs) ne tentent JAMAIS « garder un
+    joker en main » : même avec un joker en main, la décision est identique
+    à avant #225, et ``_coup_sans_joker_chevalet`` n'est jamais appelé."""
+    etat = _etat_avec_joker_en_main(taille_adversaire=10, niveau="Expert")
+    idx = 1
+    attendu = jouer_niveau_expert(etat, idx)
+
+    appels = []
+
+    def _espion(*a, **kw):
+        appels.append(True)
+        return None
+
+    monkeypatch.setattr(ia, "_coup_sans_joker_chevalet", _espion)
+
+    for niveau in ("Expert", "Avancé"):
+        coup = jouer_niveau_bride(etat, idx, niveau, rng=_Rng(0.999))
+        assert set(coup["ids_tuiles"]) == set(attendu["ids_tuiles"])
+        assert coup.get("garde_joker_info") is None
+    assert appels == []

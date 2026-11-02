@@ -878,12 +878,16 @@ SOLVEUR_RECHERCHE = "recherche"  # recherche arborescente de repli (solveur.py)
 SOLVEUR_AVANCE = "avance"        # Avancé en dernier repli
 # Affaiblissement des niveaux bridés (issue #213) :
 SOLVEUR_SANS_REARR = "sans-rearrangement"  # coup sans toucher au plateau (pert. max nulle)
+# « Garder un joker en main » (issue #225, Champion du Monde seul) : meilleur
+# coup qui ne joue PAS le joker du chevalet (voir _coup_sans_joker_chevalet).
+SOLVEUR_SANS_JOKER = "sans-joker"
 
 LIBELLES_SOLVEUR = {
     SOLVEUR_EXACT: "modèle exact",
     SOLVEUR_RECHERCHE: "recherche de repli",
     SOLVEUR_AVANCE: "Avancé en repli",
     SOLVEUR_SANS_REARR: "sans réarrangement (bridé)",
+    SOLVEUR_SANS_JOKER: "garde un joker en main",
 }
 
 
@@ -1042,33 +1046,106 @@ def _coup_selon_perturbation(etat, idx, perturbation_max, budget_temps, on_repli
     return sans_rearr if sans_rearr is not None else _piocher_ou_passer(etat)
 
 
-def _candidats_finition(etat, idx, coup_solveur):
-    """Coups candidats pour la vérification de finition (#221, point 2) :
-    toujours ``coup_solveur`` (le meilleur coup du solveur, en premier — voir
-    ``verification_finition.verifier``) et, s'il existe et diffère, le
-    meilleur coup SANS réarrangement du plateau (``_coup_sans_rearrangement``) —
-    qui, ne déplaçant AUCUNE tuile du plateau, ne reprend jamais un joker déjà
-    posé. Approximation documentée du point 2 de l'issue (« le meilleur coup
-    qui laisse en place les jokers du tapis ») : plus restrictive qu'exigé
-    (elle exclut aussi les coups qui déplaceraient des tuiles RÉELLES sans
-    toucher aux jokers), mais réutilise un mécanisme déjà existant et testé
-    (``ia._coup_sans_rearrangement``) sans dupliquer de logique, et ne peut
-    jamais, par construction, proposer un coup qui reprend un joker. Troisième
-    candidat (point 2, « éventuellement ») délibérément omis : la recherche
-    arborescente de repli (``solveur.py``) consommerait elle-même une part du
-    budget partagé pour un gain non démontré — voir CONTEXTE.md §13."""
+def _peut_tenter_garde_joker(etat, idx):
+    """Portes d'activation de « garder un joker en main » (issue #225, point
+    1, Champion du Monde seul) : le chevalet doit contenir un joker, ET aucun
+    adversaire ne doit être trop proche de finir — en dessous de
+    ``niveaux.SEUIL_PRUDENCE_ADVERSAIRE_GARDE_JOKER`` tuiles en main, il
+    pourrait finir avant que garder le joker n'ait payé. Le nombre de tuiles
+    d'un adversaire est une information PUBLIQUE (visible de tous les
+    joueurs) : ce test ne lit JAMAIS le contenu de sa main."""
+    chevalet = etat["joueurs"][idx]["chevalet"]
+    if not any(t.get("est_joker") for t in chevalet):
+        return False
+    seuil = _niveaux.SEUIL_PRUDENCE_ADVERSAIRE_GARDE_JOKER
+    for j, joueur in enumerate(etat["joueurs"]):
+        if j == idx:
+            continue
+        if len(joueur["chevalet"]) < seuil:
+            return False
+    return True
+
+
+def _coup_sans_joker_chevalet(etat, idx, budget_temps):
+    """Meilleur coup qui ne joue AUCUN joker du chevalet (issue #225, point
+    2) : résout la position avec un joker du chevalet retiré pour ce calcul
+    seulement (le joker réapparaît dans le chevalet restant une fois ce coup
+    appliqué par ``verification_finition._etat_apres_coup`` sur l'ÉTAT
+    D'ORIGINE, qui le contient toujours — c'est bien ce joker-là qui doit
+    permettre de finir au tour suivant).
+
+    Retourne un coup ``{"action": "jouer", ...}`` marqué ``SOLVEUR_SANS_JOKER``,
+    ou ``None`` si aucun joker en main, budget nul, ou si le modèle exact ne
+    produit pas de coup (dépendances absentes, budget dépassé, aucun coup
+    posable sans le joker)."""
+    if budget_temps is None or budget_temps <= 0:
+        return None
+    joueur = etat["joueurs"][idx]
+    chevalet = joueur["chevalet"]
+    idx_joker = next((i for i, t in enumerate(chevalet) if t.get("est_joker")),
+                     None)
+    if idx_joker is None:
+        return None
+    chevalet_sans_joker = chevalet[:idx_joker] + chevalet[idx_joker + 1:]
+    joueur2 = dict(joueur)
+    joueur2["chevalet"] = chevalet_sans_joker
+    joueurs2 = list(etat["joueurs"])
+    joueurs2[idx] = joueur2
+    etat2 = dict(etat)
+    etat2["joueurs"] = joueurs2
+    statut, charge = _coup_exact(etat2, idx, budget_temps, PREFERER_SIMPLICITE,
+                                 EVAL_MAIN_DEFAUT)
+    if statut != "coup":
+        return None
+    return _marquer_solveur(charge, SOLVEUR_SANS_JOKER)
+
+
+def _candidats_finition(etat, idx, coup_solveur, budget_temps=None,
+                        garder_joker=False):
+    """Coups candidats pour la vérification de finition (#221, point 2 ;
+    troisième candidat ajouté par #225, point 2) : toujours ``coup_solveur``
+    (le meilleur coup du solveur, en premier — voir
+    ``verification_finition.verifier``) puis, s'ils existent et diffèrent :
+
+    1. le meilleur coup SANS réarrangement du plateau
+       (``_coup_sans_rearrangement``) — qui, ne déplaçant AUCUNE tuile du
+       plateau, ne reprend jamais un joker déjà posé. Approximation
+       documentée du point 2 de #221 (« le meilleur coup qui laisse en place
+       les jokers du tapis ») : plus restrictive qu'exigé (elle exclut aussi
+       les coups qui déplaceraient des tuiles RÉELLES sans toucher aux
+       jokers), mais réutilise un mécanisme déjà existant et testé sans
+       dupliquer de logique ;
+    2. si ``garder_joker`` (Champion du Monde seul, #225) et que les portes
+       d'activation (``_peut_tenter_garde_joker``) le permettent, le meilleur
+       coup qui NE JOUE PAS le joker du chevalet (``_coup_sans_joker_chevalet``).
+
+    Retourne ``(candidats, idx_garde_joker)`` — ``idx_garde_joker`` est
+    l'index, dans ``candidats``, du candidat « garder un joker en main »
+    s'il a été ajouté, sinon ``None``."""
     candidats = [coup_solveur]
     sans_rearr = _coup_sans_rearrangement(etat, idx)
     if (isinstance(sans_rearr, dict) and sans_rearr.get("action") == "jouer"
             and sans_rearr.get("ids_tuiles")
             and verification_finition.coups_differents(sans_rearr, coup_solveur)):
         candidats.append(sans_rearr)
-    return candidats
+
+    idx_garde_joker = None
+    if garder_joker and _peut_tenter_garde_joker(etat, idx):
+        sans_joker = _coup_sans_joker_chevalet(etat, idx, budget_temps)
+        if (isinstance(sans_joker, dict) and sans_joker.get("action") == "jouer"
+                and sans_joker.get("ids_tuiles")
+                and verification_finition.coups_differents(sans_joker, coup_solveur)):
+            candidats.append(sans_joker)
+            idx_garde_joker = len(candidats) - 1
+    return candidats, idx_garde_joker
 
 
-def _verifier_finition_fin_de_partie(etat, idx, coup, taille_main, deadline):
+def _verifier_finition_fin_de_partie(etat, idx, coup, taille_main, deadline,
+                                     garder_joker=False):
     """Vérification de finition en fin de partie (issue #221, étape 1 de la
-    brique « Deux tours » — voir ``moteur/verification_finition.py``).
+    brique « Deux tours » — voir ``moteur/verification_finition.py`` ;
+    ``garder_joker`` ajouté par #225, point 2, ``False`` par défaut →
+    comportement strictement inchangé pour tout appelant existant).
 
     Ne s'applique (appelée uniquement pour Expert/Champion du Monde, et
     seulement si le coup du solveur ne vide pas déjà le chevalet — voir
@@ -1082,14 +1159,48 @@ def _verifier_finition_fin_de_partie(etat, idx, coup, taille_main, deadline):
     PENDANT la vérification est une situation différente, voir
     ``verification_finition.verifier``).
 
+    Si ``garder_joker`` est actif (Champion du Monde seul) ET que le chevalet
+    contient un joker, annote le coup choisi de la clé ``garde_joker_info``
+    (issue #225, point 3 — compteurs de campagne) : ``{"joker_en_main": True,
+    "candidat_existe": bool, "permet_de_finir": bool | None, "choisi": bool}``.
+    ``permet_de_finir`` vaut ``None`` quand la question n'a pas été tranchée
+    (le candidat n'a jamais été atteint par ``verifier`` — ``candidats[0]``
+    ou le candidat sans réarrangement suffisait déjà — ou budget épuisé avant
+    de l'atteindre) : ce cas n'est compté ni comme « permet de finir » ni
+    comme « ne permet pas ». Clé TOUJOURS absente pour Expert/Avancé (
+    ``garder_joker=False``) : décisions et forme du coup strictement
+    inchangées pour ces niveaux.
+
     Retourne ``(coup, statut)`` — ``coup`` inchangé si la vérification ne
     s'applique pas ou n'aboutit à rien de nouveau."""
     if taille_main > _niveaux.SEUIL_FIN_PARTIE_VERIF_FINITION:
         return coup, verification_finition.NON_APPLICABLE
     if coup.get("solveur") != SOLVEUR_EXACT:
         return coup, verification_finition.SOLVEUR_NON_EXACT
-    candidats = _candidats_finition(etat, idx, coup)
-    return verification_finition.verifier(etat, idx, candidats, deadline)
+
+    budget_restant = deadline - time.monotonic()
+    candidats, idx_garde_joker = _candidats_finition(
+        etat, idx, coup, budget_restant, garder_joker)
+    coup_choisi, statut = verification_finition.verifier(
+        etat, idx, candidats, deadline, idx_garde_joker)
+
+    joker_en_main = garder_joker and any(
+        t.get("est_joker") for t in etat["joueurs"][idx]["chevalet"])
+    if joker_en_main:
+        if statut == verification_finition.APPLIQUEE_GARDE_JOKER:
+            permet_de_finir = True
+        elif (statut == verification_finition.APPLIQUEE_AUCUN_CANDIDAT
+              and idx_garde_joker is not None):
+            permet_de_finir = False
+        else:
+            permet_de_finir = None
+        coup_choisi["garde_joker_info"] = {
+            "joker_en_main": True,
+            "candidat_existe": idx_garde_joker is not None,
+            "permet_de_finir": permet_de_finir,
+            "choisi": statut == verification_finition.APPLIQUEE_GARDE_JOKER,
+        }
+    return coup_choisi, statut
 
 
 def jouer_niveau_bride(etat, idx, nom_niveau, budget_temps=None, rng=None,
@@ -1157,7 +1268,8 @@ def jouer_niveau_bride(etat, idx, nom_niveau, budget_temps=None, rng=None,
             else BUDGET_TEMPS_EXPERT
         deadline = debut_tour + budget_total
         coup, statut_verif = _verifier_finition_fin_de_partie(
-            etat, idx, coup, taille_main, deadline)
+            etat, idx, coup, taille_main, deadline,
+            garder_joker=bridage.garder_joker_fin_partie)
         coup["verif_finition"] = statut_verif
 
     p = _niveaux.taux_oubli_effectif(bridage.taux_oubli, taille_main)

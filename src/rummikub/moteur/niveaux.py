@@ -61,10 +61,18 @@ class Bridage:
     (solveur complet) ; ``taux_oubli`` ∈ [0, 1] ; ``verif_finition`` (issue
     #221, étape 1 de la brique « Deux tours ») active la vérification de
     finition en fin de partie pour ce niveau — ``False`` par défaut, pour que
-    Débutant à Avancé restent strictement inchangés."""
+    Débutant à Avancé restent strictement inchangés. ``garder_joker_fin_partie``
+    (issue #225, deuxième stratégie multi-tours de la brique « Deux tours »,
+    SEULEMENT pour Champion du Monde) : en fin de partie, si le chevalet
+    contient un joker et qu'aucun adversaire n'est trop proche de finir (voir
+    ``SEUIL_PRUDENCE_ADVERSAIRE_GARDE_JOKER`` ci-dessous), ajoute comme
+    candidat de la vérification de finition le meilleur coup qui NE JOUE PAS
+    le joker du chevalet — ``False`` par défaut, y compris pour Expert, qui
+    reste le niveau de référence inchangé."""
     perturbation_max: int | None
     taux_oubli: float
     verif_finition: bool = False
+    garder_joker_fin_partie: bool = False
 
     @property
     def complet(self) -> bool:
@@ -139,12 +147,18 @@ BRIDAGES: dict[str, Bridage] = {
     # Expert et Champion du Monde : solveur un-tour complet PLUS, depuis
     # #221 (étape 1 de la brique « Deux tours »), la vérification de
     # finition en fin de partie (voir moteur/verification_finition.py et
-    # SEUIL_FIN_PARTIE_VERIF_FINITION ci-dessous). Les autres stratégies
-    # multi-tours de #213/§13 restent À FAIRE.
+    # SEUIL_FIN_PARTIE_VERIF_FINITION ci-dessous).
+    #
+    # Champion du Monde SEUL reçoit en plus, depuis #225, « garder un joker
+    # en main » (deuxième stratégie multi-tours de la brique « Deux tours »,
+    # §13) : Expert reste le niveau de RÉFÉRENCE, strictement inchangé — le
+    # duel Expert contre Champion du Monde mesure l'effet de cette seule
+    # stratégie. D'autres stratégies multi-tours de #213/§13 restent À FAIRE.
     "Expert":            Bridage(perturbation_max=None, taux_oubli=0.0,
                                   verif_finition=True),
     "Champion du Monde": Bridage(perturbation_max=None, taux_oubli=0.0,
-                                  verif_finition=True),
+                                  verif_finition=True,
+                                  garder_joker_fin_partie=True),
 }
 
 
@@ -155,6 +169,16 @@ BRIDAGES: dict[str, Bridage] = {
 # Valeur de départ INDICATIVE de l'issue (5), réglable ICI uniquement (même
 # emplacement que les autres paramètres de force de ce fichier).
 SEUIL_FIN_PARTIE_VERIF_FINITION = 5
+
+
+# Seuil de prudence sur l'adversaire pour « garder un joker en main » (#225) :
+# en dessous de ce nombre de tuiles dans la main d'un adversaire, Champion du
+# Monde ne tente PAS de garder son joker (l'adversaire pourrait finir avant
+# que le tour de garder le joker ne paie). Information PUBLIQUE (le nombre de
+# tuiles restantes de chaque joueur est visible de tous, voir CONTEXTE.md §13)
+# — jamais le contenu de sa main, jamais lu dans sa main. Valeur de départ
+# INDICATIVE de l'issue (3), réglable ICI uniquement.
+SEUIL_PRUDENCE_ADVERSAIRE_GARDE_JOKER = 3
 
 
 def bridage_pour(nom_niveau: str | None) -> Bridage:

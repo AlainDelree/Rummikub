@@ -69,6 +69,11 @@ from rummikub.moteur.solveur_exact import (
 #                              suivant : candidats[0] est joué comme avant.
 #   APPLIQUEE_AUTRE_COUP       un autre candidat permet de finir là où
 #                              candidats[0] ne le permet pas : il est préféré.
+#   APPLIQUEE_GARDE_JOKER      le candidat « garder un joker en main » (#225,
+#                              Champion du Monde seul) a été choisi — cas
+#                              particulier d'``APPLIQUEE_AUTRE_COUP``, distingué
+#                              pour les compteurs de campagne (issue #225,
+#                              point 3).
 NON_APPLICABLE = "non_applicable"
 PAS_DE_COUP_A_COMPARER = "pas_de_coup_a_comparer"
 SOLVEUR_NON_EXACT = "solveur_non_exact"
@@ -76,9 +81,10 @@ BUDGET_EPUISE = "budget_epuise"
 APPLIQUEE_MEILLEUR_SUFFIT = "appliquee_meilleur_suffit"
 APPLIQUEE_AUCUN_CANDIDAT = "appliquee_aucun_candidat"
 APPLIQUEE_AUTRE_COUP = "appliquee_autre_coup"
+APPLIQUEE_GARDE_JOKER = "appliquee_garde_joker"
 
 # Libellés français, dans l'ordre d'affichage attendu des rapports de
-# campagne (#223, point 4).
+# campagne (#223, point 4 ; #225 pour le dernier).
 LIBELLES = {
     NON_APPLICABLE: "non applicable (chevalet trop grand)",
     PAS_DE_COUP_A_COMPARER: "pas de coup à comparer (pioche ou passe)",
@@ -87,6 +93,7 @@ LIBELLES = {
     APPLIQUEE_MEILLEUR_SUFFIT: "appliquée : le meilleur coup suffit déjà",
     APPLIQUEE_AUCUN_CANDIDAT: "appliquée : aucun candidat ne permet de finir",
     APPLIQUEE_AUTRE_COUP: "appliquée : un autre coup a été choisi",
+    APPLIQUEE_GARDE_JOKER: "appliquée : un coup qui garde le joker a été choisi",
 }
 
 
@@ -162,7 +169,8 @@ def _peut_finir_au_tour_suivant(etat, idx, coup, budget_temps):
     return res.nb_tuiles == len(chevalet_restant)
 
 
-def verifier(etat: dict, idx: int, candidats: list, deadline: float):
+def verifier(etat: dict, idx: int, candidats: list, deadline: float,
+            idx_garde_joker: int | None = None):
     """Point d'entrée : décide, parmi ``candidats`` (coups ``{"action":
     "jouer", ...}``, ``candidats[0]`` étant TOUJOURS le meilleur coup du
     solveur), lequel jouer.
@@ -174,12 +182,19 @@ def verifier(etat: dict, idx: int, candidats: list, deadline: float):
     d'égalité (conforme au point 4). Si aucun ne permet de finir, ``candidats
     [0]`` est joué comme avant la vérification.
 
+    ``idx_garde_joker`` (issue #225, point 2, ``None`` par défaut →
+    comportement strictement inchangé) : index, dans ``candidats``, du
+    candidat « garder un joker en main » (Champion du Monde seul), s'il
+    existe — lorsque ce candidat précis est celui retenu, le statut rendu est
+    ``APPLIQUEE_GARDE_JOKER`` plutôt que le générique ``APPLIQUEE_AUTRE_COUP``,
+    pour les compteurs de campagne.
+
     ``deadline`` (``time.monotonic()``) est la limite de temps PARTAGÉE avec
     le calcul du coup normal (point 5 de l'issue) — chaque appel au solveur
     ci-dessous consomme le temps restant jusqu'à cette même échéance, sans
     budget supplémentaire propre.
 
-    Retourne ``(coup_choisi, statut)`` — ``statut`` l'un des sept codes
+    Retourne ``(coup_choisi, statut)`` — ``statut`` l'un des huit codes
     listés en tête de module, jamais ``None`` dans ce cas (l'appelant a déjà
     filtré les cas "non applicable"/"solveur non exact" avant d'appeler
     cette fonction). ``APPLIQUEE_MEILLEUR_SUFFIT`` (``candidats[0]`` finit
@@ -197,5 +212,7 @@ def verifier(etat: dict, idx: int, candidats: list, deadline: float):
         if verdict:
             if i == 0:
                 return candidats[0], APPLIQUEE_MEILLEUR_SUFFIT
+            if i == idx_garde_joker:
+                return coup, APPLIQUEE_GARDE_JOKER
             return coup, APPLIQUEE_AUTRE_COUP
     return candidats[0], APPLIQUEE_AUCUN_CANDIDAT

@@ -155,7 +155,7 @@ def _creer_journal(etat: dict) -> dict:
 def logger_action(etat: dict, action: str, *,
                    auteur_index: int = None, nb_tuiles_posees: int = 0,
                    nb_tuiles_deplacees: int = 0, solveur: str = None,
-                   verif_finition: str = None) -> None:
+                   verif_finition: str = None, garde_joker: dict = None) -> None:
     """Enregistre une action de jeu dans le journal de la partie courante.
 
     ``action`` : type de décision prise (``"pose"``, ``"pioche"``, ``"passe"``
@@ -182,6 +182,11 @@ def logger_action(etat: dict, action: str, *,
     ``"non_applicable"`` ou ``"budget_epuise"`` (voir
     ``moteur/verification_finition.py``). ``None`` (défaut) sinon ; **clé
     omise** du journal dans ce cas, dans le même esprit que ``solveur``.
+    ``garde_joker`` (issue #225, point 3) : pour un coup de Champion du Monde
+    en fin de partie avec un joker en main, le détail des compteurs
+    ``{"joker_en_main", "candidat_existe", "permet_de_finir", "choisi"}``
+    (voir ``moteur/ia._verifier_finition_fin_de_partie``). ``None`` (défaut)
+    sinon ; **clé omise** du journal dans ce cas.
 
     No-op immédiat si ``config.LOG_PARTIES`` est ``False``. Toute erreur d'écriture
     est silencieusement ignorée : le journal ne doit jamais interrompre le jeu.
@@ -233,6 +238,9 @@ def logger_action(etat: dict, action: str, *,
         # Idem pour la vérification de finition (#221, point 5).
         if verif_finition is not None:
             entree["verif_finition"] = verif_finition
+        # Idem pour « garder un joker en main » (#225, point 3).
+        if garde_joker is not None:
+            entree["garde_joker"] = garde_joker
         journal["data"]["actions"].append(entree)
         with open(journal["chemin"], "w", encoding="utf-8") as f:
             json.dump(journal["data"], f, ensure_ascii=False, indent=2)
