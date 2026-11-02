@@ -376,6 +376,112 @@ def afficher_rapport(resume: dict) -> None:
 
 
 # --------------------------------------------------------------------------- #
+# Analyse PAR NIVEAU (issue #228, point 4) : les mêmes mesures (durée de
+# phase, tuiles posées par tour, fréquence de pioche) regroupées par niveau
+# d'IA plutôt que par rôle gagnant/perdant — pour voir, par exemple, si
+# Champion du Monde pioche moins souvent qu'Expert en phase Fin. Indépendant
+# de ``analyser`` (pas besoin du résultat de manche : parcourt directement
+# les lignes de type "tour").
+# --------------------------------------------------------------------------- #
+
+def analyser_par_niveau(lignes: list[dict], seuil: int) -> dict:
+    duree_phase: dict = defaultdict(lambda: {ph: 0 for ph in PHASES})
+    tuiles_posees_phase: dict = defaultdict(lambda: {ph: 0 for ph in PHASES})
+    pioches_phase: dict = defaultdict(lambda: {ph: [0, 0] for ph in PHASES})
+    for ligne in lignes:
+        if ligne.get("type") != "tour":
+            continue
+        niveau = ligne["niveau"]
+        phase = phase_du_tour(ligne, seuil)
+        duree_phase[niveau][phase] += 1
+        tuiles_posees_phase[niveau][phase] += ligne["nb_tuiles_posees"]
+        pioches_phase[niveau][phase][1] += 1
+        if ligne["action"] == "pioche":
+            pioches_phase[niveau][phase][0] += 1
+    return {
+        "seuil": seuil,
+        "niveaux": sorted(duree_phase),
+        "duree_phase": {n: dict(v) for n, v in duree_phase.items()},
+        "tuiles_posees_phase": {n: dict(v) for n, v in tuiles_posees_phase.items()},
+        "pioches_phase": {n: dict(v) for n, v in pioches_phase.items()},
+    }
+
+
+def afficher_rapport_par_niveau(resume: dict) -> None:
+    print("=" * 70)
+    print(f"ANALYSE PAR NIVEAU — seuil N = {resume['seuil']} tuile(s)")
+    if not resume["niveaux"]:
+        print("  (aucun tour dans la trace)")
+        print("=" * 70)
+        return
+    for niveau in resume["niveaux"]:
+        print("-" * 70)
+        print(f"  {niveau} :")
+        for ph in PHASES:
+            n_tours = resume["duree_phase"][niveau][ph]
+            tuiles = resume["tuiles_posees_phase"][niveau][ph]
+            pioches, total = resume["pioches_phase"][niveau][ph]
+            moy_tuiles = tuiles / n_tours if n_tours else 0.0
+            freq_pioche = pioches / total if total else 0.0
+            print(f"    {LIBELLES_PHASES[ph]:<45} : {n_tours:5d} tour(s), "
+                 f"{moy_tuiles:4.2f} tuile(s)/tour, pioche "
+                 f"{freq_pioche * 100:4.1f} %")
+    print("=" * 70)
+
+
+# --------------------------------------------------------------------------- #
+# Comparaison de deux traces, PAR PHASE (issue #228, point 4) — p. ex. une
+# campagne témoin (Champion sans stratégie) et une campagne avec stratégies,
+# même graine. Compare deux résumés ``analyser(...)`` déjà calculés au même
+# seuil ; ne rejoue jamais rien.
+# --------------------------------------------------------------------------- #
+
+def comparer_traces(resume1: dict, resume2: dict) -> dict:
+    diffs: dict = {role: {} for role in ("gagnant", "perdant")}
+    for role in ("gagnant", "perdant"):
+        for ph in PHASES:
+            d1 = moyenne(resume1["duree_phase"][role][ph])
+            d2 = moyenne(resume2["duree_phase"][role][ph])
+            n1 = sum(resume1["duree_phase"][role][ph])
+            n2 = sum(resume2["duree_phase"][role][ph])
+            t1 = sum(resume1["tuiles_posees_phase"][role][ph])
+            t2 = sum(resume2["tuiles_posees_phase"][role][ph])
+            p1, tot1 = resume1["pioches_phase"][role][ph]
+            p2, tot2 = resume2["pioches_phase"][role][ph]
+            tuiles1 = t1 / n1 if n1 else 0.0
+            tuiles2 = t2 / n2 if n2 else 0.0
+            freq1 = p1 / tot1 if tot1 else 0.0
+            freq2 = p2 / tot2 if tot2 else 0.0
+            diffs[role][ph] = {
+                "duree_1": d1, "duree_2": d2, "delta_duree": d2 - d1,
+                "tuiles_par_tour_1": tuiles1, "tuiles_par_tour_2": tuiles2,
+                "delta_tuiles_par_tour": tuiles2 - tuiles1,
+                "freq_pioche_1": freq1, "freq_pioche_2": freq2,
+                "delta_freq_pioche": freq2 - freq1,
+            }
+    return diffs
+
+
+def afficher_comparaison(diffs: dict, chemin_1, chemin_2) -> None:
+    print("=" * 70)
+    print(f"COMPARAISON PAR PHASE : {chemin_1} (1) vs {chemin_2} (2)")
+    for role in ("gagnant", "perdant"):
+        print("-" * 70)
+        print(f"  {role.upper()} :")
+        for ph in PHASES:
+            d = diffs[role][ph]
+            print(f"    {LIBELLES_PHASES[ph]:<40} : durée "
+                 f"{d['duree_1']:.1f} -> {d['duree_2']:.1f} "
+                 f"(Δ{d['delta_duree']:+.1f}) ; tuiles/tour "
+                 f"{d['tuiles_par_tour_1']:.2f} -> {d['tuiles_par_tour_2']:.2f} "
+                 f"(Δ{d['delta_tuiles_par_tour']:+.2f}) ; pioche "
+                 f"{d['freq_pioche_1'] * 100:.1f} % -> "
+                 f"{d['freq_pioche_2'] * 100:.1f} % "
+                 f"(Δ{d['delta_freq_pioche'] * 100:+.1f} pt)")
+    print("=" * 70)
+
+
+# --------------------------------------------------------------------------- #
 # CLI
 # --------------------------------------------------------------------------- #
 
@@ -388,6 +494,18 @@ def main(argv: list[str]) -> int:
     parser.add_argument("--seuil", type=int, action="append", default=None,
                         help="Seuil N de tuiles définissant la phase de fin "
                              "(répétable ; défaut : 5).")
+    parser.add_argument("--par-niveau", action="store_true",
+                        help="Regroupe l'analyse par NIVEAU d'IA (plutôt "
+                             "que par gagnant/perdant de la manche) — durée "
+                             "de chaque phase, tuiles posées par tour et "
+                             "fréquence de pioche, pour chaque niveau "
+                             "(issue #228, point 4).")
+    parser.add_argument("--comparer", metavar="AUTRE_TRACE", default=None,
+                        help="Compare cette trace à AUTRE_TRACE (p. ex. une "
+                             "campagne témoin et une campagne avec "
+                             "stratégies) et affiche les différences par "
+                             "phase (issue #228, point 4). N'empêche pas le "
+                             "rapport habituel de s'afficher aussi.")
     args = parser.parse_args(argv[1:])
 
     try:
@@ -398,8 +516,24 @@ def main(argv: list[str]) -> int:
     if not lignes:
         parser.error(f"{args.trace} est vide ou ne contient aucune ligne lisible.")
 
+    autres_lignes = None
+    if args.comparer:
+        try:
+            autres_lignes = charger_trace(args.comparer)
+        except (OSError, ValueError) as exc:
+            parser.error(str(exc))
+        if not autres_lignes:
+            parser.error(f"{args.comparer} est vide ou ne contient aucune "
+                        f"ligne lisible.")
+
     for seuil in (args.seuil or [5]):
         afficher_rapport(analyser(lignes, seuil))
+        if args.par_niveau:
+            afficher_rapport_par_niveau(analyser_par_niveau(lignes, seuil))
+        if autres_lignes is not None:
+            diffs = comparer_traces(analyser(lignes, seuil),
+                                    analyser(autres_lignes, seuil))
+            afficher_comparaison(diffs, args.trace, args.comparer)
     return 0
 
 

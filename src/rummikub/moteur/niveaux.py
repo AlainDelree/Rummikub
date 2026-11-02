@@ -186,3 +186,115 @@ def bridage_pour(nom_niveau: str | None) -> Bridage:
     sauvegardée avec un libellé disparu — retombe sur « Débutant », jamais
     d'erreur (parties anciennes toujours valides)."""
     return BRIDAGES.get(nom_niveau, BRIDAGES["Débutant"])
+
+
+# --------------------------------------------------------------------------- #
+# Registre unique des stratégies multi-tours (issue #228).
+#
+# Avant #228, chaque stratégie avait son propre drapeau de script
+# (``--sans-verif-finition``, ``--sans-garde-joker``) et aucune liste ne les
+# réunissait : ajouter des stratégies une à une aurait multiplié les
+# drapeaux et les commandes à retenir. Ce registre est désormais LA seule
+# source de vérité sur « quelles stratégies multi-tours existent » — y
+# ajouter une entrée (plus son branchement dans ``_bridage_champion``
+# ci-dessous si la stratégie a un effet sur le bridage) suffit pour qu'elle
+# apparaisse dans les options de campagne et les rapports (voir
+# ``scripts/comparer_niveaux_ia.py``, CONTEXTE.md §13).
+# --------------------------------------------------------------------------- #
+
+@dataclass(frozen=True)
+class Strategie:
+    """Une entrée du registre. ``niveaux`` : les niveaux auxquels la
+    stratégie s'applique (p. ex. ``verif_finition`` s'applique à Expert ET
+    Champion du Monde, ``garde_joker`` à Champion du Monde seul — Expert
+    reste le témoin, jamais concerné). ``active_par_defaut`` : vrai si la
+    stratégie est active par défaut, DANS LE JEU, pour les niveaux où elle
+    s'applique (reflet de ce qui est câblé dans ``BRIDAGES`` — ne détermine
+    PAS, à lui seul, ce que Champion du Monde utilise : voir
+    :data:`STRATEGIES_CHAMPION_PAR_DEFAUT`, la liste qui fait foi pour le
+    jeu). ``compteurs`` : noms des compteurs génériques que la stratégie
+    déclare (voir ``scripts/comparer_niveaux_ia.py``, qui les affiche sans
+    code spécifique par stratégie dans la boucle de rapport)."""
+    id: str
+    description: str
+    niveaux: tuple[str, ...]
+    active_par_defaut: bool
+    compteurs: tuple[str, ...] = ("declenchee", "a_change_le_coup")
+
+
+STRATEGIES: dict[str, Strategie] = {
+    "verif_finition": Strategie(
+        id="verif_finition",
+        description=("Vérification de finition en fin de partie (#221) : "
+                     "préfère, parmi quelques coups candidats, celui qui "
+                     "permet de vider le chevalet au tour suivant."),
+        niveaux=("Expert", "Champion du Monde"),
+        active_par_defaut=True,
+    ),
+    "garde_joker": Strategie(
+        id="garde_joker",
+        description=("Garder un joker en main en fin de partie si aucun "
+                     "adversaire n'est trop proche de finir (#225)."),
+        niveaux=("Champion du Monde",),
+        active_par_defaut=True,
+    ),
+}
+
+
+# Ce que Champion du Monde utilise AUJOURD'HUI dans le JEU (inchangé par
+# #228) : reproduit à l'identique l'état actuel (``verif_finition`` +
+# ``garde_joker``, voir ``BRIDAGES`` ci-dessus). Une stratégie du registre
+# n'est ajoutée à cette liste qu'après validation par les tests/campagnes —
+# être dans ``STRATEGIES`` ne suffit pas à être jouée dans le jeu (une
+# stratégie peut exister dans le registre, à l'étude via les options de
+# campagne, SANS être encore active en production).
+STRATEGIES_CHAMPION_PAR_DEFAUT: tuple[str, ...] = ("verif_finition", "garde_joker")
+
+
+def strategies_champion_valides() -> tuple[str, ...]:
+    """Identifiants du registre applicables à Champion du Monde (ordre du
+    registre) — utilisé pour valider les options de campagne et lister les
+    noms valides en cas d'erreur."""
+    return tuple(s.id for s in STRATEGIES.values() if "Champion du Monde" in s.niveaux)
+
+
+def valider_noms_strategies(noms) -> None:
+    """Lève ``ValueError`` (message listant les noms valides) si ``noms``
+    contient un identifiant de stratégie inconnu pour Champion du Monde."""
+    valides = set(strategies_champion_valides())
+    inconnus = [n for n in noms if n not in valides]
+    if inconnus:
+        raise ValueError(
+            f"stratégie(s) inconnue(s) : {', '.join(sorted(set(inconnus)))} — "
+            f"noms valides : {', '.join(sorted(valides))}")
+
+
+def bridage_champion_personnalise(strategies_actives) -> "Bridage":
+    """Construit le ``Bridage`` de Champion du Monde pour un jeu de
+    stratégies actives donné (ids du registre, p. ex. ``{"garde_joker"}``) —
+    utilisé par les campagnes de mesure (``--strategies-champion``,
+    ``scripts/matrice_strategies.py``) pour substituer, DURANT la campagne
+    seulement, la liste de stratégies de Champion du Monde sans jamais
+    toucher au jeu (``BRIDAGES`` n'est modifié que temporairement par
+    l'appelant, voir ``comparer_niveaux_ia._strategies_champion_forcees``).
+    La perturbation et le taux d'oubli restent ceux du solveur complet
+    (Champion du Monde n'est jamais bridé sur ces deux paramètres)."""
+    actives = frozenset(strategies_actives)
+    valider_noms_strategies(actives)
+    return Bridage(
+        perturbation_max=None, taux_oubli=0.0,
+        verif_finition="verif_finition" in actives,
+        garder_joker_fin_partie="garde_joker" in actives,
+    )
+
+
+# Garde-fou de cohérence (vérifié à l'import) : ``STRATEGIES_CHAMPION_PAR_
+# DEFAUT`` doit reproduire EXACTEMENT le ``Bridage`` câblé en dur pour
+# Champion du Monde ci-dessus — sinon le registre mentirait sur ce que le
+# jeu joue réellement. Si ce test échoue, c'est que l'un des deux a été
+# modifié sans l'autre : ne JAMAIS faire taire cette assertion, corriger le
+# registre ou ``BRIDAGES`` pour qu'ils concordent à nouveau.
+assert bridage_champion_personnalise(STRATEGIES_CHAMPION_PAR_DEFAUT) == \
+    BRIDAGES["Champion du Monde"], (
+    "STRATEGIES_CHAMPION_PAR_DEFAUT ne reproduit plus BRIDAGES['Champion du "
+    "Monde'] — voir moteur/niveaux.py (issue #228).")

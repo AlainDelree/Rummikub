@@ -209,4 +209,92 @@ def test_rapport_ne_plante_pas(capsys):
     AP.afficher_rapport(resume)
     sortie = capsys.readouterr().out
     assert "ANALYSE PAR PHASES" in sortie
+
+
+# --------------------------------------------------------------------------- #
+# Analyse PAR NIVEAU (issue #228, point 4) — dans ``_manche_fabriquee``, le
+# niveau "X" joue toujours l'index 0 (futur gagnant) et "Y" toujours l'index
+# 1 (futur perdant) : les résultats par niveau doivent donc reproduire
+# exactement les résultats par rôle déjà vérifiés par
+# ``test_analyser_manche_fabriquee_seuil_5`` ci-dessus.
+# --------------------------------------------------------------------------- #
+
+def test_analyser_par_niveau_reproduit_les_roles_de_la_manche_fabriquee():
+    resume = AP.analyser_par_niveau(_manche_fabriquee(), seuil=5)
+    assert resume["niveaux"] == ["X", "Y"]
+
+    assert resume["duree_phase"]["X"]["prologue"] == 2
+    assert resume["duree_phase"]["X"]["developpement"] == 1
+    assert resume["duree_phase"]["X"]["fin"] == 2
+    assert resume["tuiles_posees_phase"]["X"]["fin"] == 5  # 2 + 3
+
+    assert resume["duree_phase"]["Y"]["prologue"] == 1
+    assert resume["duree_phase"]["Y"]["developpement"] == 3
+    assert resume["duree_phase"]["Y"]["fin"] == 0
+
+
+def test_analyser_par_niveau_sur_trace_vide():
+    resume = AP.analyser_par_niveau([], seuil=5)
+    assert resume["niveaux"] == []
+
+
+def test_rapport_par_niveau_ne_plante_pas(capsys):
+    resume = AP.analyser_par_niveau(_manche_fabriquee(), seuil=5)
+    AP.afficher_rapport_par_niveau(resume)
+    sortie = capsys.readouterr().out
+    assert "ANALYSE PAR NIVEAU" in sortie
+    assert "X" in sortie and "Y" in sortie
+
+
+# --------------------------------------------------------------------------- #
+# Comparaison de deux traces, PAR PHASE (issue #228, point 4)
+# --------------------------------------------------------------------------- #
+
+def test_comparer_traces_identiques_delta_nul():
+    resume = AP.analyser(_manche_fabriquee(), seuil=5)
+    diffs = AP.comparer_traces(resume, resume)
+    for role in ("gagnant", "perdant"):
+        for ph in AP.PHASES:
+            assert diffs[role][ph]["delta_duree"] == 0
+            assert diffs[role][ph]["delta_tuiles_par_tour"] == 0
+            assert diffs[role][ph]["delta_freq_pioche"] == 0
+
+
+def test_comparer_traces_detecte_une_difference():
+    lignes_1 = _manche_fabriquee()
+    lignes_2 = [dict(l) for l in lignes_1]
+    # Le gagnant pose une tuile de plus lors de son dernier tour de phase
+    # Fin (tour 9) dans la deuxième trace — la différence doit ressortir
+    # côté gagnant, phase Fin, jamais ailleurs.
+    for l in lignes_2:
+        if l.get("type") == "tour" and l.get("tour") == 9:
+            l["nb_tuiles_posees"] += 1
+    resume_1 = AP.analyser(lignes_1, seuil=5)
+    resume_2 = AP.analyser(lignes_2, seuil=5)
+    diffs = AP.comparer_traces(resume_1, resume_2)
+    assert diffs["gagnant"]["fin"]["delta_tuiles_par_tour"] > 0
+    assert diffs["perdant"]["fin"]["delta_tuiles_par_tour"] == 0
+    assert diffs["gagnant"]["prologue"]["delta_tuiles_par_tour"] == 0
+
+
+def test_afficher_comparaison_ne_plante_pas(capsys):
+    resume = AP.analyser(_manche_fabriquee(), seuil=5)
+    diffs = AP.comparer_traces(resume, resume)
+    AP.afficher_comparaison(diffs, "trace1.jsonl", "trace2.jsonl")
+    sortie = capsys.readouterr().out
+    assert "COMPARAISON PAR PHASE" in sortie
+    assert "trace1.jsonl" in sortie and "trace2.jsonl" in sortie
+
+
+def test_cli_par_niveau_et_comparer(tmp_path, capsys):
+    chemin = tmp_path / "trace.jsonl"
+    with open(chemin, "w", encoding="utf-8") as f:
+        for l in _manche_fabriquee():
+            f.write(json.dumps(l, ensure_ascii=False) + "\n")
+    code = AP.main(["analyser_phases.py", str(chemin), "--par-niveau",
+                    "--comparer", str(chemin)])
+    assert code == 0
+    sortie = capsys.readouterr().out
+    assert "ANALYSE PAR NIVEAU" in sortie
+    assert "COMPARAISON PAR PHASE" in sortie
     assert "seuil N = 5" in sortie

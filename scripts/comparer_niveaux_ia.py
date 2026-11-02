@@ -78,7 +78,7 @@ import contextlib  # noqa: E402
 
 from rummikub.config import NIVEAUX  # noqa: E402
 from rummikub import reglages  # noqa: E402
-from rummikub.moteur.ia import jouer_ia, jouer_niveau_bride  # noqa: E402
+from rummikub.moteur.ia import jouer_niveau_bride  # noqa: E402
 from rummikub.moteur import evaluation_main  # noqa: E402
 from rummikub.moteur import niveaux  # noqa: E402
 from rummikub.moteur import solveur_exact  # noqa: E402
@@ -119,6 +119,86 @@ def _verif_finition_desactivee():
         yield
     finally:
         niveaux.BRIDAGES.update(originaux)
+
+
+@contextlib.contextmanager
+def _strategies_champion_forcees(strategies_actives):
+    """Remplace temporairement la liste de stratégies ACTIVES de Champion du
+    Monde par ``strategies_actives`` (ids de ``moteur.niveaux.STRATEGIES``,
+    issue #228, point 2 — options ``--strategies-champion``/``--sans-
+    strategie``) — DURANT la campagne seulement, jamais dans le jeu. Restaure
+    le réglage d'origine à la sortie, même en cas d'exception. N'affecte
+    jamais Expert ni les niveaux inférieurs (dans le même esprit que
+    ``_garde_joker_desactive`` ci-dessous, qu'il ne remplace pas — les deux
+    mécanismes peuvent se combiner, voir ``main``)."""
+    nom = "Champion du Monde"
+    original = niveaux.BRIDAGES[nom]
+    niveaux.BRIDAGES[nom] = niveaux.bridage_champion_personnalise(strategies_actives)
+    try:
+        yield
+    finally:
+        niveaux.BRIDAGES[nom] = original
+
+
+def _parser_strategies_champion(valeur: str | None) -> set:
+    """Traduit l'option ``--strategies-champion`` (issue #228, point 2) : une
+    liste séparée par des virgules, ou l'un des mots-clés ``aucune``/
+    ``defaut``/``toutes``. ``None`` (option absente) équivaut à ``defaut``.
+    Lève ``ValueError`` (message listant les noms valides) sur un nom de
+    stratégie inconnu."""
+    if valeur is None or valeur == "defaut":
+        return set(niveaux.STRATEGIES_CHAMPION_PAR_DEFAUT)
+    if valeur == "aucune":
+        return set()
+    if valeur == "toutes":
+        return set(niveaux.strategies_champion_valides())
+    noms = [n.strip() for n in valeur.split(",") if n.strip()]
+    niveaux.valider_noms_strategies(noms)
+    return set(noms)
+
+
+# Extracteurs de compteurs génériques (issue #228, point 3) : UNE entrée par
+# stratégie du registre, chacune traduisant les compteurs internes propres à
+# CETTE stratégie (``stats_verif_finition``/``stats_garde_joker`` ci-dessous,
+# conservés inchangés depuis #221/#225) vers les deux compteurs génériques
+# déclarés par ``moteur.niveaux.Strategie.compteurs`` : « déclenchée » et « a
+# changé le coup ». Le rapport de campagne et l'export par partie
+# (``comparer``, ``afficher_rapport``) consomment ce dict SANS connaître le
+# détail propre à chaque stratégie — ajouter une stratégie plus tard n'exige
+# qu'une entrée ici, jamais de modifier la boucle d'affichage ou d'export.
+def _compteurs_verif_finition(resume: dict) -> dict:
+    stats = resume.get("stats_verif_finition") or {}
+    statuts_executes = (
+        verification_finition.BUDGET_EPUISE,
+        verification_finition.APPLIQUEE_MEILLEUR_SUFFIT,
+        verification_finition.APPLIQUEE_AUCUN_CANDIDAT,
+        verification_finition.APPLIQUEE_AUTRE_COUP,
+        verification_finition.APPLIQUEE_GARDE_JOKER,
+    )
+    declenchee = sum(stats.get(c, 0) for c in statuts_executes)
+    change = (stats.get(verification_finition.APPLIQUEE_AUTRE_COUP, 0)
+             + stats.get(verification_finition.APPLIQUEE_GARDE_JOKER, 0))
+    return {"declenchee": declenchee, "a_change_le_coup": change}
+
+
+def _compteurs_garde_joker(resume: dict) -> dict:
+    stats = resume.get("stats_garde_joker") or {}
+    return {"declenchee": stats.get("tours_joker_en_main", 0),
+           "a_change_le_coup": stats.get("choisi", 0)}
+
+
+EXTRACTEURS_COMPTEURS_STRATEGIES = {
+    "verif_finition": _compteurs_verif_finition,
+    "garde_joker": _compteurs_garde_joker,
+}
+
+
+def compteurs_strategies(resume: dict) -> dict:
+    """Compteurs génériques (« déclenchée »/« a changé le coup ») de chaque
+    stratégie du registre, à partir du résumé de campagne ``resume`` (issue
+    #228, point 3)."""
+    return {sid: extracteur(resume)
+           for sid, extracteur in EXTRACTEURS_COMPTEURS_STRATEGIES.items()}
 
 
 @contextlib.contextmanager
@@ -220,6 +300,10 @@ def _ecrire_ligne_trace(trace_ctx: dict, donnees: dict) -> None:
     }
     ligne.update(donnees)
     trace_ctx["fichier"].write(json.dumps(ligne, ensure_ascii=False) + "\n")
+    # Flush immédiat (issue #228, point 5 — reprise après coupure brutale) :
+    # une ligne par tour doit être relisible même si le processus est tué
+    # juste après l'avoir écrite (``scripts/matrice_strategies.py``).
+    trace_ctx["fichier"].flush()
 
 
 def _ecrire_trace_tour(trace_ctx: dict, manche_numero: int, idx: int,
@@ -279,8 +363,15 @@ def jouer_un_tour(etat: dict, idx: int, temps_par_niveau: dict,
                   aucun_coup_expert: list = None,
                   stats_garde_joker: dict = None,
                   trace_ctx: dict = None,
-                  manche_numero: int = 1) -> tuple[dict, bool, bool]:
+                  manche_numero: int = 1,
+                  budget_temps: float = None) -> tuple[dict, bool, bool]:
     """Joue le tour de l'IA à l'index ``idx``.
+
+    ``budget_temps`` (issue #228, point 5) : budget de temps du solveur par
+    coup transmis à ``jouer_niveau_bride`` — ``None`` (défaut) laisse le
+    jeu décider (``ia.BUDGET_TEMPS_EXPERT``, 1,5 s), inchangé pour tout
+    appelant existant. Une valeur explicite (machine lente) s'applique de la
+    même façon à TOUS les niveaux joués par ce script, jamais au jeu.
 
     Chronomètre l'appel à ``jouer_ia`` et l'ajoute à
     ``temps_par_niveau[niveau]``. Retourne ``(etat, coup_invalide,
@@ -376,11 +467,17 @@ def jouer_un_tour(etat: dict, idx: int, temps_par_niveau: dict,
         if niveau == "Expert":
             eval_config = eval_configs[idx] if eval_configs else None
             res_ia = jouer_niveau_bride(
-                etat, idx, "Expert", on_repli=_compter_repli,
-                preferer_simple=preferer_simple, eval_config=eval_config,
-                on_aucun=_compter_aucun)
+                etat, idx, "Expert", budget_temps=budget_temps,
+                on_repli=_compter_repli, preferer_simple=preferer_simple,
+                eval_config=eval_config, on_aucun=_compter_aucun)
         else:
-            res_ia = jouer_ia(etat, idx)
+            # Appel direct (plutôt que ``jouer_ia``, qui ne transmet aucun
+            # paramètre) : équivalent à ``jouer_ia`` quand ``budget_temps``
+            # est ``None`` (défaut du jeu), et permet un budget de temps du
+            # solveur explicite (#228, point 5) pour une machine lente —
+            # ``niveau`` vient de ``config_joueurs`` et est toujours valide.
+            res_ia = jouer_niveau_bride(etat, idx, niveau,
+                                        budget_temps=budget_temps)
     except Exception:
         temps_par_niveau.setdefault(niveau, []).append(time.monotonic() - debut)
         logger.exception("Exception de l'IA %s au tour %d", niveau, etat["tour_numero"])
@@ -457,7 +554,8 @@ def _jouer_une_manche(etat: dict, max_tours: int, temps_par_niveau: dict,
                       aucun_coup_expert: list = None,
                       stats_garde_joker: dict = None,
                       trace_ctx: dict = None,
-                      manche_numero: int = 1) -> dict:
+                      manche_numero: int = 1,
+                      budget_temps: float = None) -> dict:
     """Joue la manche courante de ``etat`` jusqu'à sa fin naturelle (chevalet
     vidé ou pioche épuisée) ou jusqu'au garde-fou ``max_tours``. Retourne les
     statistiques de CETTE manche ; ``etat`` est muté en place."""
@@ -477,7 +575,7 @@ def _jouer_une_manche(etat: dict, max_tours: int, temps_par_niveau: dict,
             etat, idx, temps_par_niveau, replis_expert, preferer_simple,
             perturbations_expert, eval_configs,
             stats_verif_finition, appels_solveur_verif, aucun_coup_expert,
-            stats_garde_joker, trace_ctx, manche_numero)
+            stats_garde_joker, trace_ctx, manche_numero, budget_temps)
         if invalide:
             coups_invalides += 1
         if tuiles_disparues:
@@ -513,7 +611,8 @@ def jouer_match(config_joueurs: list[dict], nb_manches: int, max_tours: int,
                 appels_solveur_verif: list = None,
                 aucun_coup_expert: list = None,
                 stats_garde_joker: dict = None,
-                trace_ctx: dict = None) -> dict:
+                trace_ctx: dict = None,
+                budget_temps: float = None) -> dict:
     """Joue un MATCH complet à 2 joueurs de ``nb_manches`` manches (issue
     #203). Les manches s'enchaînent via ``nouvelle_manche`` (score cumulé
     conservé, nouvelle donne et mise initiale remise à zéro à chaque manche).
@@ -524,7 +623,11 @@ def jouer_match(config_joueurs: list[dict], nb_manches: int, max_tours: int,
     « garder un joker en main » a été CHOISI au moins une fois pendant ce
     match (détecté par la variation de ``stats_garde_joker["choisi"]`` avant/
     après) — permet à ``comparer`` d'enregistrer qui a gagné les parties où la
-    stratégie a réellement changé un coup.
+    stratégie a réellement changé un coup. ``strategies_changees`` (issue
+    #228, point 3) généralise cette détection à TOUTE stratégie du registre
+    (``EXTRACTEURS_COMPTEURS_STRATEGIES``), sans code spécifique par
+    stratégie : ``{id_strategie: bool}``, vrai si son compteur « a changé le
+    coup » a progressé pendant ce match précis.
 
     ``trace_ctx`` (issue #226) : si fourni, chaque tour de chaque manche est
     tracé (``jouer_un_tour``) et une ligne de résultat est écrite à la fin
@@ -543,6 +646,10 @@ def jouer_match(config_joueurs: list[dict], nb_manches: int, max_tours: int,
     coups_invalides = coups_tuiles_disparues = anomalies_conservation = 0
     arretee_garde_fou = False
     choisi_avant = stats_garde_joker.get("choisi", 0) if stats_garde_joker else 0
+    _resume_partiel = {"stats_verif_finition": stats_verif_finition,
+                       "stats_garde_joker": stats_garde_joker}
+    compteurs_avant = {sid: extracteur(_resume_partiel)["a_change_le_coup"]
+                       for sid, extracteur in EXTRACTEURS_COMPTEURS_STRATEGIES.items()}
 
     for numero in range(1, nb_manches + 1):
         res = _jouer_une_manche(etat, max_tours, temps_par_niveau,
@@ -550,7 +657,7 @@ def jouer_match(config_joueurs: list[dict], nb_manches: int, max_tours: int,
                                 perturbations_expert, eval_configs,
                                 stats_verif_finition, appels_solveur_verif,
                                 aucun_coup_expert, stats_garde_joker,
-                                trace_ctx, numero)
+                                trace_ctx, numero, budget_temps)
         coups_invalides += res["coups_invalides"]
         coups_tuiles_disparues += res["coups_tuiles_disparues"]
         anomalies_conservation += res["anomalies_conservation"]
@@ -568,11 +675,16 @@ def jouer_match(config_joueurs: list[dict], nb_manches: int, max_tours: int,
 
     garde_joker_applique = (stats_garde_joker is not None
                             and stats_garde_joker.get("choisi", 0) > choisi_avant)
+    compteurs_apres = {sid: extracteur(_resume_partiel)["a_change_le_coup"]
+                       for sid, extracteur in EXTRACTEURS_COMPTEURS_STRATEGIES.items()}
+    strategies_changees = {sid: compteurs_apres[sid] > compteurs_avant[sid]
+                           for sid in EXTRACTEURS_COMPTEURS_STRATEGIES}
 
     return {
         "etat": etat,
         "manches": manches,
         "arretee_garde_fou": arretee_garde_fou,
+        "strategies_changees": strategies_changees,
         "coups_invalides": coups_invalides,
         "coups_tuiles_disparues": coups_tuiles_disparues,
         "anomalies_conservation": anomalies_conservation,
@@ -590,8 +702,25 @@ def comparer(niveau_a: str, niveau_b: str, nb_donnes: int, seed: int,
             eval_a: str = "off", eval_b: str = "off",
             sans_exact: bool = False,
             export_resultats: str = None,
-            export_trace: str = None) -> dict:
-    """``nb_manches`` (#203) : nombre de manches par match — chaque donne est
+            export_trace: str = None,
+            budget_temps: float = None,
+            donnes_debut: int = 0,
+            donnes_fin: int = None,
+            mode_fichier: str = "w") -> dict:
+    """``budget_temps`` (issue #228, point 5) : budget de temps du solveur par
+    coup, transmis à TOUS les niveaux joués — ``None`` (défaut) laisse le jeu
+    décider (1,5 s). ``donnes_debut``/``donnes_fin`` (issue #228, point 5,
+    reprise de ``scripts/matrice_strategies.py``) : ne jouent qu'un sous-
+    ensemble ``[donnes_debut, donnes_fin)`` des ``nb_donnes`` donnes tirées de
+    ``seed`` (la liste complète des graines reste calculée à l'identique,
+    SEULE la plage jouée change) — ``donnes_fin=None`` vaut ``nb_donnes``.
+    ``mode_fichier`` (``"w"``/``"a"``) : mode d'ouverture d'``export_
+    resultats``/``export_trace``, pour reprendre une campagne interrompue en
+    AJOUTANT à des fichiers déjà partiellement écrits plutôt qu'en les
+    écrasant — chaque ligne est immédiatement ``flush()``ée (écriture ligne
+    par ligne, tolérante à une coupure brutale, voir CONTEXTE.md §13).
+
+    ``nb_manches`` (#203) : nombre de manches par match — chaque donne est
     jouée en miroir (places échangées) sur un match complet, le vainqueur du
     match étant le joueur au plus haut score cumulé. Les résultats sont donnés
     à la fois par match (victoires, score cumulé moyen) et par manche.
@@ -628,9 +757,11 @@ def comparer(niveau_a: str, niveau_b: str, nb_donnes: int, seed: int,
                 "B": evaluation_main.depuis_preset(eval_b, nb_manches)}
     rng_graines = random.Random(seed)
     graines = [rng_graines.randrange(2**32) for _ in range(nb_donnes)]
-    fichier_export = (open(export_resultats, "w", encoding="utf-8")
+    fin = nb_donnes if donnes_fin is None else donnes_fin
+    graines_jouees = list(enumerate(graines))[donnes_debut:fin]
+    fichier_export = (open(export_resultats, mode_fichier, encoding="utf-8")
                       if export_resultats else None)
-    fichier_trace = (open(export_trace, "w", encoding="utf-8")
+    fichier_trace = (open(export_trace, mode_fichier, encoding="utf-8")
                      if export_trace else None)
 
     # Niveau MATCH (issue #203) : victoire par score cumulé, nuls comptés à
@@ -679,7 +810,7 @@ def comparer(niveau_a: str, niveau_b: str, nb_donnes: int, seed: int,
     pile_appels = contextlib.ExitStack()
     pile_appels.enter_context(_compter_appels_solveur_verif(appels_solveur_verif))
 
-    for i, graine in enumerate(graines):
+    for i, graine in graines_jouees:
         for ordre, camps in enumerate((("A", "B"), ("B", "A"))):
             random.seed(graine)
             niveau_camp = {"A": niveau_a, "B": niveau_b}
@@ -702,7 +833,7 @@ def comparer(niveau_a: str, niveau_b: str, nb_donnes: int, seed: int,
                                    appels_solveur_verif=appels_solveur_verif,
                                    aucun_coup_expert=aucun_coup_expert,
                                    stats_garde_joker=stats_garde_joker,
-                                   trace_ctx=trace_ctx)
+                                   trace_ctx=trace_ctx, budget_temps=budget_temps)
             coups_invalides_total += resultat["coups_invalides"]
             coups_tuiles_disparues_total += resultat["coups_tuiles_disparues"]
             anomalies_conservation_total += resultat["anomalies_conservation"]
@@ -719,6 +850,7 @@ def comparer(niveau_a: str, niveau_b: str, nb_donnes: int, seed: int,
                         "vainqueur_camp": None, "arretee_garde_fou": True,
                         "score_a": None, "score_b": None,
                     }, ensure_ascii=False) + "\n")
+                    fichier_export.flush()
                 continue
 
             etat = resultat["etat"]
@@ -751,7 +883,9 @@ def comparer(niveau_a: str, niveau_b: str, nb_donnes: int, seed: int,
                     "niveau_a": niveau_a, "niveau_b": niveau_b,
                     "vainqueur_camp": camp_gagnant, "arretee_garde_fou": False,
                     "score_a": cumul_a, "score_b": cumul_b,
+                    "strategies_changees": resultat["strategies_changees"],
                 }, ensure_ascii=False) + "\n")
+                fichier_export.flush()
 
             if resultat["garde_joker_applique"]:
                 parties_garde_joker.append({
@@ -799,8 +933,14 @@ def comparer(niveau_a: str, niveau_b: str, nb_donnes: int, seed: int,
         "preferer_simple": preferer_simple,
         "eval_a": eval_a,
         "eval_b": eval_b,
+        # Donnes RÉELLEMENT jouées par CET appel (issue #228, point 5) —
+        # ``nb_donnes`` reste le total demandé pour tout le cas d'usage
+        # ``matrice_strategies.py`` (reprise par tranches) : utiliser
+        # ``len(graines_jouees)`` pour les additionner correctement entre
+        # plusieurs appels successifs.
         "nb_donnes": nb_donnes,
-        "nb_parties": 2 * nb_donnes,
+        "nb_donnes_jouees": len(graines_jouees),
+        "nb_parties": 2 * len(graines_jouees),
         "sans_exact": sans_exact,
         # Coût d'un joker resté en main en fin de manche (issue #225, point
         # 4) : lu depuis les réglages par défaut du moteur (``valeur_joker_
@@ -1003,6 +1143,15 @@ def afficher_rapport(resume: dict) -> None:
             print(f"    Parties où la stratégie a été CHOISIE au moins une "
                  f"fois : {len(parties_gj)} ({detail})")
 
+    compteurs = compteurs_strategies(resume)
+    if any(c["declenchee"] for c in compteurs.values()):
+        print("-" * 70)
+        print("  Compteurs génériques par stratégie (registre, #228) :")
+        for sid, c in compteurs.items():
+            strat = niveaux.STRATEGIES[sid]
+            print(f"    {sid:15s} : déclenchée {c['declenchee']}, a changé "
+                 f"le coup {c['a_change_le_coup']} — {strat.description}")
+
     perturbations = resume["perturbations_expert"]
     if perturbations:
         deplacees = [d for d, _ in perturbations]
@@ -1073,6 +1222,32 @@ def main(argv: list[str]) -> int:
                              "avec et sans cette stratégie (relancer la "
                              "même commande avec et sans ce drapeau, même "
                              "--seed).")
+    parser.add_argument("--strategies-champion", default=None,
+                        help="Stratégies ACTIVES pour Champion du Monde "
+                             "PENDANT la campagne (issue #228), remplace la "
+                             "liste par défaut sans jamais toucher au jeu : "
+                             "une liste séparée par des virgules, ou "
+                             "'aucune'/'defaut' (= ce que joue le jeu, "
+                             "défaut de cette option)/'toutes'. Noms valides "
+                             "du registre (moteur/niveaux.py) : "
+                             + ", ".join(niveaux.strategies_champion_valides())
+                             + ".")
+    parser.add_argument("--sans-strategie", action="append", default=[],
+                        metavar="NOM",
+                        help="Retire NOM (répétable) de la liste de "
+                             "stratégies de Champion du Monde pour cette "
+                             "campagne, appliqué APRÈS --strategies-champion "
+                             "(issue #228) — p. ex. --sans-strategie "
+                             "garde_joker.")
+    parser.add_argument("--budget-solveur-expert", type=float, default=None,
+                        help="Budget de temps du solveur par coup, en "
+                             "secondes, appliqué à TOUS les niveaux joués "
+                             "(issue #228, point 5) — défaut : celui du jeu "
+                             "(1,5 s, ia.BUDGET_TEMPS_EXPERT), inchangé sans "
+                             "cette option. À relever sur une machine lente "
+                             "(appliquer la MÊME valeur à tous les bras "
+                             "d'une même série de comparaisons, voir "
+                             "scripts/matrice_strategies.py).")
     parser.add_argument("--export-resultats",
                         help="Écrit un fichier JSON Lines (une ligne par "
                              "match : donne, ordre, vainqueur, scores) — "
@@ -1131,8 +1306,26 @@ def main(argv: list[str]) -> int:
     if args.export_trace:
         print(f"[#226] Trace brute par tour activée : {args.export_trace}")
 
+    # Option unique de stratégies de Champion du Monde (issue #228, point 2) :
+    # --strategies-champion fixe la base (défaut : ce que joue le jeu),
+    # --sans-strategie en retire ensuite — validation précoce, message
+    # listant les noms valides sur un nom inconnu.
+    try:
+        strategies_champion = _parser_strategies_champion(args.strategies_champion)
+        if args.sans_strategie:
+            niveaux.valider_noms_strategies(args.sans_strategie)
+            strategies_champion -= set(args.sans_strategie)
+    except ValueError as exc:
+        parser.error(str(exc))
+    champion_personnalise = bool(args.strategies_champion) or bool(args.sans_strategie)
+    if champion_personnalise:
+        print(f"[#228] Stratégies de Champion du Monde pour cette campagne : "
+             f"{', '.join(sorted(strategies_champion)) or '(aucune)'}.")
+
     debut = time.monotonic()
-    with (_verif_finition_desactivee() if args.sans_verif_finition
+    with (_strategies_champion_forcees(strategies_champion)
+          if champion_personnalise else contextlib.nullcontext()), \
+         (_verif_finition_desactivee() if args.sans_verif_finition
           else contextlib.nullcontext()), \
          (_garde_joker_desactive() if args.sans_garde_joker
           else contextlib.nullcontext()):
@@ -1142,7 +1335,8 @@ def main(argv: list[str]) -> int:
                           eval_a=args.eval_a, eval_b=args.eval_b,
                           sans_exact=args.sans_exact,
                           export_resultats=args.export_resultats,
-                          export_trace=args.export_trace)
+                          export_trace=args.export_trace,
+                          budget_temps=args.budget_solveur_expert)
     duree = time.monotonic() - debut
 
     afficher_rapport(resume)

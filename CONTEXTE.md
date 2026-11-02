@@ -2803,6 +2803,168 @@ la fois. On juge d'abord au mécanisme (combien de fois la stratégie change
 un coup, et le résultat des seules parties qui divergent), jamais au seul
 taux de victoire global.
 
+### Infrastructure des stratégies de Champion du Monde (issue #228)
+
+Avant #228, chaque stratégie multi-tours avait son propre drapeau de script
+(`--sans-verif-finition` pour #221, `--sans-garde-joker` pour #225) et le jeu
+n'avait pas de liste unique des stratégies. #228 prépare le terrain pour les
+futures stratégies (H1/H2/H4 ci-dessus) SANS en créer aucune : registre
+unique, option de campagne unique, compteurs génériques, analyse par niveau,
+et un outil de matrice reprenable pour enchaîner des comparaisons sans
+surveillance sur plusieurs jours.
+
+**1. Registre unique (`moteur/niveaux.py`)**
+- `niveaux.Strategie` (dataclass figée) : `id`, `description` (une ligne),
+  `niveaux` (tuple des niveaux où elle s'applique — p. ex. `verif_finition`
+  s'applique à Expert ET Champion du Monde, `garde_joker` à Champion du
+  Monde SEUL), `active_par_defaut` (reflet de ce qui est câblé dans
+  `BRIDAGES`), `compteurs` (noms des compteurs génériques déclarés, défaut
+  `("declenchee", "a_change_le_coup")`).
+- `niveaux.STRATEGIES : dict[str, Strategie]` — le registre. Y ajouter une
+  stratégie future (p. ex. une variante de H1/H2) : UNE entrée ici, plus son
+  branchement dans `jouer_niveau_bride`/`verification_finition.py` si elle a
+  un effet réel sur le jeu (le registre décrit, il ne câble pas le
+  comportement par magie) — voir `test_registre_strategies.py`,
+  `test_ajouter_une_strategie_fictive_au_registre_sans_toucher_au_reste`.
+- `niveaux.STRATEGIES_CHAMPION_PAR_DEFAUT : tuple[str, ...]` — ce que
+  Champion du Monde joue AUJOURD'HUI dans le JEU (`("verif_finition",
+  "garde_joker")`, reproduit à l'identique l'état d'avant #228, vérifié par
+  une assertion à l'IMPORT du module comparant `bridage_champion_
+  personnalise(STRATEGIES_CHAMPION_PAR_DEFAUT)` à `BRIDAGES["Champion du
+  Monde"]`). Une stratégie du registre n'y est ajoutée qu'après validation
+  par les tests/campagnes — être dans `STRATEGIES` ne suffit pas à être
+  jouée en production.
+- `niveaux.bridage_champion_personnalise(ids)` : construit le `Bridage` de
+  Champion du Monde pour un jeu de stratégies donné (utilisé par les
+  campagnes de mesure, jamais par le jeu).
+- **Expert n'est pas modifié** par #228 (le témoin des duels appariés doit
+  rester fixe). Remarque signalée sans y toucher : la vérification de
+  finition (#221), active aussi chez Expert, pourrait en théorie influencer
+  son rôle de témoin si une future stratégie de Champion en modifiait la
+  fréquence de déclenchement de façon asymétrique — à surveiller si les
+  compteurs génériques (point 3 ci-dessous) montrent un écart entre les deux
+  niveaux sur ce point, mais aucune preuve d'un tel effet à ce jour (#226 :
+  jamais déclenché de changement de coup sur 600 matchs).
+
+**2. Option de campagne unique (`scripts/comparer_niveaux_ia.py`)**
+- `--strategies-champion LISTE` : une liste séparée par des virgules, ou
+  `aucune`/`defaut` (= ce que joue le jeu, défaut de l'option elle-même)/
+  `toutes`. `--sans-strategie NOM` (répétable) : retire NOM de la liste
+  obtenue, APRÈS `--strategies-champion`. Un nom inconnu arrête le script
+  avec un message listant les noms valides du registre. Les deux options
+  ne changent la liste de Champion du Monde que DURANT la campagne (`
+  comparer_niveaux_ia._strategies_champion_forcees`, restaure `BRIDAGES`
+  à la sortie même en cas d'exception) — jamais dans le jeu.
+- `--sans-garde-joker`/`--sans-verif-finition` restent utilisables tels
+  quels (compatibilité) — `--sans-garde-joker` est strictement équivalent à
+  `--sans-strategie garde_joker` (même portée, Champion du Monde seul) ;
+  `--sans-verif-finition` garde sa portée D'ORIGINE plus large (désactive la
+  vérification pour EXPERT ET Champion du Monde à la fois, pour la mesure
+  « avant/après » de #221) et n'est PAS rebranché sur le nouveau mécanisme,
+  pour ne rien changer à son comportement déjà éprouvé.
+- `--budget-solveur-expert SECONDES` (nouveau par #228, demandé par le
+  point 5 de l'issue) : budget de temps du solveur par coup, appliqué à TOUS
+  les niveaux joués par la campagne (pas seulement Expert) — défaut `None` =
+  celui du jeu (1,5 s, `ia.BUDGET_TEMPS_EXPERT`), inchangé sans l'option. À
+  relever sur une machine lente.
+
+**3. Compteurs génériques (`comparer_niveaux_ia.compteurs_strategies`)**
+- Une table `EXTRACTEURS_COMPTEURS_STRATEGIES` (une entrée par id du
+  registre) traduit les compteurs internes propres à chaque stratégie
+  (`stats_verif_finition`/`stats_garde_joker`, inchangés depuis #221/#225)
+  vers les deux compteurs génériques déclarés par `Strategie.compteurs` :
+  « déclenchée » et « a changé le coup ». Le rapport de campagne (nouvelle
+  section « Compteurs génériques par stratégie ») et l'export par partie
+  (champ `strategies_changees` de `--export-resultats`, calculé par match
+  via la même table) les affichent sans code spécifique par stratégie dans
+  la boucle d'affichage/d'export — ajouter une stratégie future n'exige
+  qu'une entrée dans cette table (et son extracteur).
+
+**4. Analyse par niveau (`scripts/analyser_phases.py`)**
+- `--par-niveau` : regroupe l'analyse PAR NIVEAU d'IA (durée de chaque
+  phase, tuiles posées par tour, fréquence de pioche) plutôt que par
+  gagnant/perdant de la manche — `analyser_par_niveau`/
+  `afficher_rapport_par_niveau`.
+- `--comparer AUTRE_TRACE` : compare la trace donnée à `AUTRE_TRACE` (p. ex.
+  une campagne témoin et une campagne avec stratégies, même graine) et
+  affiche les écarts phase par phase (durée, tuiles/tour, fréquence de
+  pioche) — `comparer_traces`/`afficher_comparaison`. Pure comparaison de
+  deux analyses déjà calculées, ne rejoue jamais rien.
+
+**5. Outil de matrice (`scripts/matrice_strategies.py`), pour tourner
+plusieurs jours sans surveillance**
+- **Plans** : `ablation` (défaut — témoin sans aucune stratégie, puis
+  Champion avec CHAQUE stratégie SEULE, puis Champion complet PRIVÉ de
+  CHAQUE stratégie, puis Champion complet — référence du résumé final) ;
+  `complet` (toutes les combinaisons de stratégies, avec avertissement si
+  elles sont nombreuses) ; ou le chemin d'un fichier JSON de configurations
+  personnalisées (`{"nom":..., "strategies_champion":[...], "reference":
+  true}`).
+- **Reprenable** : chaque configuration écrit son export par partie
+  (`resultats.jsonl`, une donne = deux lignes en miroir) et sa trace
+  éventuelle LIGNE PAR LIGNE avec `flush()` immédiat ; un `checkpoint.json`
+  réécrit de façon ATOMIQUE (fichier temporaire puis `os.replace`) après
+  CHAQUE donne. Relancer la MÊME commande sur le MÊME `--dossier` reprend
+  exactement à la dernière donne complète déjà écrite (le fichier de
+  résultats fait foi : une ligne isolée, laissée par une coupure brutale en
+  plein milieu d'une écriture, est abandonnée avant de reprendre — jamais
+  rejouée). Refuse de reprendre si le commit du code a changé depuis le
+  début de la série (`--forcer-reprise-commit-different` pour passer
+  outre, déconseillé).
+- **Statut** : `--statut DOSSIER` affiche, SANS perturber la série,
+  configurations terminées/total, la configuration en cours et son
+  avancement, une estimation de fin (rythme observé), et si un processus
+  tourne encore sur la machine (PID, vérifié sans dépendance externe).
+- **Résumé final** (`DOSSIER/resume.txt`, mis à jour après CHAQUE
+  configuration terminée) : pour chaque configuration, ses compteurs
+  génériques et sa comparaison à la configuration de RÉFÉRENCE du plan
+  (même graine — réutilise `comparer_campagnes_appariees.comparer_fichiers`,
+  donc le même test des signes).
+- **Contrôle rapide** : `--controle-rapide [N]` (défaut 50 donnes) joue
+  chaque configuration sur un petit nombre de donnes, résultats JETABLES
+  (hors `--dossier`), pour voir quelles stratégies se déclenchent du tout
+  avant de lancer la série complète.
+- **Limite de temps FERME** (`--limite-temps`, optionnelle, défaut aucune)
+  : réutilise le mécanisme de #220 (sous-processus surveillé, `scripts/
+  _limite_temps_ferme.py`, même pattern que `scripts/echelle_niveaux.py`)
+  pour TOUTE la série — un filet de sécurité, pas une contrainte par défaut
+  (une série est pensée pour tourner plusieurs jours).
+- **Processus** : `--processus 1` (défaut, séquentiel) ou `2` (deux
+  configurations en parallèle via `ProcessPoolExecutor` — la machine cible
+  n'a que deux cœurs) ; ce dernier mode n'a été vérifié qu'à la main
+  (pas de simulation longue par l'agent, voir CONTEXTE.md §7), à surveiller
+  à son premier usage réel.
+
+**Règle impérative pour toute comparaison de niveaux** (déjà vraie avant
+#228, rappelée ici) : TOUS les bras d'une même comparaison doivent tourner
+sur la MÊME machine — la force effective d'un niveau dépend du budget de
+temps réellement consommé par le solveur exact, donc de la vitesse de la
+machine (voir l'incident #223 : interpréteur sans `highspy`/`numpy`). Une
+série qui compare un bras lancé sur le ThinkPad à un bras lancé sur le PC
+fixe Windows ne mesure rien d'interprétable.
+
+**Sur un PC qui fait tourner une série de plusieurs jours (le PC fixe
+Windows lent)** : désactiver la mise en veille ET les redémarrages
+automatiques (mises à jour Windows) — sans quoi la série s'arrête sans
+qu'un `--statut` ultérieur distingue une vraie panne d'une simple veille.
+Réglages Windows : Panneau de configuration → Options d'alimentation →
+jamais de mise en veille sur secteur ; `gpedit.msc` ou Windows Update →
+Options avancées pour repousser les redémarrages automatiques, ou planifier
+les heures actives pour couvrir la durée de la série.
+
+**Reprise automatique après une coupure de courant (Windows)** :
+`scripts/lancer_matrice_windows.ps1` (lanceur minimal, à personnaliser avec
+le dépôt, le dossier de la série et la commande exacte de lancement — il ne
+rejoue rien de déjà écrit, `matrice_strategies.py` s'en charge). Pour
+l'exécuter automatiquement au démarrage de Windows (NON fait par cet
+agent — à mettre en place par Alain avec Claude) :
+
+```
+schtasks /Create /SC ONSTART /RL HIGHEST /TN "RummikubMatriceStrategies" ^
+    /TR "powershell -ExecutionPolicy Bypass -File C:\rummikub\lancer_matrice.ps1" ^
+    /RU SYSTEM
+```
+
 ## 14. Solveur exact de vérification — bibliothèque `rummikub-solver` (licence MIT, issue #204, suite de #201)
 
 Notre solveur d'Expert (`moteur/solveur.py`) est à la fois le joueur **et** le
