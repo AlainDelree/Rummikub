@@ -2609,6 +2609,78 @@ une au fur et à mesure que de futures issues les testent/implémentent.
   campagne plus grande (voir piste 4, §13) resterait nécessaire pour
   trancher si un effet existe mais reste sous le bruit.
 
+- [x] **Réalisée (#226) — mesure : où se décident les parties (trace par
+  tour + analyse par phases).**
+
+  Motivation : sur 600 matchs Expert/Champion du Monde (#221 + #225), aucune
+  des deux stratégies de fin de partie n'a jamais changé un coup, et 58 % des
+  tours de fin de partie sont des pioches. Avant de choisir les prochaines
+  pistes de l'arbre ci-dessus (Ouverture, Tuiles vivantes, Modèle adverse,
+  Course, Rétention), il fallait savoir OÙ se décident réellement les
+  manches. **Issue de MESURE uniquement : ne modifie ni le jeu, ni les
+  niveaux, ni le solveur, ni l'interface.**
+
+  **Découpage en trois phases, JOUEUR PAR JOUEUR** (l'ouverture d'un joueur
+  est indépendante de celle de l'autre — les phases ne sont PAS définies
+  pour la manche entière) :
+  1. **Prologue** : tous les tours d'un joueur avant sa propre ouverture (y
+     compris le tour de l'ouverture elle-même, qui le clôt) — il ne peut ni
+     toucher au tapis ni s'en servir, seul le contenu de sa main compte.
+  2. **Développement** : après l'ouverture, tant que son chevalet compte
+     PLUS de N tuiles au début du tour.
+  3. **Fin** : chevalet de N tuiles ou moins au début du tour, après
+     l'ouverture. N est réglable À L'ANALYSE (défaut 5, essayer aussi 6) —
+     jamais figé dans la trace elle-même.
+
+  **Trace par tour** (`scripts/comparer_niveaux_ia.py --export-trace
+  FICHIER`, JSON Lines, option indépendante d'`--export-resultats` et
+  **désactivée par défaut** — aucun changement sans elle) : une ligne par
+  tour (donne, ordre des joueurs, manche, numéro de tour, camp, niveau,
+  index du joueur, chevalet avant/après, "déjà ouvert" avant/après, action
+  RÉELLEMENT exécutée — `pose`/`pioche`/`passe`, un coup rejeté retombant sur
+  une pioche de secours est tracé comme une pioche —, tuiles posées, points
+  posés, taille de la pioche avant, présence d'un joker en main avant) + une
+  ligne de résultat par manche effectivement terminée (vainqueur, tuiles
+  restantes du perdant, type de fin). Lit l'état complet de la partie à des
+  fins de MESURE seulement (jamais une décision d'IA, jamais lu par le
+  moteur ni par aucun niveau).
+
+  **Script d'analyse** (`scripts/analyser_phases.py FICHIER --seuil N`,
+  `--seuil` répétable, défaut 5) : pure lecture/regroupement par manche
+  (indépendante d'une manche à l'autre, même au sein d'un match à plusieurs
+  manches — redistribution complète à chaque `nouvelle_manche`). Rapporte,
+  pour chaque phase et pour le gagnant/le perdant de la manche : durée
+  moyenne en tours, tuiles posées par tour, fréquence des pioches ; plus le
+  tour d'ouverture (moyenne/médiane/min/max), le nombre de pioches avant
+  l'ouverture et la taille du chevalet à ce moment. **Question centrale** :
+  l'écart de tuiles restantes en main entre les deux joueurs (a) à la FIN du
+  prologue (quand le SECOND joueur à ouvrir vient d'ouvrir) et (b) à
+  l'ENTRÉE en phase Fin de CHAQUE joueur (deux événements possibles par
+  manche, regroupés dans le rapport) — et, à chacun de ces moments, le taux
+  de victoire du joueur alors en avance (moins de tuiles en main ; égalités
+  comptées à part, jamais mêlées au taux). Permet de voir, sans rejouer la
+  moindre partie, à quelle phase l'écart se creuse vraiment — et de changer
+  N pour vérifier si la réponse en dépend.
+
+  **Vérifié** (`tests/test_export_trace.py`, `tests/test_analyser_phases.py`)
+  sur une partie courte rejouée en vrai (Débutant contre Débutant) et sur de
+  petits fichiers de trace fabriqués à la main, dont un cas où le seuil N
+  change explicitement la classification d'un même tour (chevalet de 6
+  tuiles, déjà ouvert : développement à N=5, fin à N=6) — aucune campagne
+  longue rejouée par l'agent de cette issue, conformément à CONTEXTE.md §7.
+  Un essai de 2 donnes (4 matchs) Expert contre Champion du Monde, au
+  premier plan, a validé la chaîne complète trace → analyse sur du vrai
+  jeu avant de remettre les commandes de campagne à Alain.
+
+  **Pour mémoire — quelles pistes de l'arbre ci-dessus relèvent de quelle
+  phase** (à affiner une fois une vraie campagne analysée) : Prologue →
+  Ouverture (probabilité qu'une tuile d'ouverture soit encore disponible) ;
+  Développement → Tuiles vivantes, Modèle adverse (Indices) ; Fin →
+  vérification de finition (#221) et joker gardé (#225), dont la rareté
+  d'activation a motivé cette issue. Rétention et Course dépendent des
+  trois phases à la fois (évaluation de la main/estimation de qui finira
+  le premier, quelle que soit la phase en cours).
+
 ## 14. Solveur exact de vérification — bibliothèque `rummikub-solver` (licence MIT, issue #204, suite de #201)
 
 Notre solveur d'Expert (`moteur/solveur.py`) est à la fois le joueur **et** le

@@ -48,6 +48,14 @@ Options :
                         Écrit un fichier JSON Lines (un match par ligne)
                         pour la comparaison appariée de deux campagnes
                         (voir scripts/comparer_campagnes_appariees.py).
+    --export-trace FICHIER
+                        Écrit une trace BRUTE JSON Lines, une ligne par
+                        tour de chaque manche (+ une ligne de résultat par
+                        manche) — pour l'analyse par phases (prologue /
+                        développement / fin, issue #226) via
+                        scripts/analyser_phases.py. Indépendante de
+                        --export-resultats. Désactivée par défaut (aucun
+                        changement de comportement sans elle).
     -v, --verbose       Journalise chaque partie jouée.
 """
 
@@ -198,6 +206,66 @@ def _anomalies_conservation(etat: dict) -> list[str]:
 
 
 # --------------------------------------------------------------------------- #
+# Trace brute par tour (issue #226) — mesure PURE : lit l'état complet de la
+# partie (ce n'est pas une décision d'IA) et n'influence jamais le jeu. Le
+# fichier n'est ouvert, et ces fonctions ne sont appelées, que si
+# ``--export-trace`` est fourni ; par défaut ``trace_ctx`` est ``None`` et
+# tout ce bloc est inerte.
+# --------------------------------------------------------------------------- #
+
+def _ecrire_ligne_trace(trace_ctx: dict, donnees: dict) -> None:
+    ligne = {
+        "donne": trace_ctx["donne"], "ordre": trace_ctx["ordre"],
+        "niveau_a": trace_ctx["niveau_a"], "niveau_b": trace_ctx["niveau_b"],
+    }
+    ligne.update(donnees)
+    trace_ctx["fichier"].write(json.dumps(ligne, ensure_ascii=False) + "\n")
+
+
+def _ecrire_trace_tour(trace_ctx: dict, manche_numero: int, idx: int,
+                       camp: str, niveau: str, tour_numero: int,
+                       chevalet_avant: int, ouvert_avant: bool,
+                       taille_pioche_avant: int, joker_avant: bool,
+                       action: str, nb_tuiles_posees: int, points_poses: int,
+                       chevalet_apres: int, ouvert_apres: bool) -> None:
+    """Une ligne par tour joué. ``action`` est l'action RÉELLEMENT exécutée
+    (``"pose"``/``"pioche"``/``"passe"``) — un coup proposé par l'IA mais
+    rejeté retombe sur une pioche de secours (comme côté UI), tracée comme
+    telle plutôt que comme le coup invalide."""
+    if trace_ctx is None:
+        return
+    _ecrire_ligne_trace(trace_ctx, {
+        "type": "tour", "manche": manche_numero, "tour": tour_numero,
+        "camp": camp, "niveau": niveau, "index_joueur": idx,
+        "chevalet_avant": chevalet_avant, "chevalet_apres": chevalet_apres,
+        "ouvert_avant": ouvert_avant, "ouvert_apres": ouvert_apres,
+        "action": action, "nb_tuiles_posees": nb_tuiles_posees,
+        "points_poses": points_poses,
+        "taille_pioche_avant": taille_pioche_avant,
+        "joker_en_main_avant": joker_avant,
+    })
+
+
+def _ecrire_trace_resultat(trace_ctx: dict, manche_numero: int,
+                           camps: tuple, niveau_camp: dict,
+                           res_manche: dict) -> None:
+    """Une ligne de résultat à la fin de chaque manche (vainqueur, tuiles
+    restantes du perdant)."""
+    if trace_ctx is None:
+        return
+    gi = res_manche["gagnant_manche_index"]
+    pi = 1 - gi
+    _ecrire_ligne_trace(trace_ctx, {
+        "type": "resultat", "manche": manche_numero,
+        "vainqueur_camp": camps[gi], "vainqueur_niveau": niveau_camp[camps[gi]],
+        "perdant_camp": camps[pi], "perdant_niveau": niveau_camp[camps[pi]],
+        "tuiles_restantes_perdant": res_manche["tuiles_restantes"][pi],
+        "fin": "pioche_vide" if res_manche["pioche_vide"] else "chevalet_vide",
+        "tours": res_manche["tours"],
+    })
+
+
+# --------------------------------------------------------------------------- #
 # Un tour d'IA (même logique que scripts/simulation_ia.py, + chronométrage de
 # la décision IA par niveau).
 # --------------------------------------------------------------------------- #
@@ -209,7 +277,9 @@ def jouer_un_tour(etat: dict, idx: int, temps_par_niveau: dict,
                   stats_verif_finition: dict = None,
                   appels_solveur_verif: list = None,
                   aucun_coup_expert: list = None,
-                  stats_garde_joker: dict = None) -> tuple[dict, bool, bool]:
+                  stats_garde_joker: dict = None,
+                  trace_ctx: dict = None,
+                  manche_numero: int = 1) -> tuple[dict, bool, bool]:
     """Joue le tour de l'IA à l'index ``idx``.
 
     Chronomètre l'appel à ``jouer_ia`` et l'ajoute à
@@ -258,10 +328,35 @@ def jouer_un_tour(etat: dict, idx: int, temps_par_niveau: dict,
     reçoit ``on_repli``/``on_aucun``/``preferer_simple``/``eval_config``
     (points d'observation du moteur, pas une logique dupliquée) pour que la
     campagne compte les replis et compare les réglages d'évaluation, comme
-    avant #223."""
+    avant #223.
+
+    ``trace_ctx``/``manche_numero`` (issue #226, mesure PURE — lit l'état
+    complet pour ÉCRIRE une trace, ne décide jamais rien) : si ``trace_ctx``
+    n'est pas ``None`` (``--export-trace``), écrit une ligne JSON par tour
+    via ``_ecrire_trace_tour`` (voir ce bloc plus haut)."""
     niveau = etat["joueurs"][idx]["niveau"]
     backup_debut_tour(etat)
     plateau_avant = etat["plateau"]
+
+    joueur_avant = etat["joueurs"][idx]
+    camp_trace = trace_ctx["ordre"][idx] if trace_ctx is not None else None
+    tour_numero_avant = etat["tour_numero"]
+    chevalet_avant = len(joueur_avant["chevalet"])
+    ouvert_avant = joueur_avant["mise_initiale_faite"]
+    taille_pioche_avant = len(etat["pioche"])
+    joker_avant = any(t.get("est_joker") for t in joueur_avant["chevalet"])
+
+    def _issue(etat_final, invalide, tuiles_disparues, action,
+              nb_tuiles_posees=0, points_poses=0):
+        if trace_ctx is not None:
+            joueur_apres = etat_final["joueurs"][idx]
+            _ecrire_trace_tour(
+                trace_ctx, manche_numero, idx, camp_trace, niveau,
+                tour_numero_avant, chevalet_avant, ouvert_avant,
+                taille_pioche_avant, joker_avant, action, nb_tuiles_posees,
+                points_poses, len(joueur_apres["chevalet"]),
+                joueur_apres["mise_initiale_faite"])
+        return etat_final, invalide, tuiles_disparues
 
     def _compter_repli(timeout):
         if timeout:
@@ -290,7 +385,7 @@ def jouer_un_tour(etat: dict, idx: int, temps_par_niveau: dict,
         temps_par_niveau.setdefault(niveau, []).append(time.monotonic() - debut)
         logger.exception("Exception de l'IA %s au tour %d", niveau, etat["tour_numero"])
         annuler_tour(etat)
-        return piocher(etat)["etat"], True, False
+        return _issue(piocher(etat)["etat"], True, False, "pioche")
     temps_par_niveau.setdefault(niveau, []).append(time.monotonic() - debut)
 
     if stats_verif_finition is not None and res_ia.get("verif_finition") is not None:
@@ -325,7 +420,9 @@ def jouer_un_tour(etat: dict, idx: int, temps_par_niveau: dict,
     if action == "jouer":
         res = jouer_tour(etat, res_ia["ids_tuiles"], res_ia["nouveau_plateau"])
         if res["ok"]:
-            return res["etat"], False, False
+            points_poses = res["etat"]["historique"][-1]["points"]
+            return _issue(res["etat"], False, False, "pose",
+                         len(res_ia["ids_tuiles"]), points_poses)
         tuiles_disparues = bool(res.get("tuiles_disparues"))
         if tuiles_disparues:
             logger.error("ANOMALIE : coup refusé (%s) au tour %d car des "
@@ -335,16 +432,16 @@ def jouer_un_tour(etat: dict, idx: int, temps_par_niveau: dict,
             logger.warning("Coup invalide (%s) au tour %d : %s",
                            niveau, etat["tour_numero"], res["erreur"])
         annuler_tour(etat)
-        return piocher(etat)["etat"], True, tuiles_disparues
+        return _issue(piocher(etat)["etat"], True, tuiles_disparues, "pioche")
     if action == "piocher":
-        return piocher(etat)["etat"], False, False
+        return _issue(piocher(etat)["etat"], False, False, "pioche")
     if action == "passer":
-        return passer_tour(etat)["etat"], False, False
+        return _issue(passer_tour(etat)["etat"], False, False, "passe")
 
     logger.warning("Action IA inconnue %r (%s) au tour %d",
                    action, niveau, etat["tour_numero"])
     annuler_tour(etat)
-    return piocher(etat)["etat"], True, False
+    return _issue(piocher(etat)["etat"], True, False, "pioche")
 
 
 # --------------------------------------------------------------------------- #
@@ -358,7 +455,9 @@ def _jouer_une_manche(etat: dict, max_tours: int, temps_par_niveau: dict,
                       stats_verif_finition: dict = None,
                       appels_solveur_verif: list = None,
                       aucun_coup_expert: list = None,
-                      stats_garde_joker: dict = None) -> dict:
+                      stats_garde_joker: dict = None,
+                      trace_ctx: dict = None,
+                      manche_numero: int = 1) -> dict:
     """Joue la manche courante de ``etat`` jusqu'à sa fin naturelle (chevalet
     vidé ou pioche épuisée) ou jusqu'au garde-fou ``max_tours``. Retourne les
     statistiques de CETTE manche ; ``etat`` est muté en place."""
@@ -378,7 +477,7 @@ def _jouer_une_manche(etat: dict, max_tours: int, temps_par_niveau: dict,
             etat, idx, temps_par_niveau, replis_expert, preferer_simple,
             perturbations_expert, eval_configs,
             stats_verif_finition, appels_solveur_verif, aucun_coup_expert,
-            stats_garde_joker)
+            stats_garde_joker, trace_ctx, manche_numero)
         if invalide:
             coups_invalides += 1
         if tuiles_disparues:
@@ -413,7 +512,8 @@ def jouer_match(config_joueurs: list[dict], nb_manches: int, max_tours: int,
                 stats_verif_finition: dict = None,
                 appels_solveur_verif: list = None,
                 aucun_coup_expert: list = None,
-                stats_garde_joker: dict = None) -> dict:
+                stats_garde_joker: dict = None,
+                trace_ctx: dict = None) -> dict:
     """Joue un MATCH complet à 2 joueurs de ``nb_manches`` manches (issue
     #203). Les manches s'enchaînent via ``nouvelle_manche`` (score cumulé
     conservé, nouvelle donne et mise initiale remise à zéro à chaque manche).
@@ -424,7 +524,14 @@ def jouer_match(config_joueurs: list[dict], nb_manches: int, max_tours: int,
     « garder un joker en main » a été CHOISI au moins une fois pendant ce
     match (détecté par la variation de ``stats_garde_joker["choisi"]`` avant/
     après) — permet à ``comparer`` d'enregistrer qui a gagné les parties où la
-    stratégie a réellement changé un coup."""
+    stratégie a réellement changé un coup.
+
+    ``trace_ctx`` (issue #226) : si fourni, chaque tour de chaque manche est
+    tracé (``jouer_un_tour``) et une ligne de résultat est écrite à la fin
+    de chaque manche effectivement jouée (``_ecrire_trace_resultat``)."""
+    camps_trace = tuple(trace_ctx["ordre"]) if trace_ctx is not None else None
+    niveau_camp_trace = ({"A": trace_ctx["niveau_a"], "B": trace_ctx["niveau_b"]}
+                        if trace_ctx is not None else None)
     # graine_ia (#213) : rend reproductible l'affaiblissement des niveaux bridés
     # (tirage d'oubli) — sans elle, l'oubli tire sur l'entropie système et la
     # campagne n'est pas reproductible. Dérivée de la graine de la donne.
@@ -442,7 +549,8 @@ def jouer_match(config_joueurs: list[dict], nb_manches: int, max_tours: int,
                                 replis_expert, preferer_simple,
                                 perturbations_expert, eval_configs,
                                 stats_verif_finition, appels_solveur_verif,
-                                aucun_coup_expert, stats_garde_joker)
+                                aucun_coup_expert, stats_garde_joker,
+                                trace_ctx, numero)
         coups_invalides += res["coups_invalides"]
         coups_tuiles_disparues += res["coups_tuiles_disparues"]
         anomalies_conservation += res["anomalies_conservation"]
@@ -451,6 +559,9 @@ def jouer_match(config_joueurs: list[dict], nb_manches: int, max_tours: int,
             break
         res["numero"] = numero
         manches.append(res)
+        if trace_ctx is not None:
+            _ecrire_trace_resultat(trace_ctx, numero, camps_trace,
+                                   niveau_camp_trace, res)
         if numero < nb_manches:
             etat = nouvelle_manche(etat)
             backup_debut_tour(etat)
@@ -478,7 +589,8 @@ def comparer(niveau_a: str, niveau_b: str, nb_donnes: int, seed: int,
             preferer_simple: bool = True,
             eval_a: str = "off", eval_b: str = "off",
             sans_exact: bool = False,
-            export_resultats: str = None) -> dict:
+            export_resultats: str = None,
+            export_trace: str = None) -> dict:
     """``nb_manches`` (#203) : nombre de manches par match — chaque donne est
     jouée en miroir (places échangées) sur un match complet, le vainqueur du
     match étant le joueur au plus haut score cumulé. Les résultats sont donnés
@@ -505,13 +617,21 @@ def comparer(niveau_a: str, niveau_b: str, nb_donnes: int, seed: int,
     ``export_resultats`` (issue #225, point 5bis) : chemin d'un fichier où
     écrire UNE ligne JSON par match joué (donne, ordre des joueurs, vainqueur,
     scores) — pour la comparaison appariée de deux campagnes identiques (même
-    seed), voir ``scripts/comparer_campagnes_appariees.py``."""
+    seed), voir ``scripts/comparer_campagnes_appariees.py``.
+
+    ``export_trace`` (issue #226) : chemin d'un fichier où écrire une trace
+    BRUTE JSON Lines, une ligne par TOUR de chaque manche + une ligne de
+    résultat par manche — pour l'analyse par phases (prologue/développement/
+    fin), voir ``scripts/analyser_phases.py``. Indépendant d'``export_
+    resultats`` ; mesure pure, ne change jamais le déroulement de la partie."""
     cfg_eval = {"A": evaluation_main.depuis_preset(eval_a, nb_manches),
                 "B": evaluation_main.depuis_preset(eval_b, nb_manches)}
     rng_graines = random.Random(seed)
     graines = [rng_graines.randrange(2**32) for _ in range(nb_donnes)]
     fichier_export = (open(export_resultats, "w", encoding="utf-8")
                       if export_resultats else None)
+    fichier_trace = (open(export_trace, "w", encoding="utf-8")
+                     if export_trace else None)
 
     # Niveau MATCH (issue #203) : victoire par score cumulé, nuls comptés à
     # part ; score cumulé moyen de chaque camp.
@@ -570,6 +690,10 @@ def comparer(niveau_a: str, niveau_b: str, nb_donnes: int, seed: int,
             ]
             # Config d'évaluation alignée sur l'index du joueur (camp camps[k]).
             eval_configs = [cfg_eval[camp] for camp in camps]
+            trace_ctx = ({"fichier": fichier_trace, "donne": i + 1,
+                         "ordre": list(camps), "niveau_a": niveau_a,
+                         "niveau_b": niveau_b}
+                        if fichier_trace else None)
             resultat = jouer_match(config_joueurs, nb_manches, max_tours,
                                    temps_par_niveau, replis_expert,
                                    preferer_simple, perturbations_expert,
@@ -577,7 +701,8 @@ def comparer(niveau_a: str, niveau_b: str, nb_donnes: int, seed: int,
                                    stats_verif_finition=stats_verif_finition,
                                    appels_solveur_verif=appels_solveur_verif,
                                    aucun_coup_expert=aucun_coup_expert,
-                                   stats_garde_joker=stats_garde_joker)
+                                   stats_garde_joker=stats_garde_joker,
+                                   trace_ctx=trace_ctx)
             coups_invalides_total += resultat["coups_invalides"]
             coups_tuiles_disparues_total += resultat["coups_tuiles_disparues"]
             anomalies_conservation_total += resultat["anomalies_conservation"]
@@ -647,6 +772,8 @@ def comparer(niveau_a: str, niveau_b: str, nb_donnes: int, seed: int,
     pile_appels.close()
     if fichier_export:
         fichier_export.close()
+    if fichier_trace:
+        fichier_trace.close()
     return {
         "niveau_a": niveau_a,
         "niveau_b": niveau_b,
@@ -953,6 +1080,14 @@ def main(argv: list[str]) -> int:
                              "--seed) avec "
                              "scripts/comparer_campagnes_appariees.py (#225, "
                              "point 5bis).")
+    parser.add_argument("--export-trace",
+                        help="Écrit une trace BRUTE JSON Lines, une ligne "
+                             "par tour de chaque manche + une ligne de "
+                             "résultat par manche — pour l'analyse par "
+                             "phases avec scripts/analyser_phases.py "
+                             "(#226). Indépendant de --export-resultats ; "
+                             "désactivé par défaut (aucun changement de "
+                             "comportement sans cette option).")
     parser.add_argument("-v", "--verbose", action="store_true",
                         help="Journalise chaque partie jouée.")
     args = parser.parse_args(argv[1:])
@@ -993,6 +1128,8 @@ def main(argv: list[str]) -> int:
     if args.sans_garde_joker:
         print("[#225] « Garder un joker en main » DÉSACTIVÉE (Champion du "
              "Monde).")
+    if args.export_trace:
+        print(f"[#226] Trace brute par tour activée : {args.export_trace}")
 
     debut = time.monotonic()
     with (_verif_finition_desactivee() if args.sans_verif_finition
@@ -1004,7 +1141,8 @@ def main(argv: list[str]) -> int:
                           preferer_simple=not args.sans_preferer_simple,
                           eval_a=args.eval_a, eval_b=args.eval_b,
                           sans_exact=args.sans_exact,
-                          export_resultats=args.export_resultats)
+                          export_resultats=args.export_resultats,
+                          export_trace=args.export_trace)
     duree = time.monotonic() - debut
 
     afficher_rapport(resume)
