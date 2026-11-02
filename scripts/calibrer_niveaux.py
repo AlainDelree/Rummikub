@@ -62,6 +62,9 @@ from rummikub.moteur import niveaux as _niveaux  # noqa: E402
 
 # Réutilisation directe de la logique de match miroir, reproductible (#213).
 from comparer_niveaux_ia import comparer, moyenne  # noqa: E402
+from _verif_solveur_exact import (  # noqa: E402
+    entete_dependances, exiger_solveur_exact_ou_quitter,
+)
 
 logger = logging.getLogger("calibrer_niveaux")
 
@@ -181,6 +184,8 @@ def balayer(niveau: str, perturbations: list[int | None], oublis: list[float],
 def afficher(niveau: str, resultats: list[dict], cible: float | None,
              budget_solveur: float, duree: float) -> None:
     print("=" * 72)
+    for ligne in entete_dependances():
+        print(ligne)
     print(f"CALIBRAGE DU NIVEAU « {niveau} » (issue #216)")
     print("Critère : tuiles restantes en main quand le niveau PERD "
           "(plus bas = plus fort).")
@@ -287,6 +292,14 @@ def main(argv: list[str]) -> int:
 
     if args.donnes < 1:
         parser.error("--donnes doit être au moins 1")
+
+    # Échec franc sans solveur exact (issue #224, suite de #223) : ``comparer``
+    # fait jouer le niveau calibré par le MÊME chemin de production
+    # (``jouer_niveau_bride``), qui s'appuie sur le solveur exact dès que
+    # ``perturbation_max`` n'est pas 0 (tous les niveaux sauf Débutant) — sans
+    # option ``--sans-exact``. Voir l'incident documenté dans
+    # ``_verif_solveur_exact.py``.
+    exiger_solveur_exact_ou_quitter()
 
     # Budget du solveur exact pour TOUTE la campagne (accélère le balayage).
     _ia.BUDGET_TEMPS_EXPERT = args.budget_solveur

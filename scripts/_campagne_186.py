@@ -15,6 +15,7 @@ if str(SRC) not in sys.path:
 sys.path.insert(0, str(RACINE / "scripts"))
 
 from rummikub.moteur import ia as ia_mod  # noqa: E402
+from _verif_solveur_exact import exiger_solveur_exact_ou_quitter  # noqa: E402
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--donnes", type=int, default=60)
@@ -22,6 +23,11 @@ parser.add_argument("--seed", type=int, default=0)
 parser.add_argument("--budget-expert", type=float, default=0.15)
 parser.add_argument("--max-tours", type=int, default=300)
 args = parser.parse_args()
+
+# Échec franc sans solveur exact (issue #224, suite de #223) : cette campagne
+# fait jouer Avancé contre Expert, sans option --sans-exact. Voir l'incident
+# documenté dans _verif_solveur_exact.py.
+exiger_solveur_exact_ou_quitter()
 
 ia_mod.BUDGET_TEMPS_EXPERT = args.budget_expert
 

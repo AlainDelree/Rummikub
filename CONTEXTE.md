@@ -2377,6 +2377,39 @@ une au fur et à mesure que de futures issues les testent/implémentent.
   « aucun coup possible » (le modèle exact PROUVE qu'il n'y a rien à jouer)
   est compté séparément, PAS comme un repli.
 
+  **#224 étend ce garde-fou à TOUS les scripts qui font jouer l'IA** (pas
+  seulement les trois ci-dessus) : `scripts/simulation_ia.py`,
+  `scripts/profil_joueur.py`, `scripts/calibrer_niveaux.py`,
+  `scripts/verifier_simplicite_expert.py`,
+  `scripts/generer_corpus_positions_222.py`, `scripts/match_solveurs.py` et
+  `scripts/_campagne_186.py` refusent désormais, eux aussi, de démarrer sans
+  highspy/numpy (même message, même code de sortie non nul ; aucun d'eux
+  n'offre `--sans-exact`, donc toujours exigé). `tests/
+  test_garde_fou_scripts_tous.py` parcourt `scripts/*.py`, repère par
+  recherche de texte les scripts qui font jouer l'IA (appel à `jouer_ia(`,
+  `jouer_niveau_bride(`, `jouer_niveau_expert(`, `creer_partie(`, ou import de
+  `comparer_niveaux_ia`) et échoue si l'un d'eux n'appelle pas le garde-fou et
+  ne figure pas dans sa liste d'exceptions justifiées — pour qu'un futur
+  script de mesure ne puisse plus être oublié. Scripts HORS de ce périmètre
+  (ne font PAS jouer l'IA, donc non concernés) : les scripts d'analyse de
+  journaux déjà joués (`analyser_coups_rates.py`, `analyser_partie.py`,
+  `bilan_parties.py`, `verifier_cas_reference.py`), les comparaisons de
+  solveur qui ne passent jamais par un niveau d'IA
+  (`comparer_solveur_exact.py` contre la bibliothèque `rummikub-solver`,
+  `verifier_solveur_exhaustif.py` contre une recherche exhaustive — aucun des
+  deux ne dépend de highspy/numpy), la mesure directe du solveur sur un
+  corpus figé (`mesurer_volume_solveur_222.py`, qui rapporte déjà
+  honnêtement un statut `indisponible` par position et inclut l'en-tête
+  machine/dépendances via `_rapport_duels.entete_machine`), et les modules
+  utilitaires internes (`_corpus_positions_222.py`, `_limite_temps_ferme.py`,
+  `_mesure_volume_222.py`, `_rapport_duels.py`, `solveur_exact.py`
+  l'adaptateur de bibliothèque). Pour vérifier l'interpréteur courant avant
+  toute campagne :
+
+  ```
+  python3 -c "import highspy, numpy; print('OK', highspy, numpy)"
+  ```
+
   **Deux idées d'Alain, consignées, non implémentées :**
   - **(a) Calcul pendant le tour de l'humain** : l'IA pourrait réfléchir
     pendant que l'humain joue plutôt qu'à son propre tour seulement. Distinguo

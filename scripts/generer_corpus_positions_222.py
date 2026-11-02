@@ -54,6 +54,9 @@ from simulation_ia import construire_joueurs, jouer_un_tour  # noqa: E402
 from _corpus_positions_222 import (  # noqa: E402
     position_depuis_etat, nb_tuiles_plateau,
 )
+from _verif_solveur_exact import (  # noqa: E402
+    entete_dependances, exiger_solveur_exact_ou_quitter,
+)
 
 # Seuil de tuiles posées à partir duquel un plateau est considéré « chargé »
 # (tâche 3 de l'issue #222 : le corpus doit en couvrir explicitement).
@@ -205,6 +208,13 @@ def main(argv: list[str]) -> int:
     parser.add_argument("-v", "--verbose", action="store_true")
     args = parser.parse_args(argv[1:])
 
+    # Échec franc sans solveur exact (issue #224, suite de #223) : les
+    # parties génératrices font jouer tous les niveaux d'IA (dont Avancé/
+    # Expert/Champion du Monde, selon le décalage de ``_PLANS``), sans option
+    # ``--sans-exact``. Voir l'incident documenté dans
+    # ``_verif_solveur_exact.py``.
+    exiger_solveur_exact_ou_quitter()
+
     print(f"Génération du corpus (cible={args.cible} positions)...")
     debut = time.monotonic()
     corpus = generer(args.cible, args.plafond_partie, args.budget_ia,
@@ -217,6 +227,7 @@ def main(argv: list[str]) -> int:
         "issue": 222,
         "description": "Corpus de positions réelles de tour d'IA pour la "
                        "mesure de limites de volume de calcul du solveur.",
+        "dependances_generation": entete_dependances(),
         "nb_positions": len(corpus),
         "positions": corpus,
     }

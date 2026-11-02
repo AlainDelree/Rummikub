@@ -80,6 +80,9 @@ from rummikub.moteur import solveur_exact  # noqa: E402
 
 # Réutilisation des helpers de formatage/CI (#213).
 from comparer_niveaux_ia import intervalle_confiance_95, moyenne  # noqa: E402
+from _verif_solveur_exact import (  # noqa: E402
+    entete_dependances, exiger_solveur_exact_ou_quitter,
+)
 
 logger = logging.getLogger("profil_joueur")
 
@@ -525,6 +528,14 @@ def main(argv: list[str]) -> int:
     if not niveaux and not args.journaux:
         parser.error("Fournir au moins --niveau et/ou --journaux.")
 
+    # Échec franc sans solveur exact (issue #224, suite de #223) : le chemin
+    # NIVEAU fait jouer Avancé/Expert/Champion du Monde, et le chemin HUMAIN
+    # juge chaque décision avec le solveur exact (``solveur_exact.
+    # resoudre_coup_exact``) — les deux chemins en dépendent, sans option
+    # ``--sans-exact``. Voir l'incident documenté dans
+    # ``_verif_solveur_exact.py``.
+    exiger_solveur_exact_ou_quitter()
+
     debut = time.monotonic()
     profils: list[dict] = []
 
@@ -545,6 +556,8 @@ def main(argv: list[str]) -> int:
                                        args.max_tours, args.budget_juge))
 
     if profils:
+        for ligne in entete_dependances():
+            print(ligne)
         afficher_profils(profils)
     print(f"Temps total : {time.monotonic() - debut:.1f}s.")
     return 0

@@ -37,8 +37,10 @@ from pathlib import Path
 
 RACINE = Path(__file__).resolve().parent.parent
 SRC = RACINE / "src"
-if SRC.is_dir() and str(SRC) not in sys.path:
-    sys.path.insert(0, str(SRC))
+SCRIPTS = RACINE / "scripts"
+for _p in (SRC, SCRIPTS):
+    if _p.is_dir() and str(_p) not in sys.path:
+        sys.path.insert(0, str(_p))
 
 from rummikub.config import NIVEAUX  # noqa: E402
 from rummikub.moteur.ia import jouer_ia  # noqa: E402
@@ -50,6 +52,9 @@ from rummikub.moteur.partie import (  # noqa: E402
     nouvelle_manche,
     passer_tour,
     piocher,
+)
+from _verif_solveur_exact import (  # noqa: E402
+    entete_dependances, exiger_solveur_exact_ou_quitter,
 )
 
 logger = logging.getLogger("simulation_ia")
@@ -271,6 +276,12 @@ def main(argv: list[str]) -> int:
         parser.error(str(e))
         return 2
 
+    # Échec franc sans solveur exact (issue #224, suite de #223) : ce script
+    # fait jouer tous les niveaux d'IA, y compris Avancé/Expert/Champion du
+    # Monde, sans option ``--sans-exact`` — voir l'incident documenté dans
+    # ``_verif_solveur_exact.py``.
+    exiger_solveur_exact_ou_quitter()
+
     logging.basicConfig(
         level=logging.DEBUG if args.verbose else logging.INFO,
         format="%(asctime)s %(levelname)-8s %(message)s",
@@ -280,6 +291,9 @@ def main(argv: list[str]) -> int:
     resume = simuler(args.joueurs, niveaux, args.manches, args.max_tours,
                      args.seed)
 
+    print("-" * 60)
+    for ligne in entete_dependances():
+        print(ligne)
     print("-" * 60)
     print(f"RÉSUMÉ : 1 match de {resume['manches_jouees']}/"
           f"{resume['manches_demandees']} manche(s) jouée(s), "

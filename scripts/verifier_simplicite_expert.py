@@ -98,6 +98,9 @@ from rummikub.moteur.partie import (  # noqa: E402
     annuler_tour, backup_debut_tour, creer_partie, jouer_tour, passer_tour,
     piocher,
 )
+from _verif_solveur_exact import (  # noqa: E402
+    entete_dependances, exiger_solveur_exact_ou_quitter,
+)
 
 logger = logging.getLogger("verifier_simplicite_expert")
 
@@ -513,6 +516,8 @@ def _pct(n, d):
 
 def afficher_resume(resume: dict) -> None:
     print("=" * 78)
+    for ligne in entete_dependances():
+        print(ligne)
     print("VÉRIFICATION DE LA SIMPLICITÉ DES COUPS D'EXPERT (issue #215, suite #199)")
     print("-" * 78)
     print(f"Poses d'Expert analysées            : {resume['total']}")
@@ -736,6 +741,8 @@ def ecrire_fichier_exemples(enregistrements: list, chemin: Path, resume: dict,
         "EXEMPLES LISIBLES — EXPERT DÉCOMPOSE-T-IL LE PLATEAU INUTILEMENT ?",
         "(issue #215, suite de #199)",
         "",
+        *entete_dependances(),
+        "",
         "Comment lire ce fichier : chaque exemple est une situation complète. On",
         "voit TOUT le tapis et TOUTE la main avant le coup, ce qu'Expert a fait,",
         "et TOUT le tapis après. S'il existait un coup aussi payant mais plus",
@@ -822,9 +829,14 @@ def main(argv: list) -> int:
         level=logging.INFO if args.verbose else logging.WARNING,
         format="%(asctime)s %(levelname)-8s %(message)s", datefmt="%H:%M:%S")
 
-    if not solveur_exact.DISPONIBLE:
-        print("ATTENTION : highspy/numpy absent — le juge utilise la recherche "
-              "arborescente (moteur/solveur), approximation de la perturbation.\n")
+    # Échec franc sans solveur exact (issue #224, suite de #223) : le juge
+    # indépendant de ce script PRÉFÈRE le modèle exact (``juge_optimum``) et
+    # ne se replie sur la recherche arborescente qu'au cas par cas (budget
+    # épuisé pour CE coup) — mais sans highspy/numpy du tout, la mesure de
+    # simplicité ne serait plus qu'une approximation permanente, non signalée
+    # comme telle dans le résumé. Sans option ``--sans-exact``. Voir
+    # l'incident documenté dans ``_verif_solveur_exact.py``.
+    exiger_solveur_exact_ou_quitter()
 
     sortie = Path(args.sortie) if args.sortie \
         else Path(tempfile.gettempdir()) / "rummikub_simplicite"

@@ -93,6 +93,9 @@ from rummikub.moteur.partie import (  # noqa: E402
 )
 from rummikub.moteur.ia import jouer_niveau_expert  # noqa: E402
 from rummikub.moteur import solveur_exact as solveur_maison  # noqa: E402
+from _verif_solveur_exact import (  # noqa: E402
+    entete_dependances, exiger_solveur_exact_ou_quitter,
+)
 
 import solveur_exact as solveur_biblio  # noqa: E402  (scripts/solveur_exact.py)
 
@@ -551,6 +554,8 @@ def formater_rapport(resultat: dict, agr: dict) -> str:
     w("MATCH — notre solveur d'Expert  vs  bibliothèque rummikub-solver")
     w("(issue #212, suite de #206)")
     w("=" * 72)
+    for ligne in entete_dependances():
+        w(ligne)
     w("")
     w(f"Donnes demandées   : {resultat['donnes_demandees']}")
     w(f"Donnes jouées      : {resultat['donnes_jouees']} "
@@ -710,6 +715,15 @@ def main(argv: list[str]) -> int:
     parser.add_argument("--silencieux", action="store_true",
                         help="N'affiche pas le rapport sur stdout.")
     args = parser.parse_args(argv[1:])
+
+    # Échec franc sans solveur exact (issue #224, suite de #223) : « notre
+    # solveur » est ici le niveau Expert livré (``jouer_niveau_expert``), qui
+    # suppose le modèle exact maison (highspy/numpy) — sans option
+    # ``--sans-exact``. Voir l'incident documenté dans
+    # ``_verif_solveur_exact.py``. Distinct du contrôle ``solveur_biblio.
+    # DISPONIBLE`` ci-dessous, qui porte sur la bibliothèque EXTERNE
+    # ``rummikub-solver`` (dépendance de développement, #212).
+    exiger_solveur_exact_ou_quitter()
 
     if not solveur_biblio.DISPONIBLE:
         print(solveur_biblio.MESSAGE_INSTALLATION, file=sys.stderr)
