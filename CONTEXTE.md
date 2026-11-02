@@ -2681,6 +2681,128 @@ une au fur et à mesure que de futures issues les testent/implémentent.
   trois phases à la fois (évaluation de la main/estimation de qui finira
   le premier, quelle que soit la phase en cours).
 
+### Hypothèses de stratégie issues de la recherche web (nov. 2026)
+
+En novembre 2026, Alain et Claude (conversation de conception) ont cherché
+sur internet ce que les joueurs et les éditeurs de Rummikub disent de la
+stratégie, pour cesser de choisir les prochaines stratégies de l'IA à
+l'intuition. La recherche a couvert l'anglais, le néerlandais, l'allemand,
+le français, l'hébreu, le japonais, l'espagnol et le portugais. Les pays
+les plus performants en compétition sont les Pays-Bas (quatre titres
+mondiaux), le Japon (trois), le Brésil et l'Égypte (un chacun), Israël
+(pays d'origine du jeu) n'en ayant gagné aucun (chiffres d'un article de
+2018) : le néerlandais était donc la langue la plus utile, et c'est elle
+qui a donné les meilleures sources. L'hébreu, le japonais et le portugais
+n'ont presque rien donné.
+
+**1. Méthode et règle de comptage**
+- Les sites qui recopient le règlement officiel (par exemple
+  `rulespal.com`, `scribd.com`, `rummikub.yolasite.com`) ne comptent que
+  pour UNE source avec lui.
+- Fiabilité : « solide » = règlement officiel, ou joueur de très haut
+  niveau cité nommément ; « faible » = blog, site de conseils sans auteur,
+  agrégateur, extrait sans source claire.
+- Des sites générés automatiquement (par exemple `pop.killingthyme.net`,
+  `db1.seeclickfix.com`) ont été écartés : ils contiennent des erreurs de
+  règles (par exemple de prétendus points bonus par groupe).
+- Littérature scientifique : le problème d'un SEUL tour (poser le maximum
+  avec sa main et le tapis) est étudié et résolu (programmation linéaire
+  en nombres entiers : den Hertog et Hulshof, The Computer Journal 49(6),
+  2006 ; algorithme en temps polynomial : van Rijn et al., « The
+  Complexity of Rummikub Problems », arXiv 1604.07553). Aucun travail
+  publié n'a été trouvé sur la stratégie multi-tours de la partie
+  complète.
+
+**2. Tableau des hypothèses**
+- **H1. Se retenir au début : ne pas tout poser, laisser les autres
+  ouvrir la table.** 3 solides + 1 faible. Règlement officiel
+  (Lemada/Hertzano) ; Matthijs Delvers, ex-champion du monde néerlandais
+  (« ne pas poser chaque tuile tout de suite ») ; Rixt van Perlo,
+  championne des Pays-Bas (garde longtemps toutes ses tuiles puis les pose
+  d'un coup, ce qu'elle dit être habituel). Une page d'apprentissage en
+  ligne (oboe.com), vague et faible, déconseille de se précipiter pour
+  l'ouverture.
+- **H1 inverse. Poser le plus tôt possible.** 2 faibles : un blog
+  (mechanicsofmagic.com : cette stratégie semble préférée parce que le
+  tapis change) et un article japonais (roomie.jp) qui dit que réussir
+  tôt les 30 points pèse beaucoup sur le résultat (voir H8).
+- **H2. Garder la 4e tuile d'un groupe ou d'une suite et n'en poser que
+  trois pour avoir un coup au tour suivant au lieu de piocher.** 1 source
+  (règlement officiel, éditions Pressman et Piatnik). Variante de
+  l'édition Jumbo : ne poser qu'une tuile par tour pour ne pas avoir à
+  piocher aux tours suivants.
+- **H3. Garder le joker, idéalement jusqu'au dernier tour.** 3 sources +
+  1 faible. Règlement officiel (avec le risque de 30 points) ; Delvers
+  (une fois posé, le joker sert aussi aux adversaires, donc attendre si
+  possible jusqu'au dernier tour) ; regles-du-jeu.net (« garder un joker
+  pour le coup final est une tactique redoutable »), dont une autre page
+  du MÊME site conseille au contraire de s'en débarrasser vite
+  (contradiction interne) ; faible : tecnobits.com (réserver les jokers
+  pour vider un gros groupe ou bloquer l'adversaire).
+- **H4. Retenir les petits chiffres (par exemple les 3) pour empêcher les
+  adversaires de former 1-2-3.** 1 source, très bonne : Delvers.
+- **H5. Se demander à chaque coup si on aide l'adversaire.** 1 source :
+  Delvers.
+- **H6. Mémoire du tapis et de son chevalet, estimer ce que font les
+  autres, bluffer un peu.** 1 source : Rixt van Perlo.
+- **H7. Garder un équilibre : ne pas se débarrasser trop vite de toutes
+  ses tuiles hautes ou basses.** 1 faible : tecnobits.com.
+- **H8. Ouvrir vite (les 30 points tôt pèsent beaucoup).** 2 faibles :
+  roomie.jp et un extrait d'agrégateur sans source claire.
+
+Tensions à noter : H1 (se retenir) s'oppose à H8 (ouvrir vite) et à
+l'hypothèse inverse de H1 ; regles-du-jeu.net se contredit lui-même sur
+H3. Ces conseils sont des habitudes de joueurs humains, jamais mesurées.
+
+**3. Liste des sources (avec adresses)**
+- Règlement officiel (anglais) :
+  `https://rummikub.com/wp-content/uploads/2019/12/2600-English.pdf` ;
+  recopié par `https://rulespal.com/rummikub/rulebook` et
+  `https://rulespal.com/rummikub-six-player/rulebook`.
+- Manuel de l'édition Jumbo :
+  `https://www.libble.eu/jumbo-rummikub/online-manual-365914/` ; version
+  allemande de Piatnik :
+  `https://www.piatnik.com/uploads/media/default/0001/03/4fcb17146c9070cfcdab35537f9134a3043281e3.pdf`.
+- Matthijs Delvers, ex-champion du monde (Rodi, Haarlem, 10 septembre
+  2026) :
+  `https://www.rodi.nl/haarlem/nieuws/505808/rummikub-fans-opgelet-inschrijving-voor-het-nk-rummikub-in-haarlem-geopend`.
+- Rixt van Perlo, championne des Pays-Bas (Vice Pays-Bas, 2009) :
+  `https://www.vice.com/nl/article/rummikub/`.
+- regles-du-jeu.net : `https://www.regles-du-jeu.net/?p=9594` et
+  `https://www.regles-du-jeu.net/rummikub-peut-on-commencer-ou-finir-avec-un-joker/`.
+- Blog : `https://mechanicsofmagic.com/?p=1749` ; Japonais :
+  `https://www.roomie.jp/2021/11/772619/` ; Espagnol (faible) :
+  `https://tecnobits.com/como-jugar-rummikub/` ; page d'apprentissage
+  (faible) : `https://oboe.com/learn/mastering-rummikub-strategy-1t9ka02`.
+- Résultats des championnats du monde (2018) :
+  `https://www.pressreader.com/israel/jerusalem-post/20181025/281668255962433`.
+
+**4. Correspondance avec l'arbre de stratégies et le découpage en phases**
+- H1 et H2 : phase « développement » ; piste « réserve d'un coup » de
+  l'arbre ; elles visent à éviter les pioches (58 % des tours simulés
+  sont des pioches).
+- H3 : stratégie du joker en main (#225), dont la rareté a été mesurée
+  (le troisième candidat n'a jamais été choisi sur 600 matchs entre
+  Expert et Champion du Monde).
+- H4 : piste « Rétention » ; hypothèse propre à Claude, non issue d'une
+  source : garder de petits chiffres coûte peu de points si l'on perd et
+  pourrait bloquer l'adversaire.
+- H8 et H1 pour l'ouverture : phase « prologue » ; piste « Ouverture ».
+- H6 : brique « Inconnues » (#219).
+
+**5. Protocole d'expérience prévu**
+Les traces de #226 (Expert contre Champion du Monde, Avancé contre
+Intermédiaire) diront d'abord dans quelle phase l'écart entre gagnant et
+perdant se creuse. Ensuite, une variante de Champion du Monde qui se
+retient au début (H1 et H2), puis une autre qui garde les petits chiffres
+(H4), chacune derrière un réglage propre à Champion du Monde, comparée à
+Expert en duels appariés (même graine, mêmes donnes). Méthode : ajouter
+les stratégies une à une (chaque version comparée à la précédente), puis,
+à la fin, comparer le Champion complet à lui-même privé d'une stratégie à
+la fois. On juge d'abord au mécanisme (combien de fois la stratégie change
+un coup, et le résultat des seules parties qui divergent), jamais au seul
+taux de victoire global.
+
 ## 14. Solveur exact de vérification — bibliothèque `rummikub-solver` (licence MIT, issue #204, suite de #201)
 
 Notre solveur d'Expert (`moteur/solveur.py`) est à la fois le joueur **et** le
