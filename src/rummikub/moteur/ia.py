@@ -837,7 +837,7 @@ def _coup_recherche(etat, idx, budget_temps, preferer_simple):
 
 
 def _coup_exact(etat, idx, budget_temps, preferer_simple, eval_config=None,
-                max_tuiles_posees=None):
+                max_tuiles_posees=None, valeur_max_petits=None):
     """Modèle exact (#206). Ne lève JAMAIS. Retourne ``(statut, charge)`` :
 
     * ``("coup", coup)`` — un coup optimal a été trouvé ;
@@ -851,12 +851,16 @@ def _coup_exact(etat, idx, budget_temps, preferer_simple, eval_config=None,
       vaut ``True`` pour un dépassement de budget, ``False`` sinon.
 
     ``max_tuiles_posees`` (issue #229, ``retenue_debut``) : relais vers
+    ``resoudre_exact``, ``None`` (défaut) → comportement inchangé.
+
+    ``valeur_max_petits`` (issue #230, ``petits_chiffres``) : relais vers
     ``resoudre_exact``, ``None`` (défaut) → comportement inchangé."""
     try:
         res = resoudre_exact(etat, idx, budget_temps=budget_temps,
                              preferer_simple=preferer_simple,
                              eval_config=eval_config,
-                             max_tuiles_posees=max_tuiles_posees)
+                             max_tuiles_posees=max_tuiles_posees,
+                             valeur_max_petits=valeur_max_petits)
     except BudgetExactDepasse:
         return "echec", True
     except SolveurExactIndisponible:
@@ -894,6 +898,10 @@ SOLVEUR_RESERVE_TUILE = "reserve-tuile"
 # meilleur coup plafonné en nombre de tuiles posées (voir
 # _appliquer_retenue_debut).
 SOLVEUR_RETENUE_DEBUT = "retenue-debut"
+# « Petits chiffres » (issue #230, hypothèse H4, Champion du Monde seul) :
+# meilleur coup qui GARDE une petite tuile que le coup du solveur aurait
+# posée (variante tolérante, voir _coup_qui_garde_une_petite_tuile).
+SOLVEUR_PETITS_CHIFFRES = "petits-chiffres"
 
 LIBELLES_SOLVEUR = {
     SOLVEUR_EXACT: "modèle exact",
@@ -903,6 +911,7 @@ LIBELLES_SOLVEUR = {
     SOLVEUR_SANS_JOKER: "garde un joker en main",
     SOLVEUR_RESERVE_TUILE: "réserve d'une tuile",
     SOLVEUR_RETENUE_DEBUT: "retenue au début",
+    SOLVEUR_PETITS_CHIFFRES: "garde une petite tuile",
 }
 
 
@@ -916,7 +925,8 @@ def _marquer_solveur(coup, code):
 
 def jouer_niveau_expert(etat, idx, budget_temps=None, on_repli=None,
                         preferer_simple=None, utiliser_exact=None,
-                        eval_config=None, on_aucun=None):
+                        eval_config=None, on_aucun=None,
+                        valeur_max_petits=None):
     """Niveau Expert : joue le coup qui pose le plus grand nombre de tuiles du
     chevalet, en conservant toutes les tuiles du plateau (#206).
 
@@ -945,7 +955,13 @@ def jouer_niveau_expert(etat, idx, budget_temps=None, on_repli=None,
     ``utiliser_exact`` (``None`` → lit ``UTILISER_SOLVEUR_EXACT``) à ``False``
     rejoue l'ancien comportement (recherche seule) pour la comparaison
     « avant / après ». ``preferer_simple`` et ``budget_temps`` sont transmis
-    aux deux moteurs (lus à l'appel pour rester ajustables en simulation)."""
+    aux deux moteurs (lus à l'appel pour rester ajustables en simulation).
+
+    ``valeur_max_petits`` (issue #230, ``petits_chiffres``, Champion du
+    Monde seul) : relais vers le modèle exact (voir ``solveur_exact.
+    resoudre_exact``) — ``None`` (défaut) → comportement inchangé pour tout
+    appelant existant, y compris le repli sur la recherche arborescente
+    (qui ne connaît pas ce critère)."""
     if budget_temps is None:
         budget_temps = BUDGET_TEMPS_EXPERT
     if preferer_simple is None:
@@ -957,7 +973,8 @@ def jouer_niveau_expert(etat, idx, budget_temps=None, on_repli=None,
 
     if utiliser_exact:
         statut, charge = _coup_exact(etat, idx, budget_temps, preferer_simple,
-                                     eval_config)
+                                     eval_config,
+                                     valeur_max_petits=valeur_max_petits)
         if statut == "coup":
             return _marquer_solveur(charge, SOLVEUR_EXACT)
         if statut == "aucun":
@@ -1022,7 +1039,7 @@ def _coup_sans_rearrangement(etat, idx):
 
 def _coup_selon_perturbation(etat, idx, perturbation_max, budget_temps, on_repli,
                              preferer_simple=None, eval_config=None,
-                             on_aucun=None):
+                             on_aucun=None, valeur_max_petits=None):
     """Meilleur coup « vu » compte tenu de la perturbation autorisée.
 
     ``perturbation_max is None`` → solveur complet (Avancé/Expert/Champion).
@@ -1036,13 +1053,16 @@ def _coup_selon_perturbation(etat, idx, perturbation_max, budget_temps, on_repli
     ``jouer_niveau_expert``, ajoutés par #223 pour que les scripts de mesure
     puissent faire jouer Expert/Champion du Monde par CE chemin
     (``jouer_niveau_bride``) plutôt que d'appeler ``jouer_niveau_expert``
-    directement en dupliquant la logique de vérification de finition."""
+    directement en dupliquant la logique de vérification de finition.
+    ``valeur_max_petits`` (issue #230, ``petits_chiffres``) : même relais,
+    ``None`` par défaut."""
     if perturbation_max is None:
         return jouer_niveau_expert(etat, idx, budget_temps=budget_temps,
                                    on_repli=on_repli,
                                    preferer_simple=preferer_simple,
                                    eval_config=eval_config,
-                                   on_aucun=on_aucun)
+                                   on_aucun=on_aucun,
+                                   valeur_max_petits=valeur_max_petits)
 
     sans_rearr = _coup_sans_rearrangement(etat, idx)
     if perturbation_max <= 0:
@@ -1304,6 +1324,121 @@ def _appliquer_retenue_debut(etat, idx, coup, taille_main, budget_temps):
     return _marquer_solveur(charge, SOLVEUR_RETENUE_DEBUT), info
 
 
+# --------------------------------------------------------------------------- #
+# « Petits chiffres » (issue #230, hypothèse H4, Champion du Monde seul)
+# --------------------------------------------------------------------------- #
+
+def _ids_petites_tuiles(ids, chevalet):
+    """Sous-ensemble de ``ids`` dont la tuile — retrouvée dans ``chevalet``
+    — est RÉELLE (jamais un joker) et de valeur 1 à ``niveaux.
+    VALEUR_MAX_PETITS``, dans l'ORDRE de ``ids``."""
+    par_id = {t["id"]: t for t in chevalet}
+    petites = []
+    for id_t in ids:
+        t = par_id.get(id_t)
+        if (t is not None and not t.get("est_joker")
+                and (t.get("valeur") or 0) <= _niveaux.VALEUR_MAX_PETITS):
+            petites.append(id_t)
+    return petites
+
+
+def _coup_qui_garde_une_petite_tuile(etat, idx, ids_petites, deadline):
+    """Même mécanisme que ``_coup_qui_garde_une_tuile`` (#229), restreint aux
+    PETITES tuiles posées par le coup du solveur (``ids_petites``, voir
+    ``_ids_petites_tuiles``) : premier coup valide obtenu en retirant CETTE
+    petite tuile du chevalet avant de résoudre à nouveau (réapplique aussi
+    le critère de départage ``petits_chiffres`` sur cette nouvelle
+    résolution, pour rester cohérent avec la stratégie).
+
+    Retourne ``(coup, id_tuile_gardee)`` marqué ``SOLVEUR_PETITS_CHIFFRES``,
+    ou ``(None, None)`` si budget insuffisant ou si aucune petite tuile ne
+    convient."""
+    joueur = etat["joueurs"][idx]
+    chevalet = joueur["chevalet"]
+    for id_tuile in ids_petites:
+        restant = deadline - time.monotonic()
+        if restant <= 0:
+            return None, None
+        idx_t = next((i for i, t in enumerate(chevalet) if t["id"] == id_tuile),
+                     None)
+        if idx_t is None:
+            continue
+        chevalet2 = chevalet[:idx_t] + chevalet[idx_t + 1:]
+        joueur2 = dict(joueur)
+        joueur2["chevalet"] = chevalet2
+        joueurs2 = list(etat["joueurs"])
+        joueurs2[idx] = joueur2
+        etat2 = dict(etat)
+        etat2["joueurs"] = joueurs2
+        statut, charge = _coup_exact(
+            etat2, idx, restant, PREFERER_SIMPLICITE, EVAL_MAIN_DEFAUT,
+            valeur_max_petits=_niveaux.VALEUR_MAX_PETITS)
+        if statut != "coup" or not charge.get("ids_tuiles"):
+            continue
+        return _marquer_solveur(charge, SOLVEUR_PETITS_CHIFFRES), id_tuile
+    return None, None
+
+
+def _appliquer_petits_chiffres(etat, idx, coup, taille_main, deadline):
+    """Stratégie ``petits_chiffres`` (#230, hypothèse H4, Champion du Monde
+    seul), variante tolérante (point 3 de l'issue) : au-delà du départage à
+    nombre de tuiles posées égal (déjà intégré au modèle exact, voir
+    ``jouer_niveau_bride``), essaie de jouer un coup qui GARDE au moins une
+    petite tuile que ``coup`` aurait posée, MÊME s'il pose moins de tuiles
+    — dans la limite de ``niveaux.ECART_TUILES_PETITS`` (``0`` par défaut :
+    variante désactivée, ``coup`` toujours inchangé).
+
+    Joué à la place de ``coup`` seulement si : (a) le candidat pose au
+    moins une tuile ; (b) il pose au plus ``niveaux.ECART_TUILES_PETITS``
+    tuiles de moins que ``coup`` ; (c) il pose STRICTEMENT moins de petites
+    tuiles que ``coup`` (sinon rien n'est gagné à le préférer) ; (d) le
+    chevalet après le coup reste strictement supérieur à ``niveaux.
+    SEUIL_FIN_PARTIE_VERIF_FINITION`` (ne gêne pas la fin de partie, zone
+    déjà couverte par ``verif_finition``/``garde_joker``).
+
+    Retourne ``(coup, info)`` — ``coup`` inchangé si la stratégie n'a pas
+    pu s'appliquer ; ``info`` un dict de compteurs (point 5 de l'issue) :
+    ``{"declenchee": bool, "candidat_existe": bool, "choisi": bool,
+    "nb_petites_posees_avant": int, "nb_petites_posees_apres": int}``."""
+    ids_poses = list(coup.get("ids_tuiles") or [])
+    chevalet = etat["joueurs"][idx]["chevalet"]
+    ids_petites = _ids_petites_tuiles(ids_poses, chevalet)
+    info = {"declenchee": True, "candidat_existe": False, "choisi": False,
+           "nb_petites_posees_avant": len(ids_petites),
+           "nb_petites_posees_apres": len(ids_petites)}
+    if _niveaux.ECART_TUILES_PETITS <= 0 or not ids_petites:
+        return coup, info
+    restant = deadline - time.monotonic()
+    if restant <= 0:
+        return coup, info
+
+    candidat, _id_tuile = _coup_qui_garde_une_petite_tuile(
+        etat, idx, ids_petites, deadline)
+    if candidat is None:
+        return coup, info
+
+    ids_candidat = candidat.get("ids_tuiles") or []
+    nb_candidat = len(ids_candidat)
+    if nb_candidat < 1:                                       # condition (a)
+        return coup, info
+    ecart = len(ids_poses) - nb_candidat
+    if ecart > _niveaux.ECART_TUILES_PETITS:                  # condition (b)
+        return coup, info
+
+    ids_petites_candidat = _ids_petites_tuiles(ids_candidat, chevalet)
+    info["candidat_existe"] = True
+    if len(ids_petites_candidat) >= len(ids_petites):          # condition (c)
+        return coup, info
+
+    chevalet_apres = taille_main - nb_candidat
+    if chevalet_apres <= _niveaux.SEUIL_FIN_PARTIE_VERIF_FINITION:  # (d)
+        return coup, info
+
+    info["choisi"] = True
+    info["nb_petites_posees_apres"] = len(ids_petites_candidat)
+    return candidat, info
+
+
 def _candidats_finition(etat, idx, coup_solveur, budget_temps=None,
                         garder_joker=False):
     """Coups candidats pour la vérification de finition (#221, point 2 ;
@@ -1432,17 +1567,32 @@ def jouer_niveau_bride(etat, idx, nom_niveau, budget_temps=None, rng=None,
     de production que le jeu, sans dupliquer la logique de vérification de
     finition ci-dessous avec sa propre échéance. ``on_aucun`` : voir
     ``jouer_niveau_expert`` — cas légitime (aucun coup posable, prouvé par le
-    modèle exact), distinct d'un repli."""
+    modèle exact), distinct d'un repli.
+
+    ``petits_chiffres`` (#230, hypothèse H4, Champion du Monde seul) :
+    limité, comme toutes les stratégies ci-dessous, au chevalet strictement
+    supérieur à ``niveaux.SEUIL_FIN_PARTIE_VERIF_FINITION`` AVANT de jouer
+    (point 4 de l'issue — garder une petite tuile gêne la fin de partie) ;
+    le critère de départage à nombre de tuiles posées égal (point 2) est
+    intégré DIRECTEMENT au modèle exact ci-dessous (``valeur_max_petits``) ;
+    la variante tolérante (point 3) est appliquée plus bas, après le coup
+    normal, comme ``reserve_tuile``/``retenue_debut``."""
     bridage = _niveaux.bridage_pour(nom_niveau)
     if rng is None:
         rng = _rng_oubli(etat, idx)
     taille_main = len(etat["joueurs"][idx]["chevalet"])
 
+    petits_chiffres_actif = (
+        bridage.petits_chiffres
+        and taille_main > _niveaux.SEUIL_FIN_PARTIE_VERIF_FINITION)
+    valeur_max_petits = (_niveaux.VALEUR_MAX_PETITS
+                         if petits_chiffres_actif else None)
+
     debut_tour = time.monotonic()
     coup = _coup_selon_perturbation(
         etat, idx, bridage.perturbation_max, budget_temps, on_repli,
         preferer_simple=preferer_simple, eval_config=eval_config,
-        on_aucun=on_aucun)
+        on_aucun=on_aucun, valeur_max_petits=valeur_max_petits)
 
     if not (isinstance(coup, dict) and coup.get("action") == "jouer"):
         # Aucun coup posable : pioche/passe (déjà décidé par le moteur). Tracé
@@ -1493,6 +1643,16 @@ def jouer_niveau_bride(etat, idx, nom_niveau, budget_temps=None, rng=None,
         coup, info_retenue = _appliquer_retenue_debut(
             etat, idx, coup, taille_main, restant)
         coup["retenue_debut_info"] = info_retenue
+
+    if petits_chiffres_actif:
+        # #230, hypothèse H4, variante tolérante (point 3) : le départage à
+        # nombre de tuiles posées égal est déjà intégré au coup normal
+        # ci-dessus (``valeur_max_petits``) — ceci est l'essai SUPPLÉMENTAIRE
+        # qui peut poser moins de tuiles pour garder une petite tuile,
+        # désactivé par défaut (``ECART_TUILES_PETITS == 0``).
+        coup, info_petits = _appliquer_petits_chiffres(
+            etat, idx, coup, taille_main, deadline)
+        coup["petits_chiffres_info"] = info_petits
 
     if bridage.verif_finition:
         coup, statut_verif = _verifier_finition_fin_de_partie(

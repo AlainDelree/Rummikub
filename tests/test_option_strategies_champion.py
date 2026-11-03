@@ -93,7 +93,8 @@ def test_cli_strategies_champion_toutes_et_sans_strategie_valide_sans_erreur():
     # de rejouer une campagne complète ici (couvert par un essai manuel, voir
     # le rapport de clôture de l'issue #228).
     strategies = M._parser_strategies_champion("toutes")
-    strategies -= {"garde_joker", "reserve_tuile", "retenue_debut"}
+    strategies -= {"garde_joker", "reserve_tuile", "retenue_debut",
+                   "petits_chiffres"}
     assert strategies == {"verif_finition"}
 
 

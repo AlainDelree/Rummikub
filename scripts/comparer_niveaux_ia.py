@@ -199,11 +199,18 @@ def _compteurs_retenue_debut(resume: dict) -> dict:
            "a_change_le_coup": stats.get("choisi", 0)}
 
 
+def _compteurs_petits_chiffres(resume: dict) -> dict:
+    stats = resume.get("stats_petits_chiffres") or {}
+    return {"declenchee": stats.get("declenchee", 0),
+           "a_change_le_coup": stats.get("choisi", 0)}
+
+
 EXTRACTEURS_COMPTEURS_STRATEGIES = {
     "verif_finition": _compteurs_verif_finition,
     "garde_joker": _compteurs_garde_joker,
     "reserve_tuile": _compteurs_reserve_tuile,
     "retenue_debut": _compteurs_retenue_debut,
+    "petits_chiffres": _compteurs_petits_chiffres,
 }
 
 
@@ -381,7 +388,9 @@ def jouer_un_tour(etat: dict, idx: int, temps_par_niveau: dict,
                   budget_temps: float = None,
                   stats_reserve_tuile: dict = None,
                   suivi_reserve_tuile: dict = None,
-                  stats_retenue_debut: dict = None) -> tuple[dict, bool, bool]:
+                  stats_retenue_debut: dict = None,
+                  stats_petits_chiffres: dict = None,
+                  tuiles_petites_main: dict = None) -> tuple[dict, bool, bool]:
     """Joue le tour de l'IA à l'index ``idx``.
 
     ``budget_temps`` (issue #228, point 5) : budget de temps du solveur par
@@ -452,7 +461,17 @@ def jouer_un_tour(etat: dict, idx: int, temps_par_niveau: dict,
     chaque manche, rien à suivre d'une manche à l'autre) permet de détecter,
     au TOUR SUIVANT du MÊME joueur, le mécanisme visé par la stratégie : une
     pioche évitée (le joueur a joué plutôt que pioché) et la tuile gardée
-    effectivement posée."""
+    effectivement posée.
+
+    ``stats_petits_chiffres`` (issue #230, point 5) : mêmes compteurs bruts
+    que ``stats_retenue_debut`` ci-dessus, à partir de la clé
+    ``petits_chiffres_info`` du coup renvoyé par ``jouer_niveau_bride``.
+    ``tuiles_petites_main`` (dict mutable ``{niveau: [n, ...]}``, même
+    convention que ``temps_par_niveau``) : nombre de petites tuiles (valeur
+    ≤ ``niveaux.VALEUR_MAX_PETITS``) dans le chevalet de CE joueur AVANT de
+    jouer ce tour, pour TOUS les niveaux (mesure pure, jamais de décision —
+    pour vérifier que ``petits_chiffres`` les conserve réellement en main,
+    comparé à un niveau qui ne l'active pas)."""
     niveau = etat["joueurs"][idx]["niveau"]
     backup_debut_tour(etat)
     plateau_avant = etat["plateau"]
@@ -464,6 +483,13 @@ def jouer_un_tour(etat: dict, idx: int, temps_par_niveau: dict,
     ouvert_avant = joueur_avant["mise_initiale_faite"]
     taille_pioche_avant = len(etat["pioche"])
     joker_avant = any(t.get("est_joker") for t in joueur_avant["chevalet"])
+
+    if tuiles_petites_main is not None:
+        petites_avant = sum(
+            1 for t in joueur_avant["chevalet"]
+            if not t.get("est_joker")
+            and (t.get("valeur") or 0) <= niveaux.VALEUR_MAX_PETITS)
+        tuiles_petites_main.setdefault(niveau, []).append(petites_avant)
 
     def _issue(etat_final, invalide, tuiles_disparues, action,
               nb_tuiles_posees=0, points_poses=0):
@@ -577,6 +603,15 @@ def jouer_un_tour(etat: dict, idx: int, temps_par_niveau: dict,
             stats_retenue_debut["choisi"] = (
                 stats_retenue_debut.get("choisi", 0) + 1)
 
+    info_petits = res_ia.get("petits_chiffres_info")
+    if stats_petits_chiffres is not None and info_petits is not None:
+        if info_petits.get("declenchee"):
+            stats_petits_chiffres["declenchee"] = (
+                stats_petits_chiffres.get("declenchee", 0) + 1)
+        if info_petits.get("choisi"):
+            stats_petits_chiffres["choisi"] = (
+                stats_petits_chiffres.get("choisi", 0) + 1)
+
     if niveau == "Expert" and res_ia.get("action") == "jouer":
         perturbations_expert.append(
             mesurer_perturbation(plateau_avant, res_ia["nouveau_plateau"]))
@@ -625,7 +660,9 @@ def _jouer_une_manche(etat: dict, max_tours: int, temps_par_niveau: dict,
                       manche_numero: int = 1,
                       budget_temps: float = None,
                       stats_reserve_tuile: dict = None,
-                      stats_retenue_debut: dict = None) -> dict:
+                      stats_retenue_debut: dict = None,
+                      stats_petits_chiffres: dict = None,
+                      tuiles_petites_main: dict = None) -> dict:
     """Joue la manche courante de ``etat`` jusqu'à sa fin naturelle (chevalet
     vidé ou pioche épuisée) ou jusqu'au garde-fou ``max_tours``. Retourne les
     statistiques de CETTE manche ; ``etat`` est muté en place.
@@ -653,7 +690,9 @@ def _jouer_une_manche(etat: dict, max_tours: int, temps_par_niveau: dict,
             stats_garde_joker, trace_ctx, manche_numero, budget_temps,
             stats_reserve_tuile=stats_reserve_tuile,
             suivi_reserve_tuile=suivi_reserve_tuile,
-            stats_retenue_debut=stats_retenue_debut)
+            stats_retenue_debut=stats_retenue_debut,
+            stats_petits_chiffres=stats_petits_chiffres,
+            tuiles_petites_main=tuiles_petites_main)
         if invalide:
             coups_invalides += 1
         if tuiles_disparues:
@@ -692,7 +731,9 @@ def jouer_match(config_joueurs: list[dict], nb_manches: int, max_tours: int,
                 trace_ctx: dict = None,
                 budget_temps: float = None,
                 stats_reserve_tuile: dict = None,
-                stats_retenue_debut: dict = None) -> dict:
+                stats_retenue_debut: dict = None,
+                stats_petits_chiffres: dict = None,
+                tuiles_petites_main: dict = None) -> dict:
     """Joue un MATCH complet à 2 joueurs de ``nb_manches`` manches (issue
     #203). Les manches s'enchaînent via ``nouvelle_manche`` (score cumulé
     conservé, nouvelle donne et mise initiale remise à zéro à chaque manche).
@@ -729,7 +770,8 @@ def jouer_match(config_joueurs: list[dict], nb_manches: int, max_tours: int,
     _resume_partiel = {"stats_verif_finition": stats_verif_finition,
                        "stats_garde_joker": stats_garde_joker,
                        "stats_reserve_tuile": stats_reserve_tuile,
-                       "stats_retenue_debut": stats_retenue_debut}
+                       "stats_retenue_debut": stats_retenue_debut,
+                       "stats_petits_chiffres": stats_petits_chiffres}
     compteurs_avant = {sid: extracteur(_resume_partiel)["a_change_le_coup"]
                        for sid, extracteur in EXTRACTEURS_COMPTEURS_STRATEGIES.items()}
 
@@ -741,7 +783,9 @@ def jouer_match(config_joueurs: list[dict], nb_manches: int, max_tours: int,
                                 aucun_coup_expert, stats_garde_joker,
                                 trace_ctx, numero, budget_temps,
                                 stats_reserve_tuile=stats_reserve_tuile,
-                                stats_retenue_debut=stats_retenue_debut)
+                                stats_retenue_debut=stats_retenue_debut,
+                                stats_petits_chiffres=stats_petits_chiffres,
+                                tuiles_petites_main=tuiles_petites_main)
         coups_invalides += res["coups_invalides"]
         coups_tuiles_disparues += res["coups_tuiles_disparues"]
         anomalies_conservation += res["anomalies_conservation"]
@@ -896,6 +940,15 @@ def comparer(niveau_a: str, niveau_b: str, nb_donnes: int, seed: int,
     # ``jouer_un_tour``/``_compteurs_reserve_tuile``/``_compteurs_retenue_debut``.
     stats_reserve_tuile: dict = {}
     stats_retenue_debut: dict = {}
+    # « Petits chiffres » (#230, point 5) : mêmes compteurs bruts, voir
+    # ``jouer_un_tour``/``_compteurs_petits_chiffres``, + la mesure de
+    # l'EFFET visé par la stratégie — nombre de petites tuiles (valeur ≤
+    # ``niveaux.VALEUR_MAX_PETITS``) dans le chevalet à chaque tour du
+    # joueur, par niveau (``{niveau: [n, ...]}``, même convention que
+    # ``temps_par_niveau``) — mesure PURE, toujours collectée (jamais de
+    # décision), pour vérifier que la stratégie les conserve réellement.
+    stats_petits_chiffres: dict = {}
+    tuiles_petites_main: dict = {}
     pile_appels = contextlib.ExitStack()
     pile_appels.enter_context(_compter_appels_solveur_verif(appels_solveur_verif))
 
@@ -924,7 +977,9 @@ def comparer(niveau_a: str, niveau_b: str, nb_donnes: int, seed: int,
                                    stats_garde_joker=stats_garde_joker,
                                    trace_ctx=trace_ctx, budget_temps=budget_temps,
                                    stats_reserve_tuile=stats_reserve_tuile,
-                                   stats_retenue_debut=stats_retenue_debut)
+                                   stats_retenue_debut=stats_retenue_debut,
+                                   stats_petits_chiffres=stats_petits_chiffres,
+                                   tuiles_petites_main=tuiles_petites_main)
             coups_invalides_total += resultat["coups_invalides"]
             coups_tuiles_disparues_total += resultat["coups_tuiles_disparues"]
             anomalies_conservation_total += resultat["anomalies_conservation"]
@@ -1008,6 +1063,8 @@ def comparer(niveau_a: str, niveau_b: str, nb_donnes: int, seed: int,
         "parties_garde_joker": parties_garde_joker,
         "stats_reserve_tuile": stats_reserve_tuile,
         "stats_retenue_debut": stats_retenue_debut,
+        "stats_petits_chiffres": stats_petits_chiffres,
+        "tuiles_petites_main": tuiles_petites_main,
         "victoires": victoires,
         "matchs_nuls": matchs_nuls,
         "matchs_decides": matchs_decides,
@@ -1264,6 +1321,25 @@ def afficher_rapport(resume: dict) -> None:
         print(f"    Tours examinés (fenêtre d'ouverture) : {declenchee_rd}")
         print(f"    ... coup plafonné : {stats_rd.get('choisi', 0)}/"
              f"{declenchee_rd} tour(s)")
+
+    stats_pc = resume.get("stats_petits_chiffres") or {}
+    tuiles_petites_main = resume.get("tuiles_petites_main") or {}
+    if stats_pc.get("declenchee") or tuiles_petites_main:
+        print("-" * 70)
+        print("  Petits chiffres (#230, hypothèse H4, Champion du Monde "
+             "seul) :")
+        if stats_pc.get("declenchee"):
+            declenchee_pc = stats_pc["declenchee"]
+            print(f"    Tours examinés (variante tolérante) : {declenchee_pc}")
+            print(f"    ... coup changé (garde une petite tuile de plus) : "
+                 f"{stats_pc.get('choisi', 0)}/{declenchee_pc} tour(s)")
+        if tuiles_petites_main:
+            print(f"    Petites tuiles (valeur ≤ "
+                 f"{niveaux.VALEUR_MAX_PETITS}) en main, en moyenne par "
+                 f"tour, par niveau :")
+            for niveau, valeurs in sorted(tuiles_petites_main.items()):
+                print(f"      {niveau:15s} : moyenne {moyenne(valeurs):.2f}, "
+                     f"sur {len(valeurs)} tour(s)")
 
     compteurs = compteurs_strategies(resume)
     if any(c["declenchee"] for c in compteurs.values()):

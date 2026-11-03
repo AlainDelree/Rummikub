@@ -47,6 +47,12 @@ de la passe précédente, puis optimise le critère suivant : optimisation
 lexicographique exacte, sans coefficients géants (qui, avec la tolérance de gap
 du MIP, risqueraient de perdre un critère secondaire).
 
+« Petits chiffres » (issue #230, Champion du Monde seul, désactivé par
+défaut) : si ``valeur_max_petits`` est fourni, un critère supplémentaire
+s'insère ENTRE 1 et 2 ci-dessus — min des tuiles réelles de valeur 1 à
+``valeur_max_petits`` posées — pour garder les petites tuiles en main. Sans
+effet (``None``, défaut) pour tout appelant existant, y compris Expert.
+
 Perturbation (variables ``cover``)
 ----------------------------------
 Pour chaque combinaison **flexible** ``o`` déjà posée avant ce tour, une binaire
@@ -441,7 +447,8 @@ def _a_solution_primale(h) -> bool:
 
 def _resoudre_modele(table_tiles, chevalet, mise_faite, mise_min,
                      flexibles_aspects, budget_temps, preferer_simple,
-                     eval_config=None, max_tuiles_posees=None):
+                     eval_config=None, max_tuiles_posees=None,
+                     valeur_max_petits=None):
     """Construit et résout le modèle ILP lexicographique. Retourne
     ``(combos_tokens, optimal)`` où ``combos_tokens`` est la liste des ensembles
     placés (tokens ordonnés), ou lève :class:`BudgetExactDepasse`.
@@ -451,7 +458,15 @@ def _resoudre_modele(table_tiles, chevalet, mise_faite, mise_min,
     posées (pas celles du plateau, déjà toutes forcées par la conservation)
     à au plus cette valeur — une contrainte du modèle exact, pas une
     logique de jeu réécrite à côté. ``None`` (défaut) → comportement
-    inchangé pour tout appelant existant."""
+    inchangé pour tout appelant existant.
+
+    ``valeur_max_petits`` (issue #230, stratégie ``petits_chiffres``,
+    hypothèse H4) : si fourni, ajoute un objectif secondaire — PLACÉ JUSTE
+    APRÈS le nombre de tuiles posées (critère 1) et AVANT la perturbation
+    minimale (critère 2, #199) — qui MINIMISE le nombre de tuiles RÉELLES
+    de valeur 1 à ``valeur_max_petits`` posées, sans toucher à l'objectif
+    principal (voir ``_passe_petits_chiffres`` ci-dessous). ``None``
+    (défaut) → comportement inchangé pour tout appelant existant."""
     deadline = time.monotonic() + budget_temps
 
     comptes_table = _comptes_etat(table_tiles)
@@ -725,6 +740,23 @@ def _resoudre_modele(table_tiles, chevalet, mise_faite, mise_min,
         if preferer_simple and flexibles_aspects:
             _passe(_ajouter_cover(), figer=figer)
 
+    def _passe_petits_chiffres(figer=True):
+        # ---- « Petits chiffres » (#230, hypothèse H4, Champion du Monde
+        # SEUL) : minimiser les tuiles RÉELLES de valeur 1 à
+        # ``valeur_max_petits`` posées — placé ICI, juste après le nombre de
+        # tuiles posées (critère 1, déjà figé par l'appelant) et AVANT la
+        # perturbation minimale. Les tuiles du plateau de ce type sont déjà
+        # forcées par la conservation (bornes ``t_i``, constantes) : minimiser
+        # le total placé de ce type revient donc à minimiser les tuiles DE LA
+        # MAIN posées de ce type, à une constante près.
+        if valeur_max_petits is None:
+            return
+        couts = [(j, float(-sum(1 for tok in s.tokens
+                                if tok[0] == "T" and tok[2] <= valeur_max_petits)))
+                for j, (s, _ub) in enumerate(faisables)]
+        couts = [(j, v) for j, v in couts if v]
+        _passe(couts, figer=figer)
+
     def _passe_points_jokers():
         # ---- Points posés, puis économie de jokers (comportement d'avant #211,
         # conservé quand l'évaluation de la main est inactive) ----
@@ -754,6 +786,11 @@ def _resoudre_modele(table_tiles, chevalet, mise_faite, mise_min,
     if _etat_passes["optimal"]:
         opt1 = round(h.getObjectiveValue())
         _fixer(couts_tuiles, opt1)
+
+        # « Petits chiffres » (#230) : juste après le critère 1, avant tout
+        # le reste (perturbation, points, jokers) — sans effet si
+        # ``valeur_max_petits`` est ``None`` (comportement inchangé).
+        _passe_petits_chiffres(figer=True)
 
         if eval_actif:
             # Deux ordres mesurés par simulation (#211, point 2) : l'évaluation
@@ -792,7 +829,8 @@ BUDGET_TEMPS_DEFAUT = 1.5
 
 def resoudre_exact(etat: dict, idx: int, budget_temps: float = BUDGET_TEMPS_DEFAUT,
                    preferer_simple: bool = True, eval_config=None,
-                   max_tuiles_posees: int | None = None) -> ResultatExact:
+                   max_tuiles_posees: int | None = None,
+                   valeur_max_petits: int | None = None) -> ResultatExact:
     """Résout l'état ``etat`` pour le joueur ``idx`` avec le modèle exact
     (HiGHS) et renvoie un :class:`ResultatExact` reconstruit dans notre domaine,
     avec les deux contrôles indépendants (validation + conservation) effectués.
@@ -805,6 +843,11 @@ def resoudre_exact(etat: dict, idx: int, budget_temps: float = BUDGET_TEMPS_DEFA
     ``max_tuiles_posees`` (issue #229, ``retenue_debut``) : voir
     ``_resoudre_modele`` — ``None`` (défaut) laisse le solveur poser le
     maximum, comme avant #229, pour tout appelant existant.
+
+    ``valeur_max_petits`` (issue #230, ``petits_chiffres``) : voir
+    ``_resoudre_modele`` — ``None`` (défaut) laisse le solveur départager
+    sans tenir compte des petites tuiles, comme avant #230, pour tout
+    appelant existant.
 
     Lève :class:`SolveurExactIndisponible` si ``highspy``/``numpy`` manque, ou
     :class:`BudgetExactDepasse` si la limite de temps est épuisée sans solution.
@@ -847,7 +890,8 @@ def resoudre_exact(etat: dict, idx: int, budget_temps: float = BUDGET_TEMPS_DEFA
     combos_tokens, optimal = _resoudre_modele(
         table_tiles, chevalet, mise_faite, mise_min, flexibles_aspects,
         budget_temps, preferer_simple, eval_config,
-        max_tuiles_posees=max_tuiles_posees)
+        max_tuiles_posees=max_tuiles_posees,
+        valeur_max_petits=valeur_max_petits)
     duree = time.monotonic() - debut
 
     # Reconstruction physique : pool = plateau (hors gelées) + chevalet.

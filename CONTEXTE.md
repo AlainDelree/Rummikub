@@ -3108,6 +3108,75 @@ sont INDICATIVES, à resserrer par ces séries de mesure — réglables au seul
 endroit `moteur/niveaux.py`, comme tous les autres paramètres de force de ce
 fichier.
 
+**7. `petits_chiffres` (H4, issue #230) — garder les petites tuiles pour
+bloquer l'adversaire.** Troisième entrée du registre de #228 (toujours
+réservée à Champion du Monde, désactivée par défaut, activable en campagne
+par `--strategies-champion petits_chiffres`) : reprend l'hypothèse H4
+ci-dessus (Delvers, une source, très bonne — garder les petites tuiles,
+p. ex. les 3, empêche l'adversaire de former 1-2-3). Remarque d'Alain et
+Claude, PAS issue de cette source (hypothèse, non vérifiée) : une petite
+tuile coûte peu de points en cas de défaite (un 3 vaut 3 points), donc la
+garder est peu risqué en points, alors qu'elle bloque des combinaisons de
+l'adversaire.
+
+- **Critère de départage (point 2 de l'issue), intégré DIRECTEMENT au
+  modèle exact** (`moteur/solveur_exact.py`, paramètre
+  `valeur_max_petits`) plutôt que recalculé à côté après coup : à nombre de
+  tuiles posées égal (critère 1, TOUJOURS premier), un objectif secondaire
+  minimise le nombre de tuiles RÉELLES de valeur 1 à
+  `niveaux.VALEUR_MAX_PETITS` (défaut 3) posées — placé JUSTE APRÈS le
+  critère 1 et AVANT la perturbation minimale (#199), donc avant les points
+  posés et l'économie de jokers également. Réutilise le mécanisme exact des
+  autres passes de départage (`_passe`, fixation par égalité) SANS toucher
+  à l'objectif principal ; sans effet (`None`, défaut) pour tout appelant
+  existant, y compris Expert.
+- **Variante tolérante (point 3), désactivée par défaut**
+  (`niveaux.ECART_TUILES_PETITS`, défaut 0) : à 1 (ou plus), un coup qui
+  pose AU PLUS ce nombre de tuiles de moins peut être préféré au meilleur
+  coup du solveur s'il évite de poser au moins une petite tuile que ce
+  dernier aurait posée — même mécanisme que `reserve_tuile`
+  (`_coup_qui_garde_une_petite_tuile`/`_appliquer_petits_chiffres`,
+  `moteur/ia.py`) : retire la petite tuile du chevalet et résout à nouveau,
+  premier candidat valide retenu. Joué à la place du coup normal seulement
+  si (a) il pose au moins une tuile, (b) l'écart de tuiles posées ne dépasse
+  pas `ECART_TUILES_PETITS`, (c) il pose STRICTEMENT moins de petites
+  tuiles, (d) le chevalet après coup reste strictement supérieur au seuil
+  de fin de partie ci-dessous.
+- **Limite (point 4)** : les deux parties (critère de départage ET variante
+  tolérante) ne s'appliquent que tant que le chevalet, AVANT de jouer,
+  compte STRICTEMENT plus que `niveaux.SEUIL_FIN_PARTIE_VERIF_FINITION`
+  (garder une petite tuile gênerait la fin de partie, zone déjà couverte
+  par `verif_finition`/`garde_joker`) ; un coup qui vide la main gagne la
+  partie et n'est jamais soumis à la stratégie (garde-fou commun à toutes
+  les stratégies multi-tours, §13).
+- **Compteurs** (point 5) : génériques (déclenchée/a changé le coup, via
+  `stats_petits_chiffres` et `_compteurs_petits_chiffres`,
+  `scripts/comparer_niveaux_ia.py`) + un compteur dédié à l'EFFET visé par
+  la stratégie, pas seulement à son déclenchement : nombre moyen de petites
+  tuiles (valeur ≤ `VALEUR_MAX_PETITS`) dans le chevalet, à CHAQUE tour de
+  CHAQUE joueur (`tuiles_petites_main`, mesure pure, toujours collectée,
+  par niveau) — pour vérifier que la stratégie les conserve réellement en
+  main, pas seulement qu'elle se déclenche.
+- **Tests fixes** (`tests/test_ia_petits_chiffres.py`) : deux groupes de
+  même taille (3 tuiles) se disputant le seul joker du chevalet, l'un de
+  petite valeur (3), l'autre de grande valeur (9), plateau vide (donc
+  perturbation à égalité pour les deux) — la stratégie choisit le groupe de
+  9 et garde les deux 3 en main ; désactivée (décision identique au solveur
+  seul) ; chevalet ≤ seuil de fin de partie (décision inchangée) ; Expert
+  inchangé ; coup qui vide la main joué tel quel ; variante tolérante
+  (reprend la construction de `reserve_tuile` — groupe de 3 + 4e tuile
+  PETITE en main + suite séparée — garde la petite tuile au prix d'une
+  tuile de moins) et son inapplication hors de la fenêtre de chevalet.
+- **Expérience prévue** : Champion du Monde avec `petits_chiffres` SEULE
+  contre Expert (même protocole que `reserve_tuile`/`retenue_debut`
+  ci-dessus, `--strategies-champion petits_chiffres`), jugée d'abord par le
+  compteur dédié (le nombre moyen de petites tuiles en main augmente-t-il
+  réellement, comparé à Expert ?) avant le taux de victoire global — la
+  remarque sur le faible coût en points reste une HYPOTHÈSE d'Alain et
+  Claude à vérifier par cette mesure, pas un fait établi. Les valeurs de
+  départ (`VALEUR_MAX_PETITS=3`, `ECART_TUILES_PETITS=0`) sont INDICATIVES,
+  réglables au seul endroit `moteur/niveaux.py`.
+
 ## 14. Solveur exact de vérification — bibliothèque `rummikub-solver` (licence MIT, issue #204, suite de #201)
 
 Notre solveur d'Expert (`moteur/solveur.py`) est à la fois le joueur **et** le

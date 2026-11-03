@@ -75,13 +75,18 @@ class Bridage:
     ``False`` par défaut. ``retenue_debut`` (issue #229, hypothèse H1,
     Champion du Monde SEUL) : pendant les premiers tours qui suivent SA
     PROPRE ouverture, plafonne le nombre de tuiles posées par tour —
-    ``False`` par défaut."""
+    ``False`` par défaut. ``petits_chiffres`` (issue #230, hypothèse H4,
+    Champion du Monde SEUL) : à nombre de tuiles posées égal, préfère le
+    coup qui pose le MOINS de petites tuiles (valeur 1 à
+    ``VALEUR_MAX_PETITS`` ci-dessous), pour les garder en main et bloquer
+    l'adversaire — ``False`` par défaut."""
     perturbation_max: int | None
     taux_oubli: float
     verif_finition: bool = False
     garder_joker_fin_partie: bool = False
     reserve_tuile: bool = False
     retenue_debut: bool = False
+    petits_chiffres: bool = False
 
     @property
     def complet(self) -> bool:
@@ -211,6 +216,22 @@ TUILES_TAPIS_MAX_RETENUE = 20
 POSE_MAX_DEBUT = 2
 
 
+# Paramètres de « petits chiffres » (#230, hypothèse H4) : un ex-champion du
+# monde néerlandais (Matthijs Delvers, 2026, voir CONTEXTE.md §13) conseille
+# de garder les petites tuiles (p. ex. les 3) pour bloquer l'adversaire —
+# elles coûtent aussi peu de points si l'on perd. ``VALEUR_MAX_PETITS`` :
+# valeur maximale (incluse) d'une tuile RÉELLE considérée « petite » — valeur
+# de départ INDICATIVE de l'issue (3), réglable ICI uniquement.
+# ``ECART_TUILES_PETITS`` : écart maximal ACCEPTÉ, en nombre de tuiles, entre
+# le meilleur coup du solveur et un coup qui pose au moins une petite tuile
+# de moins (variante tolérante, point 3 de l'issue) — ``0`` (défaut) désactive
+# cette variante (seul le départage à nombre de tuiles posées égal
+# s'applique) ; à ``1``, un coup qui pose une tuile de moins peut être
+# préféré s'il évite de poser une petite tuile.
+VALEUR_MAX_PETITS = 3
+ECART_TUILES_PETITS = 0
+
+
 def bridage_pour(nom_niveau: str | None) -> Bridage:
     """Bridage d'un niveau. Un niveau inconnu (ou ``None``) — p. ex. une partie
     sauvegardée avec un libellé disparu — retombe sur « Débutant », jamais
@@ -286,6 +307,17 @@ STRATEGIES: dict[str, Strategie] = {
         niveaux=("Champion du Monde",),
         active_par_defaut=False,
     ),
+    "petits_chiffres": Strategie(
+        id="petits_chiffres",
+        description=("Garder les petites tuiles (valeur ≤ VALEUR_MAX_PETITS) "
+                     "en main pour bloquer l'adversaire : à nombre de "
+                     "tuiles posées égal, préfère le coup qui en pose le "
+                     "moins (#230, hypothèse H4)."),
+        niveaux=("Champion du Monde",),
+        active_par_defaut=False,
+        compteurs=("declenchee", "a_change_le_coup",
+                  "nb_petites_main_moyenne"),
+    ),
 }
 
 
@@ -335,6 +367,7 @@ def bridage_champion_personnalise(strategies_actives) -> "Bridage":
         garder_joker_fin_partie="garde_joker" in actives,
         reserve_tuile="reserve_tuile" in actives,
         retenue_debut="retenue_debut" in actives,
+        petits_chiffres="petits_chiffres" in actives,
     )
 
 

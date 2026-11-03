@@ -7,28 +7,34 @@ import pytest
 from rummikub.moteur import niveaux
 
 
-def test_registre_contient_les_quatre_strategies_existantes():
+def test_registre_contient_les_cinq_strategies_existantes():
     assert set(niveaux.STRATEGIES) == {
-        "verif_finition", "garde_joker", "reserve_tuile", "retenue_debut"}
+        "verif_finition", "garde_joker", "reserve_tuile", "retenue_debut",
+        "petits_chiffres"}
     vf = niveaux.STRATEGIES["verif_finition"]
     assert vf.niveaux == ("Expert", "Champion du Monde")
     assert vf.active_par_defaut is True
     gj = niveaux.STRATEGIES["garde_joker"]
     assert gj.niveaux == ("Champion du Monde",)
     assert gj.active_par_defaut is True
-    # Les deux stratégies de #229 sont réservées à Champion du Monde et
-    # DÉSACTIVÉES par défaut (à l'étude, non validées par les tests/campagnes).
+    # Les deux stratégies de #229 et celle de #230 sont réservées à Champion
+    # du Monde et DÉSACTIVÉES par défaut (à l'étude, non validées par les
+    # tests/campagnes).
     rt = niveaux.STRATEGIES["reserve_tuile"]
     assert rt.niveaux == ("Champion du Monde",)
     assert rt.active_par_defaut is False
     rd = niveaux.STRATEGIES["retenue_debut"]
     assert rd.niveaux == ("Champion du Monde",)
     assert rd.active_par_defaut is False
+    pc = niveaux.STRATEGIES["petits_chiffres"]
+    assert pc.niveaux == ("Champion du Monde",)
+    assert pc.active_par_defaut is False
 
 
 def test_strategies_champion_valides():
     assert set(niveaux.strategies_champion_valides()) == {
-        "verif_finition", "garde_joker", "reserve_tuile", "retenue_debut"}
+        "verif_finition", "garde_joker", "reserve_tuile", "retenue_debut",
+        "petits_chiffres"}
 
 
 def test_strategies_champion_par_defaut_reproduit_bridages_champion():
