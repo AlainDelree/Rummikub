@@ -79,7 +79,11 @@ class Bridage:
     Champion du Monde SEUL) : à nombre de tuiles posées égal, préfère le
     coup qui pose le MOINS de petites tuiles (valeur 1 à
     ``VALEUR_MAX_PETITS`` ci-dessous), pour les garder en main et bloquer
-    l'adversaire — ``False`` par défaut."""
+    l'adversaire — ``False`` par défaut. ``chances_prochain_tour`` (issue
+    #231, Champion du Monde SEUL) : à nombre de tuiles posées égal, préfère
+    le coup qui laisse le chevalet le plus susceptible de pouvoir encore
+    jouer au tour suivant (score ``moteur/sorties.py``, somme des
+    probabilités de piocher une « sortie ») — ``False`` par défaut."""
     perturbation_max: int | None
     taux_oubli: float
     verif_finition: bool = False
@@ -87,6 +91,7 @@ class Bridage:
     reserve_tuile: bool = False
     retenue_debut: bool = False
     petits_chiffres: bool = False
+    chances_prochain_tour: bool = False
 
     @property
     def complet(self) -> bool:
@@ -232,6 +237,23 @@ VALEUR_MAX_PETITS = 3
 ECART_TUILES_PETITS = 0
 
 
+# Paramètres de « chances de poser au prochain tour » (#231, anciennement
+# « tuiles vivantes ») : à nombre de tuiles posées égal, préfère le coup qui
+# laisse le chevalet au score ``moteur/sorties.score_chevalet`` le plus élevé
+# — somme, sur les « sorties » (types de tuile qui permettraient de jouer au
+# prochain tour), des probabilités de les piocher. ``ECART_TUILES_SORTIES`` :
+# écart maximal ACCEPTÉ, en nombre de tuiles, entre le meilleur coup du
+# solveur et un coup qui en pose moins mais laisse un bien meilleur score
+# (variante tolérante) — ``0`` (défaut) désactive cette variante (seul le
+# départage à nombre de tuiles posées égal s'applique). ``SEUIL_GAIN_SORTIES``
+# : gain de score minimal exigé pour que la variante tolérante préfère un
+# coup qui pose une tuile de moins — valeur de départ INDICATIVE de l'issue
+# (0,15), réglable ICI uniquement, SANS EFFET tant que ``ECART_TUILES_
+# SORTIES`` reste à 0.
+ECART_TUILES_SORTIES = 0
+SEUIL_GAIN_SORTIES = 0.15
+
+
 def bridage_pour(nom_niveau: str | None) -> Bridage:
     """Bridage d'un niveau. Un niveau inconnu (ou ``None``) — p. ex. une partie
     sauvegardée avec un libellé disparu — retombe sur « Débutant », jamais
@@ -318,6 +340,17 @@ STRATEGIES: dict[str, Strategie] = {
         compteurs=("declenchee", "a_change_le_coup",
                   "nb_petites_main_moyenne"),
     ),
+    "chances_prochain_tour": Strategie(
+        id="chances_prochain_tour",
+        description=("À nombre de tuiles posées égal, préférer le coup qui "
+                     "laisse le chevalet le plus susceptible de pouvoir "
+                     "encore jouer au tour suivant (#231, anciennement "
+                     "« tuiles vivantes »)."),
+        niveaux=("Champion du Monde",),
+        active_par_defaut=False,
+        compteurs=("declenchee", "a_change_le_coup",
+                  "score_chevalet_moyen", "pioche_evitee_tour_suivant"),
+    ),
 }
 
 
@@ -368,6 +401,7 @@ def bridage_champion_personnalise(strategies_actives) -> "Bridage":
         reserve_tuile="reserve_tuile" in actives,
         retenue_debut="retenue_debut" in actives,
         petits_chiffres="petits_chiffres" in actives,
+        chances_prochain_tour="chances_prochain_tour" in actives,
     )
 
 

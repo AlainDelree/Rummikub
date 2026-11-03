@@ -21,12 +21,15 @@ raccourci pratique à partir de l'état de partie complet) n'appelle que
 
 Brique de base pour les stratégies multi-tours décrites en CONTEXTE.md §13
 (Pistes 8 et 9) : « Indices » (affiner ces probabilités à partir du
-comportement observé de l'adversaire), « Tuiles vivantes » (une tuile dont
-``exemplaires_restants`` tombe à 0 n'a plus de voisines utilisables),
-« Joker et réserve » (probabilité qu'un joker soit récupérable chez
-l'adversaire), « Course » et « Rétention » (probabilité qu'une tuile retenue
-prive réellement l'adversaire), « Ouverture ». Aucune de ces stratégies n'est
-implémentée ici.
+comportement observé de l'adversaire), « Joker et réserve » (probabilité
+qu'un joker soit récupérable chez l'adversaire), « Course » et « Rétention »
+(probabilité qu'une tuile retenue prive réellement l'adversaire),
+« Ouverture ». Aucune de ces stratégies n'est implémentée ici.
+
+« Chances de poser au prochain tour » (issue #231, anciennement « tuiles
+vivantes » — nom abandonné : au Rummikub, le tapis est réarrangeable, une
+tuile posée n'est jamais « sortie » du jeu) EST implémentée, dans
+``moteur/sorties.py``, à partir des probabilités calculées ici.
 """
 
 from collections import Counter

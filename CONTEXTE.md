@@ -3177,6 +3177,111 @@ l'adversaire.
   départ (`VALEUR_MAX_PETITS=3`, `ECART_TUILES_PETITS=0`) sont INDICATIVES,
   réglables au seul endroit `moteur/niveaux.py`.
 
+**8. `chances_prochain_tour` (issue #231) — garder le chevalet le plus
+susceptible de pouvoir encore jouer au tour suivant.** Quatrième entrée du
+registre de #228 (toujours réservée à Champion du Monde, désactivée par
+défaut, ABSENTE de `STRATEGIES_CHAMPION_PAR_DEFAUT`, activable en campagne
+par `--strategies-champion chances_prochain_tour`).
+
+Reprend et CORRIGE la piste 9 ci-dessus (« rétention défensive de tuiles »,
+anciennement envisagée sous le nom « tuiles vivantes ») : l'idée initiale
+d'une tuile « morte » (dont les voisines seraient « sorties » du jeu) ne
+tient pas au Rummikub, où les combinaisons du tapis sont réarrangeables — une
+tuile posée n'est donc jamais indisponible pour la suite de la partie, ni
+pour moi ni pour l'adversaire. Ce nom est abandonné POUR CETTE RAISON. La
+notion utile, retenue ici, est inversée : les « sorties » sont les tuiles
+qu'il me reste à PIOCHER (jamais celles du tapis) pour pouvoir jouer au tour
+suivant — une heuristique classique du rami, alimentée par la brique
+« Inconnues » (#219, probabilités de pioche, jamais de lecture de la main
+adverse).
+
+- **Sorties d'un chevalet** (`moteur/sorties.py::sorties_chevalet`) : pour un
+  chevalet et un tapis donnés, l'ensemble des types de tuile (couleur +
+  valeur, jokers compris) qui, ajoutés au chevalet, permettraient de jouer —
+  calcul DIRECT (énumération des paires du chevalet + brute force validé sur
+  les combinaisons du tapis), jamais un appel au solveur exact, pour rester
+  rapide. Deux règles : (1) une paire de tuiles RÉELLES du chevalet, même
+  couleur à valeurs voisines ou espacées d'une, ou même valeur à couleurs
+  différentes (un joker du chevalet n'entre jamais dans une paire — il n'a ni
+  couleur ni valeur propres) ; (2) le rattachement à une combinaison du tapis
+  (prolonger une suite par un bout, compléter un groupe de 3 à 4).
+- **Score d'un chevalet** (`sorties.score_chevalet`) : somme, sur toutes les
+  sorties, de `exemplaires_restants / nb_total_inconnues` (brique
+  « Inconnues », #219) — jamais la main adverse, seulement ses tailles. Une
+  sortie dont tous les exemplaires sont déjà connus (donc indisponibles)
+  contribue 0, elle ne « compte » donc pas dans la somme.
+- **Mécanisme de départage, EN DEHORS du modèle exact** (contrairement à
+  `petits_chiffres`) : le score dépend de PAIRES de tuiles restant en main et
+  des combinaisons effectivement formées, une propriété combinatoire du
+  résultat, pas une somme linéaire des ensembles posés (`x_s`) — non
+  formulable comme objectif du MIP sans variables auxiliaires par paire de
+  types, ce que l'issue écarte explicitement (« calcul direct, sans appel au
+  solveur »). Implémenté comme les variantes tolérantes de `reserve_tuile`/
+  `petits_chiffres` (`moteur/ia.py::_appliquer_chances_prochain_tour`) :
+  retire, tour à tour, CHACUNE des tuiles que le coup du solveur pose, puis
+  résout à nouveau (`_candidats_sorties`) — si le résultat pose le MÊME
+  nombre de tuiles (un véritable « coup équivalent », découvert sans
+  reformuler le modèle exact), compare son score à celui du coup normal et
+  garde le meilleur. Appliqué JUSTE APRÈS le coup normal (qui intègre déjà
+  `petits_chiffres` s'il est actif) et AVANT `reserve_tuile`/`retenue_debut`/
+  la variante tolérante de `petits_chiffres` — ceux-ci peuvent réduire le
+  nombre de tuiles posées, les comparer à ce stade reviendrait à comparer des
+  coups qui ne posent déjà plus le même nombre de tuiles.
+- **Variante tolérante, désactivée par défaut**
+  (`niveaux.ECART_TUILES_SORTIES`, défaut 0) : à 1 (ou plus), un candidat qui
+  pose AU PLUS ce nombre de tuiles de moins peut être préféré si son score
+  dépasse le meilleur score déjà trouvé de plus de
+  `niveaux.SEUIL_GAIN_SORTIES` (valeur de départ INDICATIVE 0,15).
+- **Limite** : ne s'applique que si le chevalet qui resterait après le coup
+  compte STRICTEMENT plus d'une tuile (une sortie exige une PAIRE, rien à
+  comparer sinon) ; un coup qui vide la main gagne la partie et n'est jamais
+  soumis à la stratégie (garde-fou commun à toutes les stratégies
+  multi-tours, §13).
+- **Limites de l'heuristique** (documentation demandée par l'issue) : le
+  score ne regarde qu'UN tour à l'avance (pas une vraie espérance sur toute
+  la fin de partie) ; il suppose le tapis INCHANGÉ au tour suivant, alors
+  qu'un adversaire peut le réarranger entre-temps — l'estimation est donc
+  PRUDENTE plutôt qu'exacte (le réarrangement du tapis ne peut qu'AJOUTER des
+  sorties, jamais en retirer, puisqu'une combinaison existante reste de toute
+  façon rattachable) ; la probabilité de pioche (`exemplaires_restants /
+  nb_total_inconnues`) est une approximation uniforme (pas encore affinée
+  par le comportement observé de l'adversaire, voir piste 8 « Indices »
+  ci-dessus).
+- **Compteurs** : génériques (déclenchée/a changé le coup, via
+  `stats_chances_prochain_tour` et `_compteurs_chances_prochain_tour`,
+  `scripts/comparer_niveaux_ia.py`) + deux compteurs dédiés à l'EFFET visé :
+  le score moyen du chevalet CONSERVÉ (`score_liste`, à chaque tour où la
+  stratégie s'est déclenchée) et, au tour SUIVANT du MÊME joueur après un
+  coup changé, la part des fois où il a pu jouer plutôt que piocher
+  (`pioche_evitee`/`verifications`, même mécanisme de suivi que
+  `reserve_tuile`) — à comparer avec le témoin (Expert, ou Champion du Monde
+  sans la stratégie).
+- **Tests fixes** (`tests/test_sorties.py` pour la brique, directe, sans
+  passer par l'IA ; `tests/test_ia_chances_prochain_tour.py` pour la
+  stratégie) : une paire qui se complète par une seule tuile encore
+  disponible contre une paire isolée (le premier a le score le plus élevé) ;
+  une sortie dont tous les exemplaires sont connus ne compte pas ; deux coups
+  posant le même nombre de tuiles (3) mais laissant des chevalets de scores
+  différents (le meilleur score est choisi, au prix d'une suite plus riche
+  en points mais plus pauvre en sorties) ; désactivée (décision identique) ;
+  Expert inchangé ; coup qui vide la main joué tel quel ; chevalet restant
+  ≤ 1 tuile (sans effet).
+- **Expérience prévue** : Champion du Monde avec `chances_prochain_tour`
+  SEULE contre Expert (même protocole que les stratégies précédentes,
+  `--strategies-champion chances_prochain_tour`), jugée d'abord par les
+  compteurs dédiés (le score moyen du chevalet conservé augmente-t-il
+  réellement, et la part de tours où le joueur peut jouer plutôt que
+  piocher au tour suivant s'améliore-t-elle, comparé au témoin ?) avant le
+  taux de victoire global. Essai de 2 donnes (`--donnes 2`) : stratégie
+  déclenchée 42 fois, coup changé 2 fois, score moyen du chevalet conservé
+  0,336 ; surcoût de calcul mesuré sur cet essai : Champion du Monde passe
+  d'environ 28 ms/tour (sans stratégie) à environ 63 ms/tour (avec) —
+  indicatif seulement (aucun seuil fixé par l'issue), dû aux appels
+  supplémentaires au modèle exact dans `_candidats_sorties` (au plus un par
+  tuile posée par le coup normal). Les valeurs de départ
+  (`ECART_TUILES_SORTIES=0`, `SEUIL_GAIN_SORTIES=0,15`) sont INDICATIVES,
+  réglables au seul endroit `moteur/niveaux.py`.
+
 ## 14. Solveur exact de vérification — bibliothèque `rummikub-solver` (licence MIT, issue #204, suite de #201)
 
 Notre solveur d'Expert (`moteur/solveur.py`) est à la fois le joueur **et** le

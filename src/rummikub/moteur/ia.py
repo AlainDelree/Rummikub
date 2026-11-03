@@ -39,6 +39,7 @@ from rummikub.moteur.solveur_exact import (
 from rummikub.moteur import evaluation_main
 from rummikub.moteur import niveaux as _niveaux
 from rummikub.moteur import verification_finition
+from rummikub.moteur import sorties as _sorties
 
 
 # --------------------------------------------------------------------------- #
@@ -902,6 +903,11 @@ SOLVEUR_RETENUE_DEBUT = "retenue-debut"
 # meilleur coup qui GARDE une petite tuile que le coup du solveur aurait
 # posée (variante tolérante, voir _coup_qui_garde_une_petite_tuile).
 SOLVEUR_PETITS_CHIFFRES = "petits-chiffres"
+# « Chances de poser au prochain tour » (issue #231, Champion du Monde seul) :
+# coup équivalent (même nombre de tuiles posées, ou une de moins avec la
+# variante tolérante) qui laisse un chevalet de meilleur score (voir
+# _appliquer_chances_prochain_tour, moteur/sorties.py).
+SOLVEUR_CHANCES_PROCHAIN_TOUR = "chances-prochain-tour"
 
 LIBELLES_SOLVEUR = {
     SOLVEUR_EXACT: "modèle exact",
@@ -912,6 +918,7 @@ LIBELLES_SOLVEUR = {
     SOLVEUR_RESERVE_TUILE: "réserve d'une tuile",
     SOLVEUR_RETENUE_DEBUT: "retenue au début",
     SOLVEUR_PETITS_CHIFFRES: "garde une petite tuile",
+    SOLVEUR_CHANCES_PROCHAIN_TOUR: "meilleures chances au prochain tour",
 }
 
 
@@ -1439,6 +1446,134 @@ def _appliquer_petits_chiffres(etat, idx, coup, taille_main, deadline):
     return candidat, info
 
 
+# --------------------------------------------------------------------------- #
+# « Chances de poser au prochain tour » (issue #231, Champion du Monde seul,
+# anciennement « tuiles vivantes » — voir moteur/sorties.py, CONTEXTE.md §13)
+# --------------------------------------------------------------------------- #
+
+def _chevalet_restant(chevalet, ids_poses):
+    """Chevalet qui resterait après avoir posé les tuiles d'identifiants
+    ``ids_poses`` — ``chevalet`` inchangé (nouvelle liste)."""
+    ids = set(ids_poses)
+    return [t for t in chevalet if t["id"] not in ids]
+
+
+def _candidats_sorties(etat, idx, coup, deadline, ecart_max):
+    """Coups obtenus en retirant, tour à tour, CHACUNE des tuiles que
+    ``coup`` pose, puis en résolvant à nouveau — même mécanisme que
+    ``_coup_qui_garde_une_tuile``/``_coup_qui_garde_une_petite_tuile``
+    (#229/#230), ici pour trouver des arrangements DIFFÉRENTS du MÊME coup
+    (pas une main réduite exprès) : retirer une tuile de la pose peut forcer
+    le solveur à composer une combinaison concurrente, posant le MÊME
+    nombre de tuiles (un véritable « coup équivalent », découvert sans
+    reformuler le modèle exact — #231, point 2 : calcul direct en dehors du
+    solveur, celui-ci n'étant appelé que pour RETROUVER le coup, jamais pour
+    noter les chevalets).
+
+    Ne garde que les candidats posant au plus ``ecart_max`` tuiles de moins
+    que ``coup`` (``0`` → seulement les coups à nombre de tuiles STRICTEMENT
+    égal, les véritables « coups équivalents » du point 4 de l'issue ;
+    ``niveaux.ECART_TUILES_SORTIES`` au-delà, pour la variante tolérante).
+    Retourne une liste de coups marqués ``SOLVEUR_CHANCES_PROCHAIN_TOUR``
+    (doublons possibles, l'appelant ne garde que le meilleur score)."""
+    ids_jouees = list(coup.get("ids_tuiles") or [])
+    nb_best = len(ids_jouees)
+    joueur = etat["joueurs"][idx]
+    chevalet = joueur["chevalet"]
+    candidats = []
+    for id_tuile in ids_jouees:
+        restant = deadline - time.monotonic()
+        if restant <= 0:
+            break
+        idx_t = next((i for i, t in enumerate(chevalet) if t["id"] == id_tuile),
+                     None)
+        if idx_t is None:
+            continue
+        chevalet2 = chevalet[:idx_t] + chevalet[idx_t + 1:]
+        joueur2 = dict(joueur)
+        joueur2["chevalet"] = chevalet2
+        joueurs2 = list(etat["joueurs"])
+        joueurs2[idx] = joueur2
+        etat2 = dict(etat)
+        etat2["joueurs"] = joueurs2
+        statut, charge = _coup_exact(etat2, idx, restant, PREFERER_SIMPLICITE,
+                                     EVAL_MAIN_DEFAUT)
+        if statut != "coup" or not charge.get("ids_tuiles"):
+            continue
+        ecart = nb_best - len(charge["ids_tuiles"])
+        if 0 <= ecart <= ecart_max:
+            candidats.append((_marquer_solveur(charge, SOLVEUR_CHANCES_PROCHAIN_TOUR),
+                              ecart))
+    return candidats
+
+
+def _appliquer_chances_prochain_tour(etat, idx, coup, taille_main, deadline):
+    """Stratégie ``chances_prochain_tour`` (#231) : à nombre de tuiles posées
+    égal, entre ``coup`` et les coups équivalents trouvés par
+    ``_candidats_sorties`` (écart 0), préfère celui qui laisse le chevalet
+    au score ``moteur/sorties.score_chevalet`` le plus élevé.
+
+    Variante tolérante (``niveaux.ECART_TUILES_SORTIES``, ``0`` par défaut =
+    désactivée) : accepte aussi un candidat posant UNE tuile de moins (écart
+    1) si son score dépasse le meilleur score déjà trouvé de plus de
+    ``niveaux.SEUIL_GAIN_SORTIES``.
+
+    N'a aucun effet (point 5 de l'issue) si le chevalet qui resterait après
+    ``coup`` compte au plus une tuile — rien à comparer (les sorties
+    exigent une PAIRE). ``coup`` qui vide la main : déjà écarté par
+    l'appelant (``jouer_niveau_bride``), jamais modifié ici.
+
+    Retourne ``(coup, info)`` — ``info`` un dict de compteurs (point 6 de
+    l'issue) : ``{"declenchee": bool, "score_avant": float,
+    "meilleur_score": float, "choisi": bool,
+    "nb_candidats_equivalents": int}``."""
+    ids_poses = list(coup.get("ids_tuiles") or [])
+    chevalet = etat["joueurs"][idx]["chevalet"]
+    chevalet_restant = _chevalet_restant(chevalet, ids_poses)
+    info = {"declenchee": False, "score_avant": 0.0, "meilleur_score": 0.0,
+           "choisi": False, "nb_candidats_equivalents": 0}
+    if len(chevalet_restant) <= 1:
+        return coup, info
+
+    info["declenchee"] = True
+    plateau_avant = coup.get("nouveau_plateau") or []
+    score_avant = _sorties.score_chevalet(chevalet_restant, plateau_avant,
+                                          etat, idx)
+    info["score_avant"] = score_avant
+    info["meilleur_score"] = score_avant
+
+    restant = deadline - time.monotonic()
+    if restant <= 0:
+        return coup, info
+
+    ecart_max = max(0, _niveaux.ECART_TUILES_SORTIES)
+    candidats = _candidats_sorties(etat, idx, coup, deadline, ecart_max)
+
+    meilleur_coup = coup
+    meilleur_score = score_avant
+    for candidat, ecart in sorted(candidats, key=lambda c: c[1]):
+        info["nb_candidats_equivalents"] += 1
+        ids_cand = candidat.get("ids_tuiles") or []
+        chevalet_cand = _chevalet_restant(chevalet, ids_cand)
+        if len(chevalet_cand) <= 1:
+            continue
+        plateau_cand = candidat.get("nouveau_plateau") or []
+        score_cand = _sorties.score_chevalet(chevalet_cand, plateau_cand,
+                                              etat, idx)
+        if ecart == 0:
+            if score_cand > meilleur_score:
+                meilleur_score = score_cand
+                meilleur_coup = candidat
+        elif score_cand - meilleur_score > _niveaux.SEUIL_GAIN_SORTIES:
+            meilleur_score = score_cand
+            meilleur_coup = candidat
+
+    info["meilleur_score"] = meilleur_score
+    if meilleur_coup is not coup:
+        info["choisi"] = True
+    return meilleur_coup, info
+
+
 def _candidats_finition(etat, idx, coup_solveur, budget_temps=None,
                         garder_joker=False):
     """Coups candidats pour la vérification de finition (#221, point 2 ;
@@ -1620,6 +1755,19 @@ def jouer_niveau_bride(etat, idx, nom_niveau, budget_temps=None, rng=None,
     budget_total = budget_temps if budget_temps is not None \
         else BUDGET_TEMPS_EXPERT
     deadline = debut_tour + budget_total
+
+    if bridage.chances_prochain_tour:
+        # #231 : à nombre de tuiles posées égal (le départage "petits_
+        # chiffres" ci-dessus, s'il est actif, est déjà intégré au coup
+        # normal via ``valeur_max_petits``), préfère le chevalet restant au
+        # meilleur score ``sorties.score_chevalet``. Appliqué AVANT les
+        # variantes tolérantes ci-dessous (``reserve_tuile``/``retenue_
+        # debut``/``petits_chiffres``), qui peuvent réduire le nombre de
+        # tuiles posées : les comparer à CE stade reviendrait à comparer des
+        # coups qui ne posent déjà plus le même nombre de tuiles.
+        coup, info_sorties = _appliquer_chances_prochain_tour(
+            etat, idx, coup, taille_main, deadline)
+        coup["chances_prochain_tour_info"] = info_sorties
 
     if bridage.reserve_tuile:
         # #229, hypothèse H2 : garder une tuile que le coup aurait posée.
