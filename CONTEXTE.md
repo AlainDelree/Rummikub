@@ -3292,12 +3292,10 @@ moins de chances de le reprendre.** Cinquième entrée du registre de #228
 l'issue, à partir de `moteur/ia.py::_jokers_recuperables`/`_tuile_
 correspond_au_joker` et des tests existants — voir §8 ci-dessus) :
 
-- **Échange direct, SEUL mécanisme avec une tuile de remplacement précise**
-  (les autres — détachement en bout, scission, réduction de groupe de 4 à 3
-  — libèrent le joker SANS remplacement, voir §8) : un joker posé dans une
-  combinaison du plateau est repris en jouant, DEPUIS LE CHEVALET OU DEPUIS
-  UNE AUTRE LIBÉRATION DU MÊME TOUR, la tuile réelle qu'il représente EXACTEMENT
-  à sa position — `_tuile_correspond_au_joker` calcule cette tuile UNIQUE :
+- **Échange direct** : un joker posé dans une combinaison du plateau est
+  repris en jouant, DEPUIS LE CHEVALET OU DEPUIS UNE AUTRE LIBÉRATION DU
+  MÊME TOUR, la tuile réelle qu'il représente EXACTEMENT à sa position —
+  `_tuile_correspond_au_joker` calcule cette tuile UNIQUE :
   - **suite** : `valeur_attendue = valeur_de_la_première_tuile_réelle -
     sa_position + position_du_joker`, et la MÊME couleur que la suite — une
     SEULE valeur convient, quelle que soit la position du joker ;
@@ -3306,24 +3304,78 @@ correspond_au_joker` et des tests existants — voir §8 ci-dessus) :
     PLUSIEURS tuiles distinctes peuvent donc convenir (2 couleurs manquantes
     pour un groupe de 3, ni plus ni moins puisqu'un groupe n'admet qu'UN seul
     joker).
-  - **Écart avec l'énoncé de l'issue, VÉRIFIÉ ici et IMPORTANT pour
-    l'exposition (point 3)** : ce moteur ne distingue PAS un joker « au
-    milieu » d'une suite d'un joker « au bout » — dans les DEUX cas, la
-    formule ci-dessus ne retient qu'UNE seule valeur (donc au plus 2
-    exemplaires), jamais « l'une des deux valeurs voisines » comme le
-    supposait l'énoncé initial (quatre exemplaires pour le cas « bout ») :
-    une fois la combinaison fixée sur le plateau, la position du joker fixe
-    sa valeur de remplacement sans ambiguïté, qu'il soit en bout ou au
-    milieu — seul le CHOIX de la position, au moment de POSER le joker (ce
-    que `placement_joker` départage), diffère d'une combinaison à l'autre.
-    Test dédié : `tests/test_ia_placement_joker.py::
-    test_types_remplacement_suite_bout_une_seule_valeur_aussi`.
-- **Libération sans remplacement** (réduction de groupe de 4 à 3, joker
-  retiré — voir §8) : réservée aux combinaisons de 4 tuiles ou plus, déjà
-  évitée par le solveur de base (qui préfère ne pas y placer de joker quand
-  une combinaison de 3 suffit) — **hors de portée de cette stratégie**
-  (point 1 de l'issue), jamais mesurée par `_types_remplacement_joker`
-  (retourne `None` pour toute combinaison de taille ≠ 3).
+- **Libération sans remplacement** (détachement en bout #150, scission,
+  réduction de groupe de 4 à 3 — voir §8) : pour une combinaison de 4 tuiles
+  ou plus, DÉJÀ sur le plateau, un joker en bout se détache sans aucune
+  tuile de remplacement.
+- **CORRECTION #233 — écart constaté dans #232, maintenant corrigé** :
+  #232 affirmait que ce moteur ne distingue PAS un joker « au milieu »
+  d'une suite d'un joker « au bout » (la formule d'échange direct ne retient
+  qu'UNE seule valeur dans les deux cas), et en déduisait que les deux
+  placements avaient la MÊME exposition. Cette conclusion est INCOMPLÈTE :
+  elle ignore une SECONDE voie, propre au joker en BOUT d'une suite de 3 —
+  **prolongement de l'extrémité OPPOSÉE, puis détachement sans
+  remplacement**. Exemple : suite 4,5,joker (joker en bout haut, représente
+  6). Une tuile de main qui prolonge l'AUTRE extrémité (rouge 3, devant le
+  4) transforme la suite de 3 en suite de 4 (3,4,5,joker) ; le joker,
+  désormais en bout d'une combinaison de 4 tuiles, se détache alors SANS
+  remplacement (mécanisme déjà implémenté pour l'IA elle-même, #150,
+  `_jokers_detachables_par_extension` — voir ci-dessus) et peut être
+  rejoué ailleurs dans le MÊME tour. Un joker au MILIEU n'a pas
+  d'« extrémité opposée » à prolonger : lui seul garde UNE SEULE voie.
+  - **Vérifié sur le MOTEUR RÉEL** (`partie.jouer_tour`, pas une fonction
+    interne de l'IA), dans les deux sens de symétrie (joker en bout haut,
+    joker en bout bas) : `tests/test_ia_placement_joker.py::
+    test_moteur_reel_detachement_par_prolongement_joker_en_haut_de_suite`
+    et `..._en_bas_de_suite` — le coup (prolongement + détachement +
+    rejeu du joker dans une nouvelle combinaison, même tour) est accepté
+    par `jouer_tour`, le plateau final reste valide.
+  - **Calcul corrigé** : `_types_remplacement_joker` (`moteur/ia.py`)
+    ajoute désormais, pour une suite de 3 avec le joker à une EXTRÉMITÉ
+    (`position_index` 0 ou 2), le type `(couleur, valeur_prolongement)` —
+    même couleur, valeur de l'extrémité opposée ± 3 selon le sens — SI
+    cette valeur reste dans 1..13 (sinon le joker est en bout CONTRE UNE
+    BORNE du jeu — ex. suite 1,2,joker — et retombe sur UNE seule voie,
+    même exposition qu'au milieu : pas de régression pour ce cas limite).
+    Pour le milieu (`position_index == 1`) et pour un groupe de 3, AUCUN
+    changement (rien de plus à compter — un groupe n'a pas d'« extrémité »,
+    les deux couleurs manquantes couvrent déjà les deux voies). Les
+    combinaisons de 4 tuiles ou plus restent hors de portée (voir
+    ci-dessous), comme avant.
+  - **Conséquence pour l'exposition (point 3 ci-dessous)** : un joker en
+    bout de suite de 3 est désormais PLUS exposé qu'un joker au milieu — au
+    plus 4 exemplaires inconnus (deux types) contre au plus 2 (un type) —
+    l'inverse de ce qu'affirmait #232. Tests dédiés :
+    `tests/test_ia_placement_joker.py::
+    test_types_remplacement_suite_bout_deux_valeurs`,
+    `test_types_remplacement_suite_bout_bas_deux_valeurs`,
+    `test_types_remplacement_suite_bout_contre_une_borne_une_seule_valeur`,
+    `test_exposition_suite_bout_quatre_exemplaires_inconnus`,
+    `test_placement_joker_prefere_le_milieu_au_bout_a_tuiles_egales`.
+  - **Libération sans remplacement, hors de portée** (réduction de groupe
+    de 4 à 3, joker retiré — voir §8) : réservée aux combinaisons de 4
+    tuiles ou plus DÉJÀ sur le plateau, déjà évitée par le solveur de base
+    (qui préfère ne pas y placer de joker quand une combinaison de 3
+    suffit) — **hors de portée de cette stratégie**, jamais mesurée par
+    `_types_remplacement_joker` (retourne `None` pour toute combinaison de
+    taille ≠ 3). La voie par prolongement ci-dessus NE lève PAS cette
+    limite : elle ne compte que le prolongement d'une suite de 3 EXISTANTE
+    (un coup mesurable par cette stratégie), jamais un réarrangement plus
+    large.
+  - **APPROXIMATION assumée, à ne pas perdre de vue** : l'exposition
+    calculée ici reste une approximation des voies de libération d'un
+    joker, PAS une mesure exhaustive. Voies COMPTÉES : échange direct
+    (milieu et bout) ; prolongement d'une extrémité suivi d'un détachement
+    sans remplacement (bout seulement, ajout #233). Voies NON comptées :
+    tout réarrangement plus large du plateau que le solveur complet
+    (Expert, §8bis) peut en théorie trouver pour libérer ce même joker —
+    démantèlement complet d'une suite (#175, identifié mais non implémenté
+    pour Avancé, voir §8), scission en milieu de suite combinée à d'autres
+    combinaisons, ou toute recombinaison globale à plusieurs coups
+    d'avance. Cette stratégie départage entre coups ÉQUIVALENTS déjà
+    proposés par le solveur (jamais n'en invente un), et ne prétend donc
+    mesurer que le risque le plus direct et le plus immédiat, pas le risque
+    total.
 - **Reprise interdite avant sa propre ouverture** : un joueur qui n'a pas
   encore fait sa mise initiale ne peut poser AUCUNE tuile sur le plateau
   (`moteur/partie.py`, contrôlé par `valider_coup`/`mise_initiale_min`) —
@@ -3403,25 +3455,39 @@ compteurs génériques que les stratégies précédentes
   (coïncidence jugée négligeable en pratique) ; à comparer avec le témoin
   (Expert, ou Champion du Monde sans la stratégie).
 
-**Tests fixes** (`tests/test_ia_placement_joker.py`) — deux niveaux, le
-second pour éviter de dépendre d'un plateau construit à la main face au
-solveur complet à perturbation illimitée (qui trouve souvent un
+**Tests fixes** (`tests/test_ia_placement_joker.py`) — trois niveaux depuis
+#233, le troisième pour éviter de dépendre d'un plateau construit à la main
+face au solveur complet à perturbation illimitée (qui trouve souvent un
 réarrangement global plus rentable que celui prévu par le test, voir le
 commentaire de tête du fichier) :
+0. **vérification sur le MOTEUR RÉEL** (`partie.jouer_tour`, issue #233,
+   tâche 1) : le coup « prolongement de l'extrémité opposée puis
+   détachement sans remplacement » est accepté par le moteur de validation
+   du jeu, dans les deux sens de symétrie (joker en bout haut, joker en bout
+   bas) ;
 1. brique directe (`_types_remplacement_joker`/`_exposition_coup_joker`) :
-   suite au milieu et suite au bout donnent la MÊME forme (une seule
-   valeur, voir l'écart documenté au point 1 ci-dessus) ; groupe de 3 (deux
-   couleurs manquantes) ; combinaison de 4 (hors scope, `None`) ;
-   exposition nulle (deux remplaçants déjà connus au tapis) ; exclusion
-   (tuile de remplacement encore en main) ; aucun joker posé (`None`) ;
+   suite au MILIEU (une seule valeur, une voie) ; suite en BOUT, haut et
+   bas (DEUX valeurs — échange direct + prolongement — correction #233) ;
+   suite en bout CONTRE UNE BORNE du jeu (une seule valeur, pas de
+   régression) ; groupe de 3 (deux couleurs manquantes) ; combinaison de 4
+   (hors scope, `None`) ; exposition nulle (deux remplaçants déjà connus au
+   tapis) ; exposition en bout (4 exemplaires, strictement plus qu'au
+   milieu) ; exclusion (tuile de remplacement OU de prolongement encore en
+   main) ; aucun joker posé (`None`) ;
 2. stratégie bout-en-bout (`jouer_niveau_bride`), SANS tapis (aucun
-   réarrangement possible) : une main où le SEUL joker du chevalet peut
-   compléter soit une série très rentable en points (exposition élevée, 4
-   exemplaires jamais vus) soit une suite peu rentable (exposition faible,
-   2 exemplaires) — sans la stratégie, le départage existant (points)
-   choisit la série ; avec elle, la stratégie choisit la suite, moins
-   exposée ; désactivée (décision identique) ; Expert inchangé ; coup sans
-   joker (aucun effet) ; coup qui vide la main (joué tel quel).
+   réarrangement possible) : deux dilemmes —
+   - série très rentable en points (exposition élevée, 4 exemplaires
+     jamais vus) contre suite peu rentable (exposition faible, 2
+     exemplaires) — sans la stratégie, le départage existant (points)
+     choisit la série ; avec elle, la stratégie choisit la suite, moins
+     exposée ;
+   - **(#233)** joker en bout très rentable (exposition élevée, 4
+     exemplaires — correction #233) contre joker au milieu peu rentable
+     (exposition faible, 2 exemplaires) — sans la stratégie, le départage
+     choisit le bout (plus de points) ; avec elle, la stratégie choisit le
+     milieu, moins exposé ;
+   - désactivée (décision identique) ; Expert inchangé ; coup sans joker
+     (aucun effet) ; coup qui vide la main (joué tel quel).
 
 **Expérience prévue** : Champion du Monde avec `placement_joker` SEULE
 contre Expert (même protocole que les stratégies précédentes,

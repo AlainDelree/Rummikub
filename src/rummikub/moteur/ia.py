@@ -1610,20 +1610,40 @@ def _localiser_tuile_sur_plateau(plateau, id_tuile):
 
 
 def _types_remplacement_joker(combo_dicts, position_index):
-    """Types de tuile (``(couleur, valeur)``) qui remplaceraient directement
-    le joker en ``position_index`` de ``combo_dicts`` SANS changer la
-    validité de la combinaison (voir ``_tuile_correspond_au_joker``, même
-    règle de position pour une suite).
+    """Types de tuile (``(couleur, valeur)``) qui peuvent libérer le joker en
+    ``position_index`` de ``combo_dicts`` (échange direct OU, pour une suite
+    de 3 avec le joker en BOUT, prolongement de l'extrémité opposée puis
+    détachement sans remplacement — voir CONTEXTE.md §13, point 9 de #232,
+    corrigé par #233).
 
     Restreint aux combinaisons de EXACTEMENT 3 tuiles (``None`` sinon) : une
-    combinaison de 4 tuiles ou plus peut libérer son joker SANS tuile de
-    remplacement (voir CONTEXTE.md §8, ``_jokers_liberables_par_
+    combinaison de 4 tuiles ou plus peut déjà libérer son joker SANS tuile
+    de remplacement (voir CONTEXTE.md §8, ``_jokers_liberables_par_
     groupe4_sans_remplacement``) — hors de portée de cette stratégie (issue
-    #232, déjà évité par le solveur de base). Pour une suite de 3, UNE seule
-    valeur convient (même règle de position, qu'elle soit au milieu ou au
-    bout — voir CONTEXTE.md §13, point 1 : ce moteur ne distingue PAS les
-    deux cas, contrairement à l'intuition de l'énoncé de l'issue). Pour une
-    série (groupe) de 3, les DEUX couleurs encore absentes conviennent."""
+    #232, déjà évité par le solveur de base).
+
+    Pour une suite de 3 :
+    - l'échange direct ne retient qu'UNE seule valeur, déduite de la
+      position du joker (``_tuile_correspond_au_joker``) ;
+    - si le joker est au MILIEU (``position_index == 1``), c'est la SEULE
+      voie : rien de plus (corrige l'issue #232, qui affirmait à tort que
+      milieu et bout étaient équivalents) ;
+    - si le joker est en BOUT (``position_index == 0`` ou ``2``), une
+      SECONDE voie existe : une tuile de même couleur qui prolonge
+      l'extrémité OPPOSÉE (valeur voisine de l'autre bout) transforme la
+      suite de 3 en suite de 4, où le joker — désormais en bout d'une
+      combinaison de 4 tuiles — se détache SANS remplacement (#150,
+      ``_jokers_detachables_par_extension``, vérifié sur le moteur réel par
+      ``tests/test_ia_placement_joker.py::
+      test_moteur_reel_detachement_par_prolongement_*``). Cette tuile de
+      prolongement est ajoutée aux types retournés si sa valeur reste dans
+      1..13 (sinon le joker est en bout CONTRE UNE BORNE : aucune seconde
+      voie, même exposition qu'au milieu).
+
+    Pour une série (groupe) de 3, les DEUX couleurs encore absentes
+    conviennent déjà (les deux voies possibles, échange direct avec l'une ou
+    l'autre couleur manquante — pas de voie supplémentaire par prolongement,
+    une série n'ayant pas d'« extrémité »)."""
     combo = [tuile_depuis_dict(d) for d in combo_dicts]
     if len(combo) != 3:
         return None
@@ -1635,7 +1655,17 @@ def _types_remplacement_joker(combo_dicts, position_index):
         valeur_attendue = t0.valeur - i0 + position_index
         if valeur_attendue < VALEUR_MIN or valeur_attendue > VALEUR_MAX:
             return None
-        return [(t0.couleur, valeur_attendue)]
+        types = [(t0.couleur, valeur_attendue)]
+        if position_index == 0:
+            valeur_prolongement = valeur_attendue + 3
+        elif position_index == 2:
+            valeur_prolongement = valeur_attendue - 3
+        else:
+            valeur_prolongement = None
+        if (valeur_prolongement is not None
+                and VALEUR_MIN <= valeur_prolongement <= VALEUR_MAX):
+            types.append((t0.couleur, valeur_prolongement))
+        return types
     valeur = next(t.valeur for t in combo if not t.est_joker)
     couleurs_utilisees = {t.couleur for t in combo if not t.est_joker}
     return [(c, valeur) for c in COULEURS if c not in couleurs_utilisees]
