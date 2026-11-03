@@ -22,7 +22,7 @@ import random
 import time
 from itertools import combinations
 
-from rummikub.config import VALEUR_MIN, VALEUR_MAX
+from rummikub.config import VALEUR_MIN, VALEUR_MAX, COULEURS
 from rummikub.moteur.validation import (
     valider_combinaison, valider_suite, valider_plateau,
 )
@@ -40,6 +40,7 @@ from rummikub.moteur import evaluation_main
 from rummikub.moteur import niveaux as _niveaux
 from rummikub.moteur import verification_finition
 from rummikub.moteur import sorties as _sorties
+from rummikub.moteur import inconnues as _inconnues
 
 
 # --------------------------------------------------------------------------- #
@@ -908,6 +909,11 @@ SOLVEUR_PETITS_CHIFFRES = "petits-chiffres"
 # variante tolérante) qui laisse un chevalet de meilleur score (voir
 # _appliquer_chances_prochain_tour, moteur/sorties.py).
 SOLVEUR_CHANCES_PROCHAIN_TOUR = "chances-prochain-tour"
+# « Placement du joker » (issue #232, Champion du Monde seul) : coup
+# équivalent (même nombre de tuiles posées) qui place le joker du chevalet
+# dans une combinaison moins exposée à une reprise par l'adversaire (voir
+# _appliquer_placement_joker).
+SOLVEUR_PLACEMENT_JOKER = "placement-joker"
 
 LIBELLES_SOLVEUR = {
     SOLVEUR_EXACT: "modèle exact",
@@ -919,6 +925,7 @@ LIBELLES_SOLVEUR = {
     SOLVEUR_RETENUE_DEBUT: "retenue au début",
     SOLVEUR_PETITS_CHIFFRES: "garde une petite tuile",
     SOLVEUR_CHANCES_PROCHAIN_TOUR: "meilleures chances au prochain tour",
+    SOLVEUR_PLACEMENT_JOKER: "placement du joker le moins exposé",
 }
 
 
@@ -1574,6 +1581,239 @@ def _appliquer_chances_prochain_tour(etat, idx, coup, taille_main, deadline):
     return meilleur_coup, info
 
 
+# --------------------------------------------------------------------------- #
+# « Placement du joker » (issue #232, Champion du Monde seul) : à nombre de
+# tuiles posées égal, préfère le placement d'un joker DEPUIS LE CHEVALET le
+# moins exposé à une reprise par l'adversaire — voir CONTEXTE.md §13 pour les
+# règles de libération d'un joker VÉRIFIÉES dans ce moteur (échange direct
+# uniquement ; les libérations sans remplacement, réservées aux combinaisons
+# de 4 tuiles ou plus, sont hors de portée de cette stratégie, déjà évitées
+# par le solveur de base).
+# --------------------------------------------------------------------------- #
+
+def _ids_jokers_poses(ids_poses, chevalet):
+    """Sous-ensemble (dans l'ordre de ``ids_poses``) des ids qui, retrouvés
+    dans ``chevalet``, sont des jokers."""
+    par_id = {t["id"]: t for t in chevalet}
+    return [id_t for id_t in ids_poses
+           if (t := par_id.get(id_t)) is not None and t.get("est_joker")]
+
+
+def _localiser_tuile_sur_plateau(plateau, id_tuile):
+    """Position ``(combi_index, position_index)`` de ``id_tuile`` sur
+    ``plateau`` (liste de combinaisons de dicts), ou ``(None, None)``."""
+    for ci, combo in enumerate(plateau):
+        for pi, t in enumerate(combo):
+            if t.get("id") == id_tuile:
+                return ci, pi
+    return None, None
+
+
+def _types_remplacement_joker(combo_dicts, position_index):
+    """Types de tuile (``(couleur, valeur)``) qui remplaceraient directement
+    le joker en ``position_index`` de ``combo_dicts`` SANS changer la
+    validité de la combinaison (voir ``_tuile_correspond_au_joker``, même
+    règle de position pour une suite).
+
+    Restreint aux combinaisons de EXACTEMENT 3 tuiles (``None`` sinon) : une
+    combinaison de 4 tuiles ou plus peut libérer son joker SANS tuile de
+    remplacement (voir CONTEXTE.md §8, ``_jokers_liberables_par_
+    groupe4_sans_remplacement``) — hors de portée de cette stratégie (issue
+    #232, déjà évité par le solveur de base). Pour une suite de 3, UNE seule
+    valeur convient (même règle de position, qu'elle soit au milieu ou au
+    bout — voir CONTEXTE.md §13, point 1 : ce moteur ne distingue PAS les
+    deux cas, contrairement à l'intuition de l'énoncé de l'issue). Pour une
+    série (groupe) de 3, les DEUX couleurs encore absentes conviennent."""
+    combo = [tuile_depuis_dict(d) for d in combo_dicts]
+    if len(combo) != 3:
+        return None
+    r = valider_combinaison(combo)
+    if not r["valide"]:
+        return None
+    if r["type"] == "suite":
+        i0, t0 = next((i, t) for i, t in enumerate(combo) if not t.est_joker)
+        valeur_attendue = t0.valeur - i0 + position_index
+        if valeur_attendue < VALEUR_MIN or valeur_attendue > VALEUR_MAX:
+            return None
+        return [(t0.couleur, valeur_attendue)]
+    valeur = next(t.valeur for t in combo if not t.est_joker)
+    couleurs_utilisees = {t.couleur for t in combo if not t.est_joker}
+    return [(c, valeur) for c in COULEURS if c not in couleurs_utilisees]
+
+
+def _exposition_coup_joker(etat, idx, coup):
+    """Exposition totale d'un coup qui pose un ou plusieurs jokers DEPUIS LE
+    CHEVALET (issue #232, point 3) : pour chacun, la somme des exemplaires
+    encore INCONNUS (brique « Inconnues », #219 — jamais la main adverse,
+    seulement sa taille) des types de tuile qui pourraient le remplacer dans
+    sa combinaison (voir ``_types_remplacement_joker``). Une exposition
+    nulle signifie que l'adversaire ne peut pas le reprendre (tous les
+    exemplaires sont déjà connus, sur le plateau ou dans NOTRE main).
+
+    Nuance d'Alain (point 4 de l'issue) : si, APRÈS le coup, notre propre
+    main contient encore la tuile qui remplacerait l'un des jokers posés,
+    ce placement est EXCLU du critère (``info["exclu"] = True``) — un bon
+    joueur jouerait cette tuile plutôt que le joker, question de génération
+    de coup hors de portée de cette stratégie de départage.
+
+    Retourne ``(score, info)`` — ``score`` est ``None`` si ``coup`` ne pose
+    aucun joker mesurable (aucun joker posé, ou chacun atterrit dans une
+    combinaison hors de portée — voir ``_types_remplacement_joker``) :
+    ``info`` vaut alors ``{"a_pose_un_joker": bool, "exclu": False,
+    "details": []}``. Sinon ``info`` contient aussi ``"exposition_brute"``
+    (somme, sans la variante d'asymétrie) et ``"details"`` (une entrée par
+    joker mesurable : ``{"id_joker", "combi_index", "position_index",
+    "types", "exposition", "en_main", "ids_autres"}``).
+
+    Variante d'asymétrie (point 5 de l'issue, ``niveaux.
+    ASYMETRIE_JOKER_ACTIVE``, ``False`` par défaut) : ``score`` devient
+    ``exposition - niveaux.POIDS_ASYMETRIE_JOKER * ma_chance_de_reprise``,
+    où ``ma_chance_de_reprise`` est la probabilité (brique « Inconnues »)
+    que CE JOUEUR pioche lui-même une tuile de remplacement — sans effet
+    tant que la variante reste désactivée (``score == exposition_brute``)."""
+    ids_poses = list(coup.get("ids_tuiles") or [])
+    chevalet = etat["joueurs"][idx]["chevalet"]
+    ids_jokers = _ids_jokers_poses(ids_poses, chevalet)
+    if not ids_jokers:
+        return None, {"a_pose_un_joker": False, "exclu": False, "details": []}
+
+    nouveau_plateau = coup.get("nouveau_plateau") or []
+    ids_poses_set = set(ids_poses)
+    chevalet_apres = [t for t in chevalet if t["id"] not in ids_poses_set]
+    tailles_adv = [len(j.get("chevalet", [])) for i, j in enumerate(etat["joueurs"])
+                  if i != idx]
+    taille_pioche = len(etat.get("pioche", []))
+    inconnues = _inconnues.calculer_inconnues(nouveau_plateau, chevalet_apres,
+                                              tailles_adv, taille_pioche)
+
+    total = 0
+    asym_total = 0.0
+    exclu = False
+    details = []
+    for id_j in ids_jokers:
+        ci, pi = _localiser_tuile_sur_plateau(nouveau_plateau, id_j)
+        if ci is None:
+            continue
+        combo = nouveau_plateau[ci]
+        types = _types_remplacement_joker(combo, pi)
+        if not types:
+            continue
+        expo = sum(inconnues.exemplaires_restants(t) for t in types)
+        en_main = any(not tt.get("est_joker") and (tt.get("couleur"), tt.get("valeur")) == t
+                     for t in types for tt in chevalet_apres)
+        total += expo
+        if _niveaux.ASYMETRIE_JOKER_ACTIVE:
+            asym_total += sum(_inconnues.proba_tuile_dans_pioche(inconnues, t)
+                              for t in types)
+        if en_main:
+            exclu = True
+        ids_autres = sorted(t["id"] for t in combo if t["id"] != id_j)
+        details.append({"id_joker": id_j, "combi_index": ci, "position_index": pi,
+                        "types": types, "exposition": expo, "en_main": en_main,
+                        "ids_autres": ids_autres})
+
+    if not details:
+        return None, {"a_pose_un_joker": True, "exclu": False, "details": []}
+
+    score = total
+    if _niveaux.ASYMETRIE_JOKER_ACTIVE:
+        score = total - _niveaux.POIDS_ASYMETRIE_JOKER * asym_total
+    return score, {"a_pose_un_joker": True, "exclu": exclu,
+                   "exposition_brute": total, "details": details}
+
+
+def _candidats_placement_joker(etat, idx, coup, deadline):
+    """Coups équivalents (MÊME nombre de tuiles posées, strictement — pas de
+    variante tolérante pour cette stratégie) obtenus en retirant, tour à
+    tour, CHACUNE des tuiles que ``coup`` pose, puis en résolvant à nouveau —
+    même mécanisme que ``_candidats_sorties`` (#231). Retourne une liste de
+    coups marqués ``SOLVEUR_PLACEMENT_JOKER``."""
+    ids_jouees = list(coup.get("ids_tuiles") or [])
+    nb_best = len(ids_jouees)
+    joueur = etat["joueurs"][idx]
+    chevalet = joueur["chevalet"]
+    candidats = []
+    for id_tuile in ids_jouees:
+        restant = deadline - time.monotonic()
+        if restant <= 0:
+            break
+        idx_t = next((i for i, t in enumerate(chevalet) if t["id"] == id_tuile),
+                     None)
+        if idx_t is None:
+            continue
+        chevalet2 = chevalet[:idx_t] + chevalet[idx_t + 1:]
+        joueur2 = dict(joueur)
+        joueur2["chevalet"] = chevalet2
+        joueurs2 = list(etat["joueurs"])
+        joueurs2[idx] = joueur2
+        etat2 = dict(etat)
+        etat2["joueurs"] = joueurs2
+        statut, charge = _coup_exact(etat2, idx, restant, PREFERER_SIMPLICITE,
+                                     EVAL_MAIN_DEFAUT)
+        if statut != "coup" or not charge.get("ids_tuiles"):
+            continue
+        if len(charge["ids_tuiles"]) != nb_best:
+            continue
+        candidats.append(_marquer_solveur(charge, SOLVEUR_PLACEMENT_JOKER))
+    return candidats
+
+
+def _appliquer_placement_joker(etat, idx, coup, taille_main, deadline):
+    """Stratégie ``placement_joker`` (#232) : à nombre de tuiles posées égal,
+    entre ``coup`` et les coups équivalents trouvés par
+    ``_candidats_placement_joker``, préfère celui dont l'exposition du/des
+    joker(s) posé(s) (``_exposition_coup_joker``) est la plus faible.
+
+    N'a aucun effet (``coup`` inchangé) si : ``coup`` ne pose aucun joker
+    mesurable depuis le chevalet ; ou si ``coup`` est lui-même EXCLU du
+    critère (point 4 de l'issue — notre main contient encore la tuile de
+    remplacement, voir ``_exposition_coup_joker``) ; ou si aucun candidat
+    équivalent n'a une exposition strictement meilleure. Les candidats
+    eux-mêmes EXCLUS (même nuance) ne sont jamais choisis.
+
+    Retourne ``(coup, info)`` — ``info`` un dict de compteurs (point 6 de
+    l'issue) : ``{"declenchee": bool, "exclu": bool,
+    "nb_candidats_equivalents": int, "choisi": bool,
+    "exposition_avant": float|None, "meilleure_exposition": float|None,
+    "details": [...]}`` (``details``, voir ``_exposition_coup_joker``, du
+    coup FINALEMENT retenu)."""
+    expo_avant, info_expo = _exposition_coup_joker(etat, idx, coup)
+    info = {"declenchee": bool(info_expo.get("details")),
+           "exclu": info_expo.get("exclu", False),
+           "nb_candidats_equivalents": 0, "choisi": False,
+           "exposition_avant": expo_avant, "meilleure_exposition": expo_avant,
+           "details": info_expo.get("details", [])}
+    if expo_avant is None or not info["declenchee"]:
+        return coup, info
+    if info_expo["exclu"]:
+        return coup, info
+
+    restant = deadline - time.monotonic()
+    if restant <= 0:
+        return coup, info
+
+    candidats = _candidats_placement_joker(etat, idx, coup, deadline)
+
+    meilleur_coup = coup
+    meilleure_expo = expo_avant
+    meilleure_info_expo = info_expo
+    for candidat in candidats:
+        info["nb_candidats_equivalents"] += 1
+        expo_cand, info_expo_cand = _exposition_coup_joker(etat, idx, candidat)
+        if expo_cand is None or info_expo_cand["exclu"]:
+            continue
+        if expo_cand < meilleure_expo:
+            meilleure_expo = expo_cand
+            meilleur_coup = candidat
+            meilleure_info_expo = info_expo_cand
+
+    info["meilleure_exposition"] = meilleure_expo
+    info["details"] = meilleure_info_expo.get("details", [])
+    if meilleur_coup is not coup:
+        info["choisi"] = True
+    return meilleur_coup, info
+
+
 def _candidats_finition(etat, idx, coup_solveur, budget_temps=None,
                         garder_joker=False):
     """Coups candidats pour la vérification de finition (#221, point 2 ;
@@ -1768,6 +2008,17 @@ def jouer_niveau_bride(etat, idx, nom_niveau, budget_temps=None, rng=None,
         coup, info_sorties = _appliquer_chances_prochain_tour(
             etat, idx, coup, taille_main, deadline)
         coup["chances_prochain_tour_info"] = info_sorties
+
+    if bridage.placement_joker:
+        # #232 : à nombre de tuiles posées égal, préfère le placement d'un
+        # joker du chevalet le moins exposé à une reprise par l'adversaire.
+        # Même raisonnement d'ordre que ``chances_prochain_tour`` ci-dessus :
+        # appliqué AVANT les variantes tolérantes qui peuvent réduire le
+        # nombre de tuiles posées (``reserve_tuile``/``retenue_debut``/
+        # ``petits_chiffres``).
+        coup, info_joker = _appliquer_placement_joker(
+            etat, idx, coup, taille_main, deadline)
+        coup["placement_joker_info"] = info_joker
 
     if bridage.reserve_tuile:
         # #229, hypothèse H2 : garder une tuile que le coup aurait posée.

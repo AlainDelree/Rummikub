@@ -211,6 +211,12 @@ def _compteurs_chances_prochain_tour(resume: dict) -> dict:
            "a_change_le_coup": stats.get("choisi", 0)}
 
 
+def _compteurs_placement_joker(resume: dict) -> dict:
+    stats = resume.get("stats_placement_joker") or {}
+    return {"declenchee": stats.get("declenchee", 0),
+           "a_change_le_coup": stats.get("choisi", 0)}
+
+
 EXTRACTEURS_COMPTEURS_STRATEGIES = {
     "verif_finition": _compteurs_verif_finition,
     "garde_joker": _compteurs_garde_joker,
@@ -218,6 +224,7 @@ EXTRACTEURS_COMPTEURS_STRATEGIES = {
     "retenue_debut": _compteurs_retenue_debut,
     "petits_chiffres": _compteurs_petits_chiffres,
     "chances_prochain_tour": _compteurs_chances_prochain_tour,
+    "placement_joker": _compteurs_placement_joker,
 }
 
 
@@ -314,6 +321,47 @@ def _anomalies_conservation(etat: dict) -> list[str]:
 
 
 # --------------------------------------------------------------------------- #
+# Suivi du mécanisme VISÉ par ``placement_joker`` (issue #232, point 6) :
+# nombre de fois où un joker posé par CE joueur, SOUS la stratégie, a été
+# repris par un adversaire (échange direct, voir CONTEXTE.md §13).
+# --------------------------------------------------------------------------- #
+
+def _joker_encore_accompagne(plateau: list, id_joker: str, ids_autres: set) -> bool:
+    """Vrai si ``id_joker`` est encore présent sur ``plateau``, dans une
+    combinaison qui contient TOUJOURS toutes ses anciennes compagnes
+    (``ids_autres``, les autres tuiles de sa combinaison au moment où il a
+    été posé) — c'est-à-dire si rien n'indique qu'il ait été repris.
+    Introuvable (ne devrait jamais arriver, un joker posé doit toujours
+    être rejoué dans le même tour, CONTEXTE.md §13) : on ne compte rien."""
+    for combo in plateau:
+        ids_combo = {t["id"] for t in combo}
+        if id_joker in ids_combo:
+            return ids_autres <= ids_combo
+    return True
+
+
+def _detecter_reprises_joker(plateau_apres: list, mover_idx: int,
+                            suivi: dict, stats: dict) -> None:
+    """Pour chaque joker suivi (``suivi``, ``{id_joker: {"owner", "ids_
+    autres"}}``, voir ``jouer_un_tour``), détecte une reprise directe
+    (CONTEXTE.md §13 : la tuile qui le remplaçait a pris sa place) —
+    APPROXIMATION documentée : un réarrangement du plateau sans aucun
+    rapport avec ce joker précis pourrait, en théorie, produire le même
+    signal (il faudrait, par coïncidence, déplacer le joker hors du groupe
+    de SES compagnes d'origine) — négligeable en pratique. Compte dans
+    ``stats["joker_repris_par_adversaire"]`` seulement si le joueur qui
+    vient de jouer n'est PAS le propriétaire du joker, puis arrête de le
+    suivre (repris ou non, l'épisode est clos)."""
+    for id_joker, info in list(suivi.items()):
+        if _joker_encore_accompagne(plateau_apres, id_joker, info["ids_autres"]):
+            continue
+        if mover_idx != info["owner"] and stats is not None:
+            stats["joker_repris_par_adversaire"] = (
+                stats.get("joker_repris_par_adversaire", 0) + 1)
+        del suivi[id_joker]
+
+
+# --------------------------------------------------------------------------- #
 # Trace brute par tour (issue #226) — mesure PURE : lit l'état complet de la
 # partie (ce n'est pas une décision d'IA) et n'influence jamais le jeu. Le
 # fichier n'est ouvert, et ces fonctions ne sont appelées, que si
@@ -399,7 +447,9 @@ def jouer_un_tour(etat: dict, idx: int, temps_par_niveau: dict,
                   stats_petits_chiffres: dict = None,
                   tuiles_petites_main: dict = None,
                   stats_chances_prochain_tour: dict = None,
-                  suivi_chances_prochain_tour: dict = None) -> tuple[dict, bool, bool]:
+                  suivi_chances_prochain_tour: dict = None,
+                  stats_placement_joker: dict = None,
+                  suivi_placement_joker: dict = None) -> tuple[dict, bool, bool]:
     """Joue le tour de l'IA à l'index ``idx``.
 
     ``budget_temps`` (issue #228, point 5) : budget de temps du solveur par
@@ -489,7 +539,18 @@ def jouer_un_tour(etat: dict, idx: int, temps_par_niveau: dict,
     CONSERVÉ, ``meilleur_score``, à chaque tour où la stratégie s'est
     déclenchée) et ``pioche_evitee`` (au tour SUIVANT du même joueur, a-t-il
     joué plutôt que pioché, à comparer avec le témoin — même mécanisme de
-    suivi que ``suivi_reserve_tuile``)."""
+    suivi que ``suivi_reserve_tuile``).
+
+    ``stats_placement_joker``/``suivi_placement_joker`` (issue #232, point
+    6) : compteurs bruts (``declenchee``/``choisi``, clé ``placement_joker_
+    info`` du coup renvoyé par ``jouer_niveau_bride``) + ``nb_jokers_
+    poses``/``exposition_liste`` (un ajout par joker mesurable posé, qu'il
+    ait ou non changé le coup) — et le mécanisme VISÉ par la stratégie
+    (``joker_repris_par_adversaire``, voir ``_detecter_reprises_joker``) :
+    contrairement à ``suivi_reserve_tuile``/``suivi_chances_prochain_tour``
+    (qui ne regardent que le tour SUIVANT du MÊME joueur), ``suivi_
+    placement_joker`` est vérifié à CHAQUE tour (de n'importe quel joueur)
+    jusqu'à ce qu'une reprise soit détectée ou que la manche se termine."""
     niveau = etat["joueurs"][idx]["niveau"]
     backup_debut_tour(etat)
     plateau_avant = etat["plateau"]
@@ -511,6 +572,9 @@ def jouer_un_tour(etat: dict, idx: int, temps_par_niveau: dict,
 
     def _issue(etat_final, invalide, tuiles_disparues, action,
               nb_tuiles_posees=0, points_poses=0):
+        if suivi_placement_joker:
+            _detecter_reprises_joker(etat_final.get("plateau", []), idx,
+                                     suivi_placement_joker, stats_placement_joker)
         if trace_ctx is not None:
             joueur_apres = etat_final["joueurs"][idx]
             _ecrire_trace_tour(
@@ -659,6 +723,30 @@ def jouer_un_tour(etat: dict, idx: int, temps_par_niveau: dict,
         if suivi_chances_prochain_tour is not None and info_chances.get("choisi"):
             suivi_chances_prochain_tour[idx] = True
 
+    # « Placement du joker » (#232, point 6) : compteurs bruts + mesure DIRECTE
+    # (``nb_jokers_poses``/``exposition_liste``, un ajout par joker mesurable
+    # posé CE tour, que le départage ait ou non changé le coup) ; la détection
+    # de reprise elle-même (le mécanisme VISÉ) se fait à CHAQUE tour via
+    # ``_issue``/``_detecter_reprises_joker`` ci-dessus, pas seulement au tour
+    # suivant du même joueur (un adversaire quelconque peut reprendre).
+    info_joker = res_ia.get("placement_joker_info")
+    if info_joker is not None:
+        if stats_placement_joker is not None and info_joker.get("declenchee"):
+            stats_placement_joker["declenchee"] = (
+                stats_placement_joker.get("declenchee", 0) + 1)
+            for detail in info_joker.get("details", []):
+                stats_placement_joker["nb_jokers_poses"] = (
+                    stats_placement_joker.get("nb_jokers_poses", 0) + 1)
+                stats_placement_joker.setdefault("exposition_liste", []).append(
+                    detail["exposition"])
+        if stats_placement_joker is not None and info_joker.get("choisi"):
+            stats_placement_joker["choisi"] = (
+                stats_placement_joker.get("choisi", 0) + 1)
+        if suivi_placement_joker is not None:
+            for detail in info_joker.get("details", []):
+                suivi_placement_joker[detail["id_joker"]] = {
+                    "owner": idx, "ids_autres": set(detail["ids_autres"])}
+
     if niveau == "Expert" and res_ia.get("action") == "jouer":
         perturbations_expert.append(
             mesurer_perturbation(plateau_avant, res_ia["nouveau_plateau"]))
@@ -710,15 +798,16 @@ def _jouer_une_manche(etat: dict, max_tours: int, temps_par_niveau: dict,
                       stats_retenue_debut: dict = None,
                       stats_petits_chiffres: dict = None,
                       tuiles_petites_main: dict = None,
-                      stats_chances_prochain_tour: dict = None) -> dict:
+                      stats_chances_prochain_tour: dict = None,
+                      stats_placement_joker: dict = None) -> dict:
     """Joue la manche courante de ``etat`` jusqu'à sa fin naturelle (chevalet
     vidé ou pioche épuisée) ou jusqu'au garde-fou ``max_tours``. Retourne les
     statistiques de CETTE manche ; ``etat`` est muté en place.
 
-    ``suivi_reserve_tuile``/``suivi_chances_prochain_tour`` (issues #229/#231)
-    sont créés ICI, frais à chaque manche (les mains sont redistribuées à
-    chaque nouvelle manche, voir ``jouer_un_tour``) — jamais transmis par
-    l'appelant."""
+    ``suivi_reserve_tuile``/``suivi_chances_prochain_tour``/``suivi_
+    placement_joker`` (issues #229/#231/#232) sont créés ICI, frais à chaque
+    manche (les mains sont redistribuées à chaque nouvelle manche, voir
+    ``jouer_un_tour``) — jamais transmis par l'appelant."""
     tours = 0
     coups_invalides = 0
     coups_tuiles_disparues = 0
@@ -726,6 +815,7 @@ def _jouer_une_manche(etat: dict, max_tours: int, temps_par_niveau: dict,
     arretee_garde_fou = False
     suivi_reserve_tuile: dict = {}
     suivi_chances_prochain_tour: dict = {}
+    suivi_placement_joker: dict = {}
 
     while not etat["manche_terminee"]:
         tours += 1
@@ -744,7 +834,9 @@ def _jouer_une_manche(etat: dict, max_tours: int, temps_par_niveau: dict,
             stats_petits_chiffres=stats_petits_chiffres,
             tuiles_petites_main=tuiles_petites_main,
             stats_chances_prochain_tour=stats_chances_prochain_tour,
-            suivi_chances_prochain_tour=suivi_chances_prochain_tour)
+            suivi_chances_prochain_tour=suivi_chances_prochain_tour,
+            stats_placement_joker=stats_placement_joker,
+            suivi_placement_joker=suivi_placement_joker)
         if invalide:
             coups_invalides += 1
         if tuiles_disparues:
@@ -786,7 +878,8 @@ def jouer_match(config_joueurs: list[dict], nb_manches: int, max_tours: int,
                 stats_retenue_debut: dict = None,
                 stats_petits_chiffres: dict = None,
                 tuiles_petites_main: dict = None,
-                stats_chances_prochain_tour: dict = None) -> dict:
+                stats_chances_prochain_tour: dict = None,
+                stats_placement_joker: dict = None) -> dict:
     """Joue un MATCH complet à 2 joueurs de ``nb_manches`` manches (issue
     #203). Les manches s'enchaînent via ``nouvelle_manche`` (score cumulé
     conservé, nouvelle donne et mise initiale remise à zéro à chaque manche).
@@ -825,7 +918,8 @@ def jouer_match(config_joueurs: list[dict], nb_manches: int, max_tours: int,
                        "stats_reserve_tuile": stats_reserve_tuile,
                        "stats_retenue_debut": stats_retenue_debut,
                        "stats_petits_chiffres": stats_petits_chiffres,
-                       "stats_chances_prochain_tour": stats_chances_prochain_tour}
+                       "stats_chances_prochain_tour": stats_chances_prochain_tour,
+                       "stats_placement_joker": stats_placement_joker}
     compteurs_avant = {sid: extracteur(_resume_partiel)["a_change_le_coup"]
                        for sid, extracteur in EXTRACTEURS_COMPTEURS_STRATEGIES.items()}
 
@@ -840,7 +934,8 @@ def jouer_match(config_joueurs: list[dict], nb_manches: int, max_tours: int,
                                 stats_retenue_debut=stats_retenue_debut,
                                 stats_petits_chiffres=stats_petits_chiffres,
                                 tuiles_petites_main=tuiles_petites_main,
-                                stats_chances_prochain_tour=stats_chances_prochain_tour)
+                                stats_chances_prochain_tour=stats_chances_prochain_tour,
+                                stats_placement_joker=stats_placement_joker)
         coups_invalides += res["coups_invalides"]
         coups_tuiles_disparues += res["coups_tuiles_disparues"]
         anomalies_conservation += res["anomalies_conservation"]
@@ -1010,6 +1105,12 @@ def comparer(niveau_a: str, niveau_b: str, nb_donnes: int, seed: int,
     # CONSERVÉS) et ``pioche_evitee``/``verifications`` (au tour suivant du
     # même joueur, a-t-il pu jouer plutôt que piocher).
     stats_chances_prochain_tour: dict = {}
+    # « Placement du joker » (#232, point 6) : mêmes compteurs bruts, voir
+    # ``jouer_un_tour``/``_compteurs_placement_joker`` — ``exposition_liste``
+    # (une entrée par joker mesurable posé) et ``joker_repris_par_
+    # adversaire`` (mécanisme VISÉ, détecté à CHAQUE tour via ``_detecter_
+    # reprises_joker``, pas seulement au tour suivant du même joueur).
+    stats_placement_joker: dict = {}
     pile_appels = contextlib.ExitStack()
     pile_appels.enter_context(_compter_appels_solveur_verif(appels_solveur_verif))
 
@@ -1041,7 +1142,8 @@ def comparer(niveau_a: str, niveau_b: str, nb_donnes: int, seed: int,
                                    stats_retenue_debut=stats_retenue_debut,
                                    stats_petits_chiffres=stats_petits_chiffres,
                                    tuiles_petites_main=tuiles_petites_main,
-                                   stats_chances_prochain_tour=stats_chances_prochain_tour)
+                                   stats_chances_prochain_tour=stats_chances_prochain_tour,
+                                   stats_placement_joker=stats_placement_joker)
             coups_invalides_total += resultat["coups_invalides"]
             coups_tuiles_disparues_total += resultat["coups_tuiles_disparues"]
             anomalies_conservation_total += resultat["anomalies_conservation"]
@@ -1128,6 +1230,7 @@ def comparer(niveau_a: str, niveau_b: str, nb_donnes: int, seed: int,
         "stats_petits_chiffres": stats_petits_chiffres,
         "tuiles_petites_main": tuiles_petites_main,
         "stats_chances_prochain_tour": stats_chances_prochain_tour,
+        "stats_placement_joker": stats_placement_joker,
         "victoires": victoires,
         "matchs_nuls": matchs_nuls,
         "matchs_decides": matchs_decides,
@@ -1424,6 +1527,27 @@ def afficher_rapport(resume: dict) -> None:
             print(f"    ... a pu jouer (plutôt que piocher) au tour suivant "
                  f"du même joueur, après un coup changé : "
                  f"{stats_cpt.get('pioche_evitee', 0)}/{verifs_cpt} tour(s)")
+
+    stats_pj = resume.get("stats_placement_joker") or {}
+    if stats_pj.get("declenchee"):
+        declenchee_pj = stats_pj["declenchee"]
+        choisi_pj = stats_pj.get("choisi", 0)
+        expositions = stats_pj.get("exposition_liste") or []
+        nb_jokers = stats_pj.get("nb_jokers_poses", 0)
+        repris_pj = stats_pj.get("joker_repris_par_adversaire", 0)
+        print("-" * 70)
+        print("  Placement du joker (#232, Champion du Monde seul) :")
+        print(f"    Tours examinés (coup posant un joker mesurable) : "
+             f"{declenchee_pj}")
+        print(f"    ... coup changé (placement moins exposé trouvé) : "
+             f"{choisi_pj}/{declenchee_pj} tour(s)")
+        print(f"    Jokers posés mesurés : {nb_jokers}")
+        if expositions:
+            print(f"    Exposition moyenne (exemplaires inconnus) : "
+                 f"{moyenne(expositions):.2f}, sur {len(expositions)} "
+                 f"placement(s).")
+        print(f"    ... repris par un adversaire (mécanisme visé) : "
+             f"{repris_pj}/{nb_jokers} joker(s) posé(s)")
 
     compteurs = compteurs_strategies(resume)
     if any(c["declenchee"] for c in compteurs.values()):

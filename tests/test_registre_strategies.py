@@ -7,10 +7,10 @@ import pytest
 from rummikub.moteur import niveaux
 
 
-def test_registre_contient_les_six_strategies_existantes():
+def test_registre_contient_les_sept_strategies_existantes():
     assert set(niveaux.STRATEGIES) == {
         "verif_finition", "garde_joker", "reserve_tuile", "retenue_debut",
-        "petits_chiffres", "chances_prochain_tour"}
+        "petits_chiffres", "chances_prochain_tour", "placement_joker"}
     vf = niveaux.STRATEGIES["verif_finition"]
     assert vf.niveaux == ("Expert", "Champion du Monde")
     assert vf.active_par_defaut is True
@@ -32,12 +32,15 @@ def test_registre_contient_les_six_strategies_existantes():
     cpt = niveaux.STRATEGIES["chances_prochain_tour"]
     assert cpt.niveaux == ("Champion du Monde",)
     assert cpt.active_par_defaut is False
+    pj = niveaux.STRATEGIES["placement_joker"]
+    assert pj.niveaux == ("Champion du Monde",)
+    assert pj.active_par_defaut is False
 
 
 def test_strategies_champion_valides():
     assert set(niveaux.strategies_champion_valides()) == {
         "verif_finition", "garde_joker", "reserve_tuile", "retenue_debut",
-        "petits_chiffres", "chances_prochain_tour"}
+        "petits_chiffres", "chances_prochain_tour", "placement_joker"}
 
 
 def test_strategies_champion_par_defaut_reproduit_bridages_champion():

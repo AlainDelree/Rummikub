@@ -83,7 +83,12 @@ class Bridage:
     #231, Champion du Monde SEUL) : à nombre de tuiles posées égal, préfère
     le coup qui laisse le chevalet le plus susceptible de pouvoir encore
     jouer au tour suivant (score ``moteur/sorties.py``, somme des
-    probabilités de piocher une « sortie ») — ``False`` par défaut."""
+    probabilités de piocher une « sortie ») — ``False`` par défaut.
+    ``placement_joker`` (issue #232, Champion du Monde SEUL) : pour un coup
+    qui pose un joker du chevalet, à nombre de tuiles posées égal, préfère
+    le placement dont l'exposition (nombre d'exemplaires encore INCONNUS des
+    tuiles qui pourraient le remplacer, brique « Inconnues » #219) est la
+    plus faible — ``False`` par défaut."""
     perturbation_max: int | None
     taux_oubli: float
     verif_finition: bool = False
@@ -92,6 +97,7 @@ class Bridage:
     retenue_debut: bool = False
     petits_chiffres: bool = False
     chances_prochain_tour: bool = False
+    placement_joker: bool = False
 
     @property
     def complet(self) -> bool:
@@ -254,6 +260,22 @@ ECART_TUILES_SORTIES = 0
 SEUIL_GAIN_SORTIES = 0.15
 
 
+# Paramètres de « placement du joker » (#232) : variante d'asymétrie,
+# DÉSACTIVÉE par défaut (``ASYMETRIE_JOKER_ACTIVE = False``). Quand active,
+# le départage ne compare plus l'exposition brute (nombre d'exemplaires
+# inconnus des tuiles de remplacement, exposées à l'ADVERSAIRE) mais un score
+# ajusté ``exposition - POIDS_ASYMETRIE_JOKER * ma_chance_de_reprise``, où
+# ``ma_chance_de_reprise`` est la probabilité (brique « Inconnues », #219)
+# que CE JOUEUR pioche lui-même une des tuiles de remplacement — nuance
+# d'Alain (#232, point 5) : un joker difficile à reprendre pour l'adversaire
+# l'est aussi pour moi, donc préférer, à exposition égale, le placement que
+# j'ai le plus de chances de récupérer moi-même. Valeur de départ INDICATIVE
+# (1.0), réglable ICI uniquement, SANS EFFET tant qu'``ASYMETRIE_JOKER_
+# ACTIVE`` reste à ``False``.
+ASYMETRIE_JOKER_ACTIVE = False
+POIDS_ASYMETRIE_JOKER = 1.0
+
+
 def bridage_pour(nom_niveau: str | None) -> Bridage:
     """Bridage d'un niveau. Un niveau inconnu (ou ``None``) — p. ex. une partie
     sauvegardée avec un libellé disparu — retombe sur « Débutant », jamais
@@ -351,6 +373,16 @@ STRATEGIES: dict[str, Strategie] = {
         compteurs=("declenchee", "a_change_le_coup",
                   "score_chevalet_moyen", "pioche_evitee_tour_suivant"),
     ),
+    "placement_joker": Strategie(
+        id="placement_joker",
+        description=("Pour un coup qui pose un joker du chevalet, à nombre "
+                     "de tuiles posées égal, préférer le placement le "
+                     "moins exposé à une reprise par l'adversaire (#232)."),
+        niveaux=("Champion du Monde",),
+        active_par_defaut=False,
+        compteurs=("declenchee", "a_change_le_coup", "nb_jokers_poses",
+                  "exposition_moyenne", "joker_repris_par_adversaire"),
+    ),
 }
 
 
@@ -402,6 +434,7 @@ def bridage_champion_personnalise(strategies_actives) -> "Bridage":
         retenue_debut="retenue_debut" in actives,
         petits_chiffres="petits_chiffres" in actives,
         chances_prochain_tour="chances_prochain_tour" in actives,
+        placement_joker="placement_joker" in actives,
     )
 
 

@@ -94,7 +94,8 @@ def test_cli_strategies_champion_toutes_et_sans_strategie_valide_sans_erreur():
     # le rapport de clôture de l'issue #228).
     strategies = M._parser_strategies_champion("toutes")
     strategies -= {"garde_joker", "reserve_tuile", "retenue_debut",
-                   "petits_chiffres", "chances_prochain_tour"}
+                   "petits_chiffres", "chances_prochain_tour",
+                   "placement_joker"}
     assert strategies == {"verif_finition"}
 
 

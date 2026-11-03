@@ -3282,6 +3282,164 @@ adverse).
   (`ECART_TUILES_SORTIES=0`, `SEUIL_GAIN_SORTIES=0,15`) sont INDICATIVES,
   réglables au seul endroit `moteur/niveaux.py`.
 
+**9. `placement_joker` (issue #232) — poser un joker là où l'adversaire a le
+moins de chances de le reprendre.** Cinquième entrée du registre de #228
+(toujours réservée à Champion du Monde, désactivée par défaut, ABSENTE de
+`STRATEGIES_CHAMPION_PAR_DEFAUT`, activable en campagne par
+`--strategies-champion placement_joker`).
+
+**Règles de libération d'un joker VÉRIFIÉES dans ce moteur** (point 1 de
+l'issue, à partir de `moteur/ia.py::_jokers_recuperables`/`_tuile_
+correspond_au_joker` et des tests existants — voir §8 ci-dessus) :
+
+- **Échange direct, SEUL mécanisme avec une tuile de remplacement précise**
+  (les autres — détachement en bout, scission, réduction de groupe de 4 à 3
+  — libèrent le joker SANS remplacement, voir §8) : un joker posé dans une
+  combinaison du plateau est repris en jouant, DEPUIS LE CHEVALET OU DEPUIS
+  UNE AUTRE LIBÉRATION DU MÊME TOUR, la tuile réelle qu'il représente EXACTEMENT
+  à sa position — `_tuile_correspond_au_joker` calcule cette tuile UNIQUE :
+  - **suite** : `valeur_attendue = valeur_de_la_première_tuile_réelle -
+    sa_position + position_du_joker`, et la MÊME couleur que la suite — une
+    SEULE valeur convient, quelle que soit la position du joker ;
+  - **groupe** : la valeur du groupe, et N'IMPORTE LAQUELLE des couleurs
+    encore absentes du groupe (`COULEURS - couleurs_déjà_utilisées`) —
+    PLUSIEURS tuiles distinctes peuvent donc convenir (2 couleurs manquantes
+    pour un groupe de 3, ni plus ni moins puisqu'un groupe n'admet qu'UN seul
+    joker).
+  - **Écart avec l'énoncé de l'issue, VÉRIFIÉ ici et IMPORTANT pour
+    l'exposition (point 3)** : ce moteur ne distingue PAS un joker « au
+    milieu » d'une suite d'un joker « au bout » — dans les DEUX cas, la
+    formule ci-dessus ne retient qu'UNE seule valeur (donc au plus 2
+    exemplaires), jamais « l'une des deux valeurs voisines » comme le
+    supposait l'énoncé initial (quatre exemplaires pour le cas « bout ») :
+    une fois la combinaison fixée sur le plateau, la position du joker fixe
+    sa valeur de remplacement sans ambiguïté, qu'il soit en bout ou au
+    milieu — seul le CHOIX de la position, au moment de POSER le joker (ce
+    que `placement_joker` départage), diffère d'une combinaison à l'autre.
+    Test dédié : `tests/test_ia_placement_joker.py::
+    test_types_remplacement_suite_bout_une_seule_valeur_aussi`.
+- **Libération sans remplacement** (réduction de groupe de 4 à 3, joker
+  retiré — voir §8) : réservée aux combinaisons de 4 tuiles ou plus, déjà
+  évitée par le solveur de base (qui préfère ne pas y placer de joker quand
+  une combinaison de 3 suffit) — **hors de portée de cette stratégie**
+  (point 1 de l'issue), jamais mesurée par `_types_remplacement_joker`
+  (retourne `None` pour toute combinaison de taille ≠ 3).
+- **Reprise interdite avant sa propre ouverture** : un joueur qui n'a pas
+  encore fait sa mise initiale ne peut poser AUCUNE tuile sur le plateau
+  (`moteur/partie.py`, contrôlé par `valider_coup`/`mise_initiale_min`) —
+  l'échange d'un joker étant une pose, il est donc de fait interdit avant
+  l'ouverture, sans règle séparée à vérifier.
+- **Obligation de rejouer le joker dans le même tour** : confirmée par
+  construction dans `_liberations_possibles`/`_coup_depuis_liberations`
+  (§8) — un joker libéré (par échange ou sans remplacement) est TOUJOURS
+  immédiatement replacé ailleurs sur le plateau dans le MÊME coup, jamais
+  gardé en main ; le moteur ne modélise d'ailleurs aucune autre possibilité
+  (un coup ne « retire » jamais une tuile du plateau sans la replacer).
+
+**Exposition d'un placement (point 3)** : pour un coup qui pose un joker
+DEPUIS LE CHEVALET dans une combinaison de 3 tuiles (suite ou groupe), la
+somme, sur les types de tuile qui le remplaceraient (`_types_remplacement_
+joker`), du nombre d'exemplaires encore INCONNUS (brique « Inconnues »,
+#219, `inconnues.exemplaires_restants` — jamais la main adverse, seulement
+ce qui n'est ni sur le plateau ni dans NOTRE main) — `moteur/ia.py::
+_exposition_coup_joker`. Une exposition nulle (tous les exemplaires connus,
+sur le plateau ou dans notre main) signifie que l'adversaire ne peut pas le
+reprendre. Un coup qui pose PLUSIEURS jokers mesurables cumule leurs
+expositions (somme).
+
+**Nuance d'Alain, EXCLUSION du critère (point 4)** : si, APRÈS le coup,
+notre main contient encore la tuile qui remplacerait l'un des jokers posés,
+ce placement est EXCLU (`info["exclu"] = True`) — un bon joueur jouerait
+cette tuile plutôt que le joker ; la génération du coup lui-même (jouer la
+vraie tuile au lieu du joker) reste hors de portée de cette stratégie de
+DÉPARTAGE (elle ne fait que choisir entre les coups que le solveur propose
+déjà, jamais n'en invente un nouveau).
+
+**Mécanisme de départage (point 4), même famille que `chances_prochain_
+tour`** : à nombre de tuiles posées égal, cherche des coups ÉQUIVALENTS
+(`_candidats_placement_joker`, écart STRICTEMENT nul — pas de variante
+tolérante pour cette stratégie) en retirant, tour à tour, chacune des
+tuiles que le coup normal pose, puis en résolvant à nouveau — même
+mécanisme que `_candidats_sorties` (#231). Parmi `coup` et ses candidats
+NON EXCLUS, retient celui dont l'exposition est la plus faible ; les
+candidats EXCLUS (nuance ci-dessus) ne sont jamais choisis, y compris si
+`coup` lui-même est exclu (alors AUCUNE comparaison n'est tentée, `coup`
+reste inchangé). Sans effet si `coup` ne pose aucun joker mesurable, ou si
+le chevalet qui resterait a déjà gagné la partie (coup qui vide la main,
+jamais soumis à la stratégie, garde-fou commun à toutes les stratégies
+multi-tours, §13).
+
+**Variante d'asymétrie, désactivée par défaut (point 5)** : les règles
+vérifiées au point 1 (exposition = exemplaires inconnus) permettent
+d'ajouter SIMPLEMENT un terme qui tient compte de MA PROPRE chance de
+reprendre le joker — `niveaux.ASYMETRIE_JOKER_ACTIVE` (`False` par défaut)
+remplace l'exposition brute par `exposition - niveaux.POIDS_ASYMETRIE_
+JOKER * ma_chance_de_reprise`, où `ma_chance_de_reprise` est la somme, sur
+les mêmes types de remplacement, de `inconnues.proba_tuile_dans_pioche`
+(brique #219 — jamais la main adverse). Nuance d'Alain reprise ici : un
+joker très difficile à reprendre pour l'adversaire l'est AUSSI pour moi
+(même ensemble de tuiles inconnu) ; cette variante ne change donc rien au
+cas où je n'ai AUCUNE chance de le reprendre moi-même (`ma_chance_de_
+reprise = 0`), et ne fait que départager, À EXPOSITION ÉGALE OU PROCHE,
+vers le placement que je peux moi-même espérer récupérer en piochant. Le
+cas « tuile clé en main » (deuxième nuance de l'issue) est, lui, déjà géré
+PAR EXCLUSION (point 4 ci-dessus) : il n'entre jamais dans cette variante
+puisque le placement correspondant est exclu du critère avant même d'y
+arriver.
+
+**Compteurs (point 6, `scripts/comparer_niveaux_ia.py`)** — mêmes
+compteurs génériques que les stratégies précédentes
+(`stats_placement_joker`/`_compteurs_placement_joker`) + :
+- `nb_jokers_poses`/`exposition_liste` : un ajout par joker MESURABLE posé
+  (que le départage ait ou non changé le coup), pour calculer l'exposition
+  MOYENNE — mesure de l'effet visé indépendante du taux de déclenchement ;
+- `joker_repris_par_adversaire` : le mécanisme VISÉ par la stratégie,
+  détecté à CHAQUE tour (de n'importe quel joueur, pas seulement le tour
+  suivant du même joueur — `_detecter_reprises_joker`, `scripts/comparer_
+  niveaux_ia.py`) par une signature d'échange direct (le joker suivi n'est
+  plus accompagné de TOUTES ses anciennes compagnes de combinaison) —
+  **approximation documentée** : un réarrangement du plateau totalement
+  étranger à ce joker précis pourrait, en théorie, produire le même signal
+  (coïncidence jugée négligeable en pratique) ; à comparer avec le témoin
+  (Expert, ou Champion du Monde sans la stratégie).
+
+**Tests fixes** (`tests/test_ia_placement_joker.py`) — deux niveaux, le
+second pour éviter de dépendre d'un plateau construit à la main face au
+solveur complet à perturbation illimitée (qui trouve souvent un
+réarrangement global plus rentable que celui prévu par le test, voir le
+commentaire de tête du fichier) :
+1. brique directe (`_types_remplacement_joker`/`_exposition_coup_joker`) :
+   suite au milieu et suite au bout donnent la MÊME forme (une seule
+   valeur, voir l'écart documenté au point 1 ci-dessus) ; groupe de 3 (deux
+   couleurs manquantes) ; combinaison de 4 (hors scope, `None`) ;
+   exposition nulle (deux remplaçants déjà connus au tapis) ; exclusion
+   (tuile de remplacement encore en main) ; aucun joker posé (`None`) ;
+2. stratégie bout-en-bout (`jouer_niveau_bride`), SANS tapis (aucun
+   réarrangement possible) : une main où le SEUL joker du chevalet peut
+   compléter soit une série très rentable en points (exposition élevée, 4
+   exemplaires jamais vus) soit une suite peu rentable (exposition faible,
+   2 exemplaires) — sans la stratégie, le départage existant (points)
+   choisit la série ; avec elle, la stratégie choisit la suite, moins
+   exposée ; désactivée (décision identique) ; Expert inchangé ; coup sans
+   joker (aucun effet) ; coup qui vide la main (joué tel quel).
+
+**Expérience prévue** : Champion du Monde avec `placement_joker` SEULE
+contre Expert (même protocole que les stratégies précédentes,
+`--strategies-champion placement_joker`), jugée d'abord par les compteurs
+dédiés (l'exposition moyenne baisse-t-elle réellement, et surtout le taux
+de reprise par l'adversaire baisse-t-il, comparé au témoin ?) avant le taux
+de victoire global. Essai de 2 donnes (`--donnes 2`, Expert vs Champion du
+Monde avec `placement_joker` SEULE) : stratégie déclenchée 3 fois (3 jokers
+mesurables posés), coup changé 0 fois (aucun placement alternatif trouvé
+sur ce petit échantillon), exposition moyenne 2,33 exemplaires inconnus,
+2 des 3 jokers posés repris par l'adversaire d'après `_detecter_reprises_
+joker` — chiffres PUREMENT indicatifs (3 événements, aucune signification
+statistique), qui montrent seulement que la mesure fonctionne de bout en
+bout ; surcoût de calcul négligeable sur cet essai (Champion du Monde ~153
+ms/tour contre ~181 ms/tour pour Expert, dans le bruit de mesure habituel).
+Les valeurs de départ (`ASYMETRIE_JOKER_ACTIVE=False`, `POIDS_ASYMETRIE_
+JOKER=1.0`) sont INDICATIVES, réglables au seul endroit `moteur/niveaux.py`.
+
 ## 14. Solveur exact de vérification — bibliothèque `rummikub-solver` (licence MIT, issue #204, suite de #201)
 
 Notre solveur d'Expert (`moteur/solveur.py`) est à la fois le joueur **et** le
