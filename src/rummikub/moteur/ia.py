@@ -836,7 +836,8 @@ def _coup_recherche(etat, idx, budget_temps, preferer_simple):
         return None, True
 
 
-def _coup_exact(etat, idx, budget_temps, preferer_simple, eval_config=None):
+def _coup_exact(etat, idx, budget_temps, preferer_simple, eval_config=None,
+                max_tuiles_posees=None):
     """Modèle exact (#206). Ne lève JAMAIS. Retourne ``(statut, charge)`` :
 
     * ``("coup", coup)`` — un coup optimal a été trouvé ;
@@ -847,11 +848,15 @@ def _coup_exact(etat, idx, budget_temps, preferer_simple, eval_config=None):
     * ``("echec", cause_timeout)`` — le modèle n'a pas pu conclure (dépendances
       absentes, budget dépassé sans solution, résultat non valide, erreur) :
       l'appelant se replie sur la recherche arborescente. ``cause_timeout``
-      vaut ``True`` pour un dépassement de budget, ``False`` sinon."""
+      vaut ``True`` pour un dépassement de budget, ``False`` sinon.
+
+    ``max_tuiles_posees`` (issue #229, ``retenue_debut``) : relais vers
+    ``resoudre_exact``, ``None`` (défaut) → comportement inchangé."""
     try:
         res = resoudre_exact(etat, idx, budget_temps=budget_temps,
                              preferer_simple=preferer_simple,
-                             eval_config=eval_config)
+                             eval_config=eval_config,
+                             max_tuiles_posees=max_tuiles_posees)
     except BudgetExactDepasse:
         return "echec", True
     except SolveurExactIndisponible:
@@ -881,6 +886,14 @@ SOLVEUR_SANS_REARR = "sans-rearrangement"  # coup sans toucher au plateau (pert.
 # « Garder un joker en main » (issue #225, Champion du Monde seul) : meilleur
 # coup qui ne joue PAS le joker du chevalet (voir _coup_sans_joker_chevalet).
 SOLVEUR_SANS_JOKER = "sans-joker"
+# « Réserve d'une tuile » (issue #229, hypothèse H2, Champion du Monde seul) :
+# meilleur coup qui GARDE une tuile que le coup du solveur aurait posée
+# (voir _coup_qui_garde_une_tuile).
+SOLVEUR_RESERVE_TUILE = "reserve-tuile"
+# « Retenue au début » (issue #229, hypothèse H1, Champion du Monde seul) :
+# meilleur coup plafonné en nombre de tuiles posées (voir
+# _appliquer_retenue_debut).
+SOLVEUR_RETENUE_DEBUT = "retenue-debut"
 
 LIBELLES_SOLVEUR = {
     SOLVEUR_EXACT: "modèle exact",
@@ -888,6 +901,8 @@ LIBELLES_SOLVEUR = {
     SOLVEUR_AVANCE: "Avancé en repli",
     SOLVEUR_SANS_REARR: "sans réarrangement (bridé)",
     SOLVEUR_SANS_JOKER: "garde un joker en main",
+    SOLVEUR_RESERVE_TUILE: "réserve d'une tuile",
+    SOLVEUR_RETENUE_DEBUT: "retenue au début",
 }
 
 
@@ -1100,6 +1115,195 @@ def _coup_sans_joker_chevalet(etat, idx, budget_temps):
     return _marquer_solveur(charge, SOLVEUR_SANS_JOKER)
 
 
+# --------------------------------------------------------------------------- #
+# « Réserve d'une tuile » (issue #229, hypothèse H2, Champion du Monde seul)
+# --------------------------------------------------------------------------- #
+
+def _coup_qui_garde_une_tuile(etat, idx, coup_solveur, deadline):
+    """Premier coup valide, parmi les tuiles posées par ``coup_solveur``,
+    obtenu en retirant CETTE tuile du chevalet avant de résoudre à nouveau —
+    même mécanisme que ``_coup_sans_joker_chevalet``, généralisé à une tuile
+    quelconque plutôt qu'un joker. Pas de recherche exhaustive du meilleur
+    candidat parmi toutes les tuiles possibles (budget) : même
+    simplification assumée que pour le joker (#225) — le premier qui
+    produit un coup valide est retenu, dans l'ordre où le solveur les a
+    posées.
+
+    Retourne ``(coup, id_tuile_gardee)`` marqué ``SOLVEUR_RESERVE_TUILE``,
+    ou ``(None, None)`` si budget insuffisant ou si aucune tuile ne
+    convient."""
+    ids_jouees = list(coup_solveur.get("ids_tuiles") or [])
+    if not ids_jouees:
+        return None, None
+    joueur = etat["joueurs"][idx]
+    chevalet = joueur["chevalet"]
+    for id_tuile in ids_jouees:
+        restant = deadline - time.monotonic()
+        if restant <= 0:
+            return None, None
+        idx_t = next((i for i, t in enumerate(chevalet) if t["id"] == id_tuile),
+                     None)
+        if idx_t is None:
+            continue
+        chevalet2 = chevalet[:idx_t] + chevalet[idx_t + 1:]
+        joueur2 = dict(joueur)
+        joueur2["chevalet"] = chevalet2
+        joueurs2 = list(etat["joueurs"])
+        joueurs2[idx] = joueur2
+        etat2 = dict(etat)
+        etat2["joueurs"] = joueurs2
+        statut, charge = _coup_exact(etat2, idx, restant, PREFERER_SIMPLICITE,
+                                     EVAL_MAIN_DEFAUT)
+        if statut != "coup" or not charge.get("ids_tuiles"):
+            continue
+        return _marquer_solveur(charge, SOLVEUR_RESERVE_TUILE), id_tuile
+    return None, None
+
+
+def _appliquer_reserve_tuile(etat, idx, coup, taille_main, deadline):
+    """Stratégie ``reserve_tuile`` (#229, hypothèse H2, Champion du Monde
+    seul) : après le coup du solveur (``coup``, qui ne vide PAS la main —
+    seul appelant, voir ``jouer_niveau_bride``), essaie de jouer un coup
+    qui GARDE une tuile que ``coup`` aurait posée, pour disposer d'un coup
+    au tour suivant plutôt que de piocher.
+
+    Joué à la place de ``coup`` seulement si TOUTES les conditions de
+    l'issue sont réunies : (a) le candidat pose au moins une tuile ; (b) il
+    pose au plus ``niveaux.ECART_MAX_RESERVE`` tuiles de moins que ``coup``;
+    (c) sur la position résultante (tapis supposé inchangé), le même
+    solveur peut poser au moins une tuile au tour suivant ; (d) le
+    chevalet après le coup reste plus grand que
+    ``niveaux.SEUIL_FIN_PARTIE_VERIF_FINITION`` (la stratégie ne gêne pas
+    la fin de partie, zone déjà couverte par ``verif_finition``/
+    ``garde_joker``). La condition (e) (« le meilleur coup ne vide pas la
+    main ») est déjà garantie par l'appelant.
+
+    Retourne ``(coup, info)`` — ``coup`` inchangé si la stratégie n'a pas
+    pu s'appliquer ; ``info`` un dict de compteurs (#229, point 4) :
+    ``{"declenchee": bool, "candidat_existe": bool,
+    "peut_jouer_au_tour_suivant": bool | None, "choisi": bool,
+    "nb_tuiles_gardees": int, "id_tuile_gardee": str | None}``."""
+    info = {"declenchee": True, "candidat_existe": False,
+           "peut_jouer_au_tour_suivant": None, "choisi": False,
+           "nb_tuiles_gardees": 0, "id_tuile_gardee": None}
+    restant = deadline - time.monotonic()
+    if restant <= 0:
+        return coup, info
+    candidat, id_tuile = _coup_qui_garde_une_tuile(etat, idx, coup, deadline)
+    if candidat is None:
+        return coup, info
+
+    ids_best = coup.get("ids_tuiles") or []
+    nb_candidat = len(candidat.get("ids_tuiles") or [])
+    if nb_candidat < 1:                                       # condition (a)
+        return coup, info
+    ecart = len(ids_best) - nb_candidat
+    if ecart > _niveaux.ECART_MAX_RESERVE:                    # condition (b)
+        return coup, info
+
+    info["candidat_existe"] = True
+    info["nb_tuiles_gardees"] = ecart
+    info["id_tuile_gardee"] = id_tuile
+
+    restant = deadline - time.monotonic()
+    peut_jouer = verification_finition.peut_poser_au_tour_suivant(
+        etat, idx, candidat, restant)
+    info["peut_jouer_au_tour_suivant"] = peut_jouer
+    if not peut_jouer:                                        # condition (c)
+        return coup, info
+
+    chevalet_apres = taille_main - nb_candidat
+    if chevalet_apres <= _niveaux.SEUIL_FIN_PARTIE_VERIF_FINITION:  # condition (d)
+        return coup, info
+
+    info["choisi"] = True
+    return candidat, info
+
+
+# --------------------------------------------------------------------------- #
+# « Retenue au début » (issue #229, hypothèse H1, Champion du Monde seul)
+# --------------------------------------------------------------------------- #
+
+def _nb_tours_joueur_depuis_ouverture(etat, idx):
+    """Nombre de tours déjà joués par le joueur ``idx`` depuis SA PROPRE
+    ouverture (mise initiale), sans compter l'ouverture elle-même.
+
+    Dérivé de ``etat["historique"]`` (déjà tenu par ``moteur/partie.py``
+    pour CHAQUE tour, tous niveaux et joueur humain confondus, voir
+    ``_ajouter_historique``) à partir d'un seul signal NUMÉRIQUE, jamais
+    du texte des descriptions : une pose (« jouer ») y est journalisée
+    avec ``points`` > 0 (la règle du jeu exige au moins
+    ``mise_initiale_min`` points pour la toute première, et toute pose
+    retient au moins la valeur d'une tuile réelle ensuite), alors qu'une
+    pioche/passe l'est TOUJOURS à 0 points (``partie.piocher``/
+    ``passer_tour``). La première entrée de ce joueur à ``points`` > 0 est
+    donc forcément son ouverture (elle ne peut pas avoir été précédée d'une
+    autre pose : la mise initiale n'était pas encore faite).
+
+    Retourne ``None`` si l'ouverture de ce joueur n'est pas retrouvée dans
+    l'historique (mise initiale pas encore faite, partie reprise sans
+    historique complet...) — l'appelant doit alors se replier sans
+    activer la stratégie (#229, point 3)."""
+    entrees = [h for h in (etat.get("historique") or [])
+              if h.get("joueur_index") == idx]
+    tour_ouverture = next((h.get("tour") for h in entrees
+                          if h.get("points", 0) > 0), None)
+    if tour_ouverture is None:
+        return None
+    return sum(1 for h in entrees if h.get("tour", 0) > tour_ouverture)
+
+
+def _appliquer_retenue_debut(etat, idx, coup, taille_main, budget_temps):
+    """Stratégie ``retenue_debut`` (#229, hypothèse H1, Champion du Monde
+    seul) : pendant les ``niveaux.TOURS_RETENUE_DEBUT`` premiers tours qui
+    suivent SA PROPRE ouverture, tant que le tapis compte moins de
+    ``niveaux.TUILES_TAPIS_MAX_RETENUE`` tuiles et que le chevalet compte
+    plus de 8 tuiles, plafonne le coup à ``niveaux.POSE_MAX_DEBUT`` tuiles
+    posées au plus (et au moins une — jamais de pioche si un coup existe,
+    voir la contrainte de l'issue).
+
+    N'a aucun effet (``coup`` inchangé) avant l'ouverture du joueur, hors
+    de la fenêtre, hors des seuils de tapis/chevalet, si ``coup`` pose
+    déjà au plus le plafond, ou si le modèle exact ne trouve, SOUS LE
+    PLAFOND, aucun coup : ``coup`` (potentiellement au-delà du plafond)
+    reste alors joué, pour ne jamais remplacer une pose par une pioche.
+
+    Retourne ``(coup, info)`` — ``info`` un dict de compteurs (#229, point
+    4) : ``{"declenchee": bool, "choisi": bool, "nb_tuiles_posees": int}``."""
+    info = {"declenchee": False, "choisi": False,
+           "nb_tuiles_posees": len(coup.get("ids_tuiles") or [])}
+    joueur = etat["joueurs"][idx]
+    if not joueur.get("mise_initiale_faite"):
+        return coup, info
+    nb_tours = _nb_tours_joueur_depuis_ouverture(etat, idx)
+    if nb_tours is None or nb_tours >= _niveaux.TOURS_RETENUE_DEBUT:
+        return coup, info
+    nb_tuiles_tapis = sum(len(combo) for combo in etat.get("plateau", []))
+    if nb_tuiles_tapis >= _niveaux.TUILES_TAPIS_MAX_RETENUE:
+        return coup, info
+    if taille_main <= 8:
+        return coup, info
+
+    info["declenchee"] = True
+    nb_best = len(coup.get("ids_tuiles") or [])
+    if nb_best <= _niveaux.POSE_MAX_DEBUT:
+        return coup, info
+    if budget_temps is None or budget_temps <= 0:
+        return coup, info
+
+    statut, charge = _coup_exact(etat, idx, budget_temps, PREFERER_SIMPLICITE,
+                                 EVAL_MAIN_DEFAUT,
+                                 max_tuiles_posees=_niveaux.POSE_MAX_DEBUT)
+    if statut != "coup" or not charge.get("ids_tuiles"):
+        # Aucun coup dans le plafond : on garde le coup normal (jamais de
+        # pioche si un coup existe, contrainte de l'issue).
+        return coup, info
+
+    info["choisi"] = True
+    info["nb_tuiles_posees"] = len(charge["ids_tuiles"])
+    return _marquer_solveur(charge, SOLVEUR_RETENUE_DEBUT), info
+
+
 def _candidats_finition(etat, idx, coup_solveur, budget_temps=None,
                         garder_joker=False):
     """Coups candidats pour la vérification de finition (#221, point 2 ;
@@ -1259,14 +1463,38 @@ def jouer_niveau_bride(etat, idx, nom_niveau, budget_temps=None, rng=None,
     if vide_la_main:
         return coup
 
+    # Limite de calcul PARTAGÉE avec le coup normal (#221, point 5), désormais
+    # commune à TOUTES les stratégies ci-dessous (#229) : une seule échéance
+    # pour tout le tour — ``debut_tour`` a été relevé avant le calcul du coup
+    # normal ci-dessus, qui en a donc déjà consommé une partie.
+    budget_total = budget_temps if budget_temps is not None \
+        else BUDGET_TEMPS_EXPERT
+    deadline = debut_tour + budget_total
+
+    if bridage.reserve_tuile:
+        # #229, hypothèse H2 : garder une tuile que le coup aurait posée.
+        # Appliqué AVANT la vérification de finition ci-dessous — les deux
+        # zones ne se recoupent jamais par construction (la condition (d)
+        # de ``_appliquer_reserve_tuile`` exige un chevalet après coup
+        # strictement supérieur à ``SEUIL_FIN_PARTIE_VERIF_FINITION`` : si
+        # elle change le coup, la main AVANT ce tour est donc elle aussi
+        # au-delà de ce seuil, et la vérification de finition sera de toute
+        # façon ``NON_APPLICABLE``).
+        coup, info_reserve = _appliquer_reserve_tuile(
+            etat, idx, coup, taille_main, deadline)
+        coup["reserve_tuile_info"] = info_reserve
+
+    if bridage.retenue_debut:
+        # #229, hypothèse H1 : plafonner la pose pendant les premiers tours
+        # qui suivent l'ouverture — seuil chevalet > 8 utilisé par la
+        # stratégie elle-même place aussi cette zone au-delà de
+        # ``SEUIL_FIN_PARTIE_VERIF_FINITION``, même raisonnement que ci-dessus.
+        restant = deadline - time.monotonic()
+        coup, info_retenue = _appliquer_retenue_debut(
+            etat, idx, coup, taille_main, restant)
+        coup["retenue_debut_info"] = info_retenue
+
     if bridage.verif_finition:
-        # Limite de calcul PARTAGÉE avec le coup normal (#221, point 5) :
-        # une seule échéance pour tout le tour, pas un budget séparé pour la
-        # vérification — ``debut_tour`` a été relevé avant le calcul du coup
-        # normal ci-dessus, qui en a donc déjà consommé une partie.
-        budget_total = budget_temps if budget_temps is not None \
-            else BUDGET_TEMPS_EXPERT
-        deadline = debut_tour + budget_total
         coup, statut_verif = _verifier_finition_fin_de_partie(
             etat, idx, coup, taille_main, deadline,
             garder_joker=bridage.garder_joker_fin_partie)

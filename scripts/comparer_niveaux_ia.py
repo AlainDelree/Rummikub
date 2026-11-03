@@ -187,9 +187,23 @@ def _compteurs_garde_joker(resume: dict) -> dict:
            "a_change_le_coup": stats.get("choisi", 0)}
 
 
+def _compteurs_reserve_tuile(resume: dict) -> dict:
+    stats = resume.get("stats_reserve_tuile") or {}
+    return {"declenchee": stats.get("declenchee", 0),
+           "a_change_le_coup": stats.get("choisi", 0)}
+
+
+def _compteurs_retenue_debut(resume: dict) -> dict:
+    stats = resume.get("stats_retenue_debut") or {}
+    return {"declenchee": stats.get("declenchee", 0),
+           "a_change_le_coup": stats.get("choisi", 0)}
+
+
 EXTRACTEURS_COMPTEURS_STRATEGIES = {
     "verif_finition": _compteurs_verif_finition,
     "garde_joker": _compteurs_garde_joker,
+    "reserve_tuile": _compteurs_reserve_tuile,
+    "retenue_debut": _compteurs_retenue_debut,
 }
 
 
@@ -364,7 +378,10 @@ def jouer_un_tour(etat: dict, idx: int, temps_par_niveau: dict,
                   stats_garde_joker: dict = None,
                   trace_ctx: dict = None,
                   manche_numero: int = 1,
-                  budget_temps: float = None) -> tuple[dict, bool, bool]:
+                  budget_temps: float = None,
+                  stats_reserve_tuile: dict = None,
+                  suivi_reserve_tuile: dict = None,
+                  stats_retenue_debut: dict = None) -> tuple[dict, bool, bool]:
     """Joue le tour de l'IA à l'index ``idx``.
 
     ``budget_temps`` (issue #228, point 5) : budget de temps du solveur par
@@ -424,7 +441,18 @@ def jouer_un_tour(etat: dict, idx: int, temps_par_niveau: dict,
     ``trace_ctx``/``manche_numero`` (issue #226, mesure PURE — lit l'état
     complet pour ÉCRIRE une trace, ne décide jamais rien) : si ``trace_ctx``
     n'est pas ``None`` (``--export-trace``), écrit une ligne JSON par tour
-    via ``_ecrire_trace_tour`` (voir ce bloc plus haut)."""
+    via ``_ecrire_trace_tour`` (voir ce bloc plus haut).
+
+    ``stats_reserve_tuile``/``suivi_reserve_tuile``/``stats_retenue_debut``
+    (issue #229, point 4) : mêmes compteurs bruts que ``stats_garde_joker``
+    pour les deux nouvelles stratégies, à partir des clés ``reserve_tuile_
+    info``/``retenue_debut_info`` du coup renvoyé par ``jouer_niveau_bride``.
+    ``suivi_reserve_tuile`` (dict mutable ``{idx: id_tuile_gardee}``, créé
+    frais à CHAQUE MANCHE par l'appelant — les mains sont redistribuées à
+    chaque manche, rien à suivre d'une manche à l'autre) permet de détecter,
+    au TOUR SUIVANT du MÊME joueur, le mécanisme visé par la stratégie : une
+    pioche évitée (le joueur a joué plutôt que pioché) et la tuile gardée
+    effectivement posée."""
     niveau = etat["joueurs"][idx]["niveau"]
     backup_debut_tour(etat)
     plateau_avant = etat["plateau"]
@@ -509,6 +537,46 @@ def jouer_un_tour(etat: dict, idx: int, temps_par_niveau: dict,
         if info.get("choisi"):
             stats_garde_joker["choisi"] = stats_garde_joker.get("choisi", 0) + 1
 
+    # « Réserve d'une tuile » (#229, point 4) : d'abord le mécanisme VISÉ par
+    # la stratégie — au tour suivant du MÊME joueur, a-t-il joué plutôt que
+    # pioché (pioche évitée), et la tuile gardée a-t-elle été effectivement
+    # posée ? — AVANT de mettre à jour ``suivi_reserve_tuile`` avec la
+    # décision de CE tour (sinon on comparerait un coup à lui-même).
+    if suivi_reserve_tuile is not None:
+        tuile_en_attente = suivi_reserve_tuile.get(idx)
+        if tuile_en_attente is not None:
+            if stats_reserve_tuile is not None:
+                if res_ia.get("action") == "jouer":
+                    stats_reserve_tuile["pioche_evitee"] = (
+                        stats_reserve_tuile.get("pioche_evitee", 0) + 1)
+                    if tuile_en_attente in (res_ia.get("ids_tuiles") or []):
+                        stats_reserve_tuile["tuile_gardee_posee"] = (
+                            stats_reserve_tuile.get("tuile_gardee_posee", 0) + 1)
+            suivi_reserve_tuile[idx] = None
+
+    info_reserve = res_ia.get("reserve_tuile_info")
+    if info_reserve is not None:
+        if stats_reserve_tuile is not None:
+            if info_reserve.get("declenchee"):
+                stats_reserve_tuile["declenchee"] = (
+                    stats_reserve_tuile.get("declenchee", 0) + 1)
+            if info_reserve.get("choisi"):
+                stats_reserve_tuile["choisi"] = (
+                    stats_reserve_tuile.get("choisi", 0) + 1)
+                stats_reserve_tuile.setdefault("nb_tuiles_gardees_liste", []).append(
+                    info_reserve["nb_tuiles_gardees"])
+        if suivi_reserve_tuile is not None and info_reserve.get("choisi"):
+            suivi_reserve_tuile[idx] = info_reserve.get("id_tuile_gardee")
+
+    if stats_retenue_debut is not None and res_ia.get("retenue_debut_info") is not None:
+        info_retenue = res_ia["retenue_debut_info"]
+        if info_retenue.get("declenchee"):
+            stats_retenue_debut["declenchee"] = (
+                stats_retenue_debut.get("declenchee", 0) + 1)
+        if info_retenue.get("choisi"):
+            stats_retenue_debut["choisi"] = (
+                stats_retenue_debut.get("choisi", 0) + 1)
+
     if niveau == "Expert" and res_ia.get("action") == "jouer":
         perturbations_expert.append(
             mesurer_perturbation(plateau_avant, res_ia["nouveau_plateau"]))
@@ -555,15 +623,22 @@ def _jouer_une_manche(etat: dict, max_tours: int, temps_par_niveau: dict,
                       stats_garde_joker: dict = None,
                       trace_ctx: dict = None,
                       manche_numero: int = 1,
-                      budget_temps: float = None) -> dict:
+                      budget_temps: float = None,
+                      stats_reserve_tuile: dict = None,
+                      stats_retenue_debut: dict = None) -> dict:
     """Joue la manche courante de ``etat`` jusqu'à sa fin naturelle (chevalet
     vidé ou pioche épuisée) ou jusqu'au garde-fou ``max_tours``. Retourne les
-    statistiques de CETTE manche ; ``etat`` est muté en place."""
+    statistiques de CETTE manche ; ``etat`` est muté en place.
+
+    ``suivi_reserve_tuile`` (issue #229, point 4) est créé ICI, frais à
+    chaque manche (les mains sont redistribuées à chaque nouvelle manche,
+    voir ``jouer_un_tour``) — jamais transmis par l'appelant."""
     tours = 0
     coups_invalides = 0
     coups_tuiles_disparues = 0
     anomalies_conservation = 0
     arretee_garde_fou = False
+    suivi_reserve_tuile: dict = {}
 
     while not etat["manche_terminee"]:
         tours += 1
@@ -575,7 +650,10 @@ def _jouer_une_manche(etat: dict, max_tours: int, temps_par_niveau: dict,
             etat, idx, temps_par_niveau, replis_expert, preferer_simple,
             perturbations_expert, eval_configs,
             stats_verif_finition, appels_solveur_verif, aucun_coup_expert,
-            stats_garde_joker, trace_ctx, manche_numero, budget_temps)
+            stats_garde_joker, trace_ctx, manche_numero, budget_temps,
+            stats_reserve_tuile=stats_reserve_tuile,
+            suivi_reserve_tuile=suivi_reserve_tuile,
+            stats_retenue_debut=stats_retenue_debut)
         if invalide:
             coups_invalides += 1
         if tuiles_disparues:
@@ -612,7 +690,9 @@ def jouer_match(config_joueurs: list[dict], nb_manches: int, max_tours: int,
                 aucun_coup_expert: list = None,
                 stats_garde_joker: dict = None,
                 trace_ctx: dict = None,
-                budget_temps: float = None) -> dict:
+                budget_temps: float = None,
+                stats_reserve_tuile: dict = None,
+                stats_retenue_debut: dict = None) -> dict:
     """Joue un MATCH complet à 2 joueurs de ``nb_manches`` manches (issue
     #203). Les manches s'enchaînent via ``nouvelle_manche`` (score cumulé
     conservé, nouvelle donne et mise initiale remise à zéro à chaque manche).
@@ -647,7 +727,9 @@ def jouer_match(config_joueurs: list[dict], nb_manches: int, max_tours: int,
     arretee_garde_fou = False
     choisi_avant = stats_garde_joker.get("choisi", 0) if stats_garde_joker else 0
     _resume_partiel = {"stats_verif_finition": stats_verif_finition,
-                       "stats_garde_joker": stats_garde_joker}
+                       "stats_garde_joker": stats_garde_joker,
+                       "stats_reserve_tuile": stats_reserve_tuile,
+                       "stats_retenue_debut": stats_retenue_debut}
     compteurs_avant = {sid: extracteur(_resume_partiel)["a_change_le_coup"]
                        for sid, extracteur in EXTRACTEURS_COMPTEURS_STRATEGIES.items()}
 
@@ -657,7 +739,9 @@ def jouer_match(config_joueurs: list[dict], nb_manches: int, max_tours: int,
                                 perturbations_expert, eval_configs,
                                 stats_verif_finition, appels_solveur_verif,
                                 aucun_coup_expert, stats_garde_joker,
-                                trace_ctx, numero, budget_temps)
+                                trace_ctx, numero, budget_temps,
+                                stats_reserve_tuile=stats_reserve_tuile,
+                                stats_retenue_debut=stats_retenue_debut)
         coups_invalides += res["coups_invalides"]
         coups_tuiles_disparues += res["coups_tuiles_disparues"]
         anomalies_conservation += res["anomalies_conservation"]
@@ -807,6 +891,11 @@ def comparer(niveau_a: str, niveau_b: str, nb_donnes: int, seed: int,
     # appliquée ? ».
     stats_garde_joker: dict = {}
     parties_garde_joker: list = []
+    # « Réserve d'une tuile »/« Retenue au début » (#229, point 4) : mêmes
+    # compteurs bruts que ``stats_garde_joker`` ci-dessus, voir
+    # ``jouer_un_tour``/``_compteurs_reserve_tuile``/``_compteurs_retenue_debut``.
+    stats_reserve_tuile: dict = {}
+    stats_retenue_debut: dict = {}
     pile_appels = contextlib.ExitStack()
     pile_appels.enter_context(_compter_appels_solveur_verif(appels_solveur_verif))
 
@@ -833,7 +922,9 @@ def comparer(niveau_a: str, niveau_b: str, nb_donnes: int, seed: int,
                                    appels_solveur_verif=appels_solveur_verif,
                                    aucun_coup_expert=aucun_coup_expert,
                                    stats_garde_joker=stats_garde_joker,
-                                   trace_ctx=trace_ctx, budget_temps=budget_temps)
+                                   trace_ctx=trace_ctx, budget_temps=budget_temps,
+                                   stats_reserve_tuile=stats_reserve_tuile,
+                                   stats_retenue_debut=stats_retenue_debut)
             coups_invalides_total += resultat["coups_invalides"]
             coups_tuiles_disparues_total += resultat["coups_tuiles_disparues"]
             anomalies_conservation_total += resultat["anomalies_conservation"]
@@ -915,6 +1006,8 @@ def comparer(niveau_a: str, niveau_b: str, nb_donnes: int, seed: int,
         "stats_verif_finition": stats_verif_finition,
         "stats_garde_joker": stats_garde_joker,
         "parties_garde_joker": parties_garde_joker,
+        "stats_reserve_tuile": stats_reserve_tuile,
+        "stats_retenue_debut": stats_retenue_debut,
         "victoires": victoires,
         "matchs_nuls": matchs_nuls,
         "matchs_decides": matchs_decides,
@@ -1142,6 +1235,35 @@ def afficher_rapport(resume: dict) -> None:
             detail = ", ".join(f"{v} : {n}" for v, n in sorted(gagnees.items()))
             print(f"    Parties où la stratégie a été CHOISIE au moins une "
                  f"fois : {len(parties_gj)} ({detail})")
+
+    stats_rt = resume.get("stats_reserve_tuile") or {}
+    if stats_rt.get("declenchee"):
+        declenchee_rt = stats_rt["declenchee"]
+        choisi_rt = stats_rt.get("choisi", 0)
+        gardees = stats_rt.get("nb_tuiles_gardees_liste") or []
+        print("-" * 70)
+        print("  Réserve d'une tuile (#229, hypothèse H2, Champion du Monde "
+             "seul) :")
+        print(f"    Tours examinés : {declenchee_rt}")
+        print(f"    ... coup changé (conditions (a)-(d) réunies) : "
+             f"{choisi_rt}/{declenchee_rt} tour(s)")
+        if gardees:
+            print(f"    Tuiles gardées par coup changé : moyenne "
+                 f"{moyenne(gardees):.2f}, sur {len(gardees)} coup(s).")
+        print(f"    ... pioche évitée au tour suivant du même joueur : "
+             f"{stats_rt.get('pioche_evitee', 0)}/{choisi_rt} coup(s) changé(s)")
+        print(f"    ... tuile gardée effectivement posée au tour suivant : "
+             f"{stats_rt.get('tuile_gardee_posee', 0)}/{choisi_rt} coup(s) changé(s)")
+
+    stats_rd = resume.get("stats_retenue_debut") or {}
+    if stats_rd.get("declenchee"):
+        declenchee_rd = stats_rd["declenchee"]
+        print("-" * 70)
+        print("  Retenue au début (#229, hypothèse H1, Champion du Monde "
+             "seul) :")
+        print(f"    Tours examinés (fenêtre d'ouverture) : {declenchee_rd}")
+        print(f"    ... coup plafonné : {stats_rd.get('choisi', 0)}/"
+             f"{declenchee_rd} tour(s)")
 
     compteurs = compteurs_strategies(resume)
     if any(c["declenchee"] for c in compteurs.values()):

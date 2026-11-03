@@ -441,10 +441,17 @@ def _a_solution_primale(h) -> bool:
 
 def _resoudre_modele(table_tiles, chevalet, mise_faite, mise_min,
                      flexibles_aspects, budget_temps, preferer_simple,
-                     eval_config=None):
+                     eval_config=None, max_tuiles_posees=None):
     """Construit et résout le modèle ILP lexicographique. Retourne
     ``(combos_tokens, optimal)`` où ``combos_tokens`` est la liste des ensembles
-    placés (tokens ordonnés), ou lève :class:`BudgetExactDepasse`."""
+    placés (tokens ordonnés), ou lève :class:`BudgetExactDepasse`.
+
+    ``max_tuiles_posees`` (issue #229, stratégie ``retenue_debut``) : si
+    fourni, ajoute une contrainte bornant le nombre de tuiles DE LA MAIN
+    posées (pas celles du plateau, déjà toutes forcées par la conservation)
+    à au plus cette valeur — une contrainte du modèle exact, pas une
+    logique de jeu réécrite à côté. ``None`` (défaut) → comportement
+    inchangé pour tout appelant existant."""
     deadline = time.monotonic() + budget_temps
 
     comptes_table = _comptes_etat(table_tiles)
@@ -502,6 +509,18 @@ def _resoudre_modele(table_tiles, chevalet, mise_faite, mise_min,
         valeurs = np.array([float(s.pfull) for s, _ub in faisables],
                            dtype=np.float64)
         h.addRow(float(mise_min), highspy.kHighsInf, n_x, indices, valeurs)
+
+    # Contrainte de plafond de pose (issue #229, ``retenue_debut``) :
+    # Σ taille_s x_s ≤ (tuiles du plateau, toutes reconduites par la
+    # conservation ci-dessus) + max_tuiles_posees — borne donc bien les
+    # tuiles posées DE LA MAIN, jamais celles déjà sur le tapis.
+    if max_tuiles_posees is not None:
+        total_plateau = sum(comptes_table.values())
+        indices = np.arange(n_x, dtype=np.int32)
+        valeurs = np.array([float(s.taille) for s, _ub in faisables],
+                           dtype=np.float64)
+        h.addRow(-highspy.kHighsInf, float(total_plateau + max_tuiles_posees),
+                 n_x, indices, valeurs)
 
     def _poser_objectif(couts, sens):
         n_cols = h.getNumCol()
@@ -772,7 +791,8 @@ BUDGET_TEMPS_DEFAUT = 1.5
 
 
 def resoudre_exact(etat: dict, idx: int, budget_temps: float = BUDGET_TEMPS_DEFAUT,
-                   preferer_simple: bool = True, eval_config=None) -> ResultatExact:
+                   preferer_simple: bool = True, eval_config=None,
+                   max_tuiles_posees: int | None = None) -> ResultatExact:
     """Résout l'état ``etat`` pour le joueur ``idx`` avec le modèle exact
     (HiGHS) et renvoie un :class:`ResultatExact` reconstruit dans notre domaine,
     avec les deux contrôles indépendants (validation + conservation) effectués.
@@ -781,6 +801,10 @@ def resoudre_exact(etat: dict, idx: int, budget_temps: float = BUDGET_TEMPS_DEFA
     (ou ``None``) qui, si ``active``, ajoute l'évaluation de la main restante
     comme objectif secondaire — JAMAIS avant le nombre de tuiles posées. Le
     poids des points est ajusté au nombre de manches du match (lu dans ``etat``).
+
+    ``max_tuiles_posees`` (issue #229, ``retenue_debut``) : voir
+    ``_resoudre_modele`` — ``None`` (défaut) laisse le solveur poser le
+    maximum, comme avant #229, pour tout appelant existant.
 
     Lève :class:`SolveurExactIndisponible` si ``highspy``/``numpy`` manque, ou
     :class:`BudgetExactDepasse` si la limite de temps est épuisée sans solution.
@@ -822,7 +846,8 @@ def resoudre_exact(etat: dict, idx: int, budget_temps: float = BUDGET_TEMPS_DEFA
 
     combos_tokens, optimal = _resoudre_modele(
         table_tiles, chevalet, mise_faite, mise_min, flexibles_aspects,
-        budget_temps, preferer_simple, eval_config)
+        budget_temps, preferer_simple, eval_config,
+        max_tuiles_posees=max_tuiles_posees)
     duree = time.monotonic() - debut
 
     # Reconstruction physique : pool = plateau (hors gelées) + chevalet.

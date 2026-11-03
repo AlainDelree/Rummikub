@@ -169,6 +169,35 @@ def _peut_finir_au_tour_suivant(etat, idx, coup, budget_temps):
     return res.nb_tuiles == len(chevalet_restant)
 
 
+def peut_poser_au_tour_suivant(etat, idx, coup, budget_temps):
+    """Le même solveur (modèle exact) pourrait-il poser AU MOINS UNE tuile
+    du chevalet restant, une fois ``coup`` joué, en supposant le tapis
+    inchangé par l'adversaire (même hypothèse que
+    ``_peut_finir_au_tour_suivant`` ci-dessus) ? Condition (c) de la
+    stratégie ``reserve_tuile`` (#229) — moins stricte que « finir », qui
+    exige de vider tout le chevalet.
+
+    Retourne ``True``/``False`` si déterminé, ou ``None`` si la question n'a
+    pas pu être tranchée (budget épuisé, dépendances absentes, erreur) —
+    même convention que ``_peut_finir_au_tour_suivant``."""
+    if budget_temps is None or budget_temps <= 0:
+        return None
+    etat2 = _etat_apres_coup(etat, idx, coup)
+    chevalet_restant = etat2["joueurs"][idx]["chevalet"]
+    if not chevalet_restant:
+        return True
+    try:
+        res = resoudre_exact(etat2, idx, budget_temps=budget_temps,
+                             preferer_simple=False, eval_config=None)
+    except (SolveurExactIndisponible, BudgetExactDepasse):
+        return None
+    except Exception:  # pragma: no cover - filet, ne doit jamais bloquer le jeu
+        return None
+    if not res.valide_globalement:
+        return None
+    return res.nb_tuiles >= 1
+
+
 def verifier(etat: dict, idx: int, candidats: list, deadline: float,
             idx_garde_joker: int | None = None):
     """Point d'entrée : décide, parmi ``candidats`` (coups ``{"action":

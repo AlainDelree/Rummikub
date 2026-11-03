@@ -2965,6 +2965,149 @@ schtasks /Create /SC ONSTART /RL HIGHEST /TN "RummikubMatriceStrategies" ^
     /RU SYSTEM
 ```
 
+### Stratégies « réserve d'une tuile » et « retenue au début » (issue #229)
+
+Deux premières stratégies livrées via le registre de #228 (jusque-là vide de
+toute entrée désactivée par défaut) : `reserve_tuile` (hypothèse H2 ci-dessus)
+et `retenue_debut` (hypothèse H1). Chacune est une entrée **indépendante**,
+activable seule via `--strategies-champion`, réservée à Champion du Monde,
+**désactivée par défaut dans le jeu** (ABSENTE de `STRATEGIES_CHAMPION_PAR_
+DEFAUT` — Expert et tous les niveaux inférieurs restent strictement
+inchangés, confirmé par les tests `test_expert_inchange_meme_position` des
+deux nouveaux fichiers de tests).
+
+**1. `reserve_tuile` (H2, `moteur/ia.py`)** — après le coup du solveur,
+cherche le meilleur coup qui GARDE une tuile que ce même coup aurait posée
+(typiquement la 4e tuile d'un groupe ou le prolongement d'une suite) :
+`_coup_qui_garde_une_tuile` retire, l'une après l'autre dans l'ordre où le
+solveur les a posées, chaque tuile jouée par le coup normal du chevalet, et
+résout à nouveau le modèle exact sur cette main réduite — **une contrainte du
+modèle exact (main réduite), jamais une logique de jeu réécrite à côté**,
+dans le même esprit que `_coup_sans_joker_chevalet` (#225), dont ce
+mécanisme est la généralisation à une tuile quelconque. Premier candidat
+valide retenu (pas de recherche exhaustive parmi toutes les tuiles
+possibles : même simplification assumée que pour le joker, par souci de
+budget de temps). Joué à la place du coup normal seulement si TOUTES les
+conditions sont réunies :
+  - (a) le candidat pose au moins une tuile ;
+  - (b) il pose au plus `niveaux.ECART_MAX_RESERVE` (défaut **1**) tuiles de
+    moins que le coup normal ;
+  - (c) sur la position résultante (tapis supposé inchangé par l'adversaire,
+    même hypothèse optimiste que #221), le même solveur peut poser au moins
+    une tuile au tour suivant — `verification_finition.
+    peut_poser_au_tour_suivant`, nouvelle fonction sœur de `_peut_finir_au_
+    tour_suivant` (#221), MOINS stricte (pas besoin de vider tout le
+    chevalet) ;
+  - (d) le chevalet après le coup reste STRICTEMENT supérieur à `niveaux.
+    SEUIL_FIN_PARTIE_VERIF_FINITION` (#221) — la stratégie ne gêne jamais la
+    fin de partie, zone déjà couverte par `verif_finition`/`garde_joker`.
+    Propriété vérifiée par construction (voir `moteur/ia.py`, commentaire de
+    `jouer_niveau_bride`) : si cette condition est remplie, la main AVANT ce
+    tour est elle-même strictement supérieure à ce seuil, donc la
+    vérification de finition sera de toute façon `NON_APPLICABLE` — les deux
+    stratégies ne se recoupent jamais, l'ordre d'application entre elles est
+    donc sans importance pour `reserve_tuile` seule ;
+  - (e) le coup normal ne vide pas la main — déjà garanti par l'appelant
+    (`jouer_niveau_bride` ne soumet jamais un coup gagnant à une stratégie).
+
+**2. `retenue_debut` (H1, `moteur/ia.py` + `moteur/solveur_exact.py`)** —
+pendant les `niveaux.TOURS_RETENUE_DEBUT` (défaut **4**) premiers tours qui
+suivent la PROPRE ouverture du joueur (pas l'ouverture globale de la
+partie), tant que le tapis compte moins de `niveaux.TUILES_TAPIS_MAX_
+RETENUE` (défaut **20**) tuiles et que le chevalet compte plus de 8 tuiles,
+plafonne le coup à `niveaux.POSE_MAX_DEBUT` (défaut **2**) tuiles posées au
+plus — jamais une pioche si un coup existe : si aucune combinaison ne tient
+sous le plafond, le coup normal (même au-delà du plafond) reste joué tel
+quel. La pose d'ouverture elle-même n'est jamais concernée (seul un joueur
+dont `mise_initiale_faite` est déjà vraie peut entrer dans la fenêtre).
+  - **Plafond exprimé proprement par le modèle exact** (pas d'improvisation
+    : la question posée par le point 3 de l'issue) : `solveur_exact.
+    resoudre_exact`/`_resoudre_modele` acceptent un nouveau paramètre
+    optionnel `max_tuiles_posees` (``None`` par défaut, comportement
+    inchangé pour tout appelant existant) qui ajoute UNE contrainte au
+    programme linéaire — `Σ taille_s·x_s ≤ (tuiles du plateau, toutes
+    reconduites par la conservation) + max_tuiles_posees` — bornant donc
+    bien les tuiles posées DE LA MAIN, jamais celles déjà sur le tapis.
+    Exactement le même principe que la condition (b) de `reserve_tuile`
+    ci-dessus : une contrainte du modèle exact existant, pas une logique de
+    jeu réécrite à côté.
+  - **Nombre de tours depuis SA PROPRE ouverture** (`ia.
+    _nb_tours_joueur_depuis_ouverture`) : dérivé de `etat["historique"]`
+    (déjà tenu par `moteur/partie.py` pour CHAQUE tour, tous niveaux et
+    joueur humain confondus) à partir d'un seul signal NUMÉRIQUE — une pose
+    (« jouer ») y est journalisée avec `points` > 0 (la règle du jeu exige
+    au moins `mise_initiale_min` points pour la toute première, puis toute
+    pose retient au moins la valeur d'une tuile réelle), alors qu'une
+    pioche/passe l'est TOUJOURS à 0 point (`partie.piocher`/`passer_tour`) —
+    **jamais une lecture du texte des descriptions** (qui ne distinguent pas
+    pose/pioche/passe ailleurs dans le code, voir la revue effectuée avant
+    d'écrire cette fonction). La première entrée de ce joueur à `points` > 0
+    est donc forcément SON ouverture (elle ne peut pas avoir été précédée
+    d'une autre pose, la mise initiale n'étant pas encore faite). Retourne
+    `None` si l'ouverture n'est pas retrouvée dans l'historique (partie
+    reprise sans historique complet) : la stratégie se replie alors sans
+    s'activer, jamais une erreur.
+  - **Aucune modification de `moteur/partie.py`** : le compteur de tours
+    depuis l'ouverture est entièrement dérivé de l'historique déjà tenu,
+    sans ajouter de champ ni de logique de bookkeeping au moteur de jeu
+    partagé par tous les niveaux et l'interface.
+
+**3. Interaction entre les deux nouvelles stratégies, si les DEUX sont
+actives en même temps** (jamais le cas par défaut, seulement via
+`--strategies-champion reserve_tuile,retenue_debut`) : appliquées dans
+l'ordre `reserve_tuile` PUIS `retenue_debut` dans `jouer_niveau_bride` — la
+seconde recalcule un coup plafonné FRAIS (son propre appel au solveur avec
+`max_tuiles_posees`), sans dépendre du résultat de la première au-delà de la
+longueur du coup qu'elle reçoit ; le plafond de `retenue_debut` a donc
+toujours le dernier mot. Logiquement cohérent (documenté dans
+`moteur/ia.jouer_niveau_bride`) mais **non couvert par un test dédié** — les
+tests de l'issue couvrent chaque stratégie SEULE, conformément au point 5 de
+l'issue.
+
+**4. Compteurs (`scripts/comparer_niveaux_ia.py`)** — mêmes compteurs bruts
+que `stats_garde_joker` (#225), recensés par tour via les clés `reserve_
+tuile_info`/`retenue_debut_info` du coup renvoyé par `jouer_niveau_bride` :
+  - **Génériques** (registre, section « Compteurs génériques par stratégie
+    ») : tours où la stratégie a été EXAMINÉE (« déclenchée ») et où elle a
+    CHANGÉ le coup (« a changé le coup ») — `_compteurs_reserve_tuile`/
+    `_compteurs_retenue_debut`, mêmes extracteurs que #228.
+  - **Section dédiée `reserve_tuile`** : nombre moyen de tuiles gardées par
+    coup changé (`stats_reserve_tuile["nb_tuiles_gardees_liste"]`) ; le
+    mécanisme VISÉ (point 4 de l'issue), détecté au tour SUIVANT du MÊME
+    joueur via un dict `suivi_reserve_tuile` (`{idx: id_tuile_gardee}`, créé
+    FRAIS à chaque manche dans `_jouer_une_manche` — les mains sont
+    redistribuées à chaque manche) : une pioche évitée (le joueur a joué
+    plutôt que pioché au tour suivant) et la tuile gardée effectivement
+    posée à ce tour-là.
+  - **Section dédiée `retenue_debut`** : tours examinés (fenêtre
+    d'ouverture) et coups effectivement plafonnés.
+
+**5. Tests fixes** (`tests/test_ia_reserve_tuile.py`,
+`tests/test_ia_retenue_debut.py`) — constructions à la main, point 5 de
+l'issue : groupe de 3 + 4e tuile en main avec une autre combinaison posable
+(garde la 4e) ; même cas chevalet < 6 tuiles (décision inchangée, condition
+(d)) ; coup qui vide la main (joué tel quel) ; plafond respecté pendant la
+fenêtre de retenue, aucun effet après la fenêtre, ni avant l'ouverture, ni si
+aucune combinaison ne tient dans le plafond (coup normal joué) ; chaque
+stratégie désactivée (décision identique au solveur seul) ; Expert
+inchangé (les deux fichiers).
+
+**6. Expérience prévue** (reprend le protocole du point 5 de la section
+« Hypothèses de stratégie » ci-dessus) : Champion du Monde avec `reserve_
+tuile` SEULE contre Expert, puis avec `retenue_debut` SEULE contre Expert
+(même graine, duels appariés, `--strategies-champion reserve_tuile` /
+`--strategies-champion retenue_debut`), chacune jugée d'abord par ses
+compteurs de mécanisme (point 4 ci-dessus : pioches réellement évitées,
+tuile gardée réellement posée, coups réellement plafonnés) avant le taux de
+victoire global — puis, si les deux se révèlent utiles séparément, Champion
+avec les DEUX ensemble comparé au retrait d'une à la fois
+(`scripts/matrice_strategies.py`, plan `ablation`), comme prévu par
+l'infrastructure de #228. Les valeurs de départ (`ECART_MAX_RESERVE=1`,
+`TOURS_RETENUE_DEBUT=4`, `TUILES_TAPIS_MAX_RETENUE=20`, `POSE_MAX_DEBUT=2`)
+sont INDICATIVES, à resserrer par ces séries de mesure — réglables au seul
+endroit `moteur/niveaux.py`, comme tous les autres paramètres de force de ce
+fichier.
+
 ## 14. Solveur exact de vérification — bibliothèque `rummikub-solver` (licence MIT, issue #204, suite de #201)
 
 Notre solveur d'Expert (`moteur/solveur.py`) est à la fois le joueur **et** le

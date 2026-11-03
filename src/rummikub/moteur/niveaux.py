@@ -68,11 +68,20 @@ class Bridage:
     ``SEUIL_PRUDENCE_ADVERSAIRE_GARDE_JOKER`` ci-dessous), ajoute comme
     candidat de la vérification de finition le meilleur coup qui NE JOUE PAS
     le joker du chevalet — ``False`` par défaut, y compris pour Expert, qui
-    reste le niveau de référence inchangé."""
+    reste le niveau de référence inchangé. ``reserve_tuile`` (issue #229,
+    hypothèse H2, Champion du Monde SEUL) : après le coup du solveur,
+    essaie de jouer un coup qui GARDE une tuile que ce même coup aurait
+    posée, pour disposer d'un coup au tour suivant plutôt que de piocher —
+    ``False`` par défaut. ``retenue_debut`` (issue #229, hypothèse H1,
+    Champion du Monde SEUL) : pendant les premiers tours qui suivent SA
+    PROPRE ouverture, plafonne le nombre de tuiles posées par tour —
+    ``False`` par défaut."""
     perturbation_max: int | None
     taux_oubli: float
     verif_finition: bool = False
     garder_joker_fin_partie: bool = False
+    reserve_tuile: bool = False
+    retenue_debut: bool = False
 
     @property
     def complet(self) -> bool:
@@ -181,6 +190,27 @@ SEUIL_FIN_PARTIE_VERIF_FINITION = 5
 SEUIL_PRUDENCE_ADVERSAIRE_GARDE_JOKER = 3
 
 
+# Paramètres de « réserve d'une tuile » (#229, hypothèse H2) : écart maximal
+# ACCEPTÉ, en nombre de tuiles, entre le meilleur coup du solveur et le coup
+# qui en garde une (condition (b) de l'issue) — au-delà, la perte immédiate
+# de tuiles posées n'est plus jugée compensée par le coup gardé pour le tour
+# suivant. Valeur de départ INDICATIVE de l'issue (1), réglable ICI
+# uniquement (même emplacement que les autres paramètres de ce fichier).
+ECART_MAX_RESERVE = 1
+
+# Paramètres de « retenue au début » (#229, hypothèse H1) : nombre de tours
+# du JOUEUR LUI-MÊME (pas le tour global de la partie), comptés à partir de
+# SA PROPRE ouverture (mise initiale), pendant lesquels le plafond
+# ``POSE_MAX_DEBUT`` s'applique ; désactivé au-delà de
+# ``TUILES_TAPIS_MAX_RETENUE`` tuiles sur le tapis (le tapis est déjà assez
+# fourni pour que la retenue n'ait plus de sens) ou en dessous de 9 tuiles en
+# main (on se rapproche de la fin, la retenue devient contre-productive).
+# Valeurs de départ INDICATIVES de l'issue, réglables ICI uniquement.
+TOURS_RETENUE_DEBUT = 4
+TUILES_TAPIS_MAX_RETENUE = 20
+POSE_MAX_DEBUT = 2
+
+
 def bridage_pour(nom_niveau: str | None) -> Bridage:
     """Bridage d'un niveau. Un niveau inconnu (ou ``None``) — p. ex. une partie
     sauvegardée avec un libellé disparu — retombe sur « Débutant », jamais
@@ -238,6 +268,24 @@ STRATEGIES: dict[str, Strategie] = {
         niveaux=("Champion du Monde",),
         active_par_defaut=True,
     ),
+    "reserve_tuile": Strategie(
+        id="reserve_tuile",
+        description=("Garder une tuile du chevalet que le meilleur coup "
+                     "aurait posée, pour avoir un coup au tour suivant "
+                     "plutôt que de piocher (#229, hypothèse H2)."),
+        niveaux=("Champion du Monde",),
+        active_par_defaut=False,
+        compteurs=("declenchee", "a_change_le_coup", "nb_tuiles_gardees",
+                  "pioche_evitee", "tuile_gardee_posee"),
+    ),
+    "retenue_debut": Strategie(
+        id="retenue_debut",
+        description=("Se retenir en début de partie : plafonner le nombre "
+                     "de tuiles posées par tour pendant les premiers tours "
+                     "qui suivent sa propre ouverture (#229, hypothèse H1)."),
+        niveaux=("Champion du Monde",),
+        active_par_defaut=False,
+    ),
 }
 
 
@@ -285,6 +333,8 @@ def bridage_champion_personnalise(strategies_actives) -> "Bridage":
         perturbation_max=None, taux_oubli=0.0,
         verif_finition="verif_finition" in actives,
         garder_joker_fin_partie="garde_joker" in actives,
+        reserve_tuile="reserve_tuile" in actives,
+        retenue_debut="retenue_debut" in actives,
     )
 
 
