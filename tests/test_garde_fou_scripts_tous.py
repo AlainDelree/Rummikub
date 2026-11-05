@@ -57,6 +57,7 @@ def test_inventaire_connu():
     l'inventaire a changé : à revérifier consciemment, pas en silence."""
     attendu = {
         "_campagne_186.py",
+        "calibrer_echelle.py",
         "calibrer_niveaux.py",
         "comparer_niveaux_ia.py",
         "echelle_niveaux.py",
@@ -64,7 +65,6 @@ def test_inventaire_connu():
         "match_solveurs.py",
         "profil_joueur.py",
         "simulation_ia.py",
-        "valider_bas_echelle.py",
         "verifier_simplicite_expert.py",
     }
     assert set(_scripts_qui_font_jouer_ia()) == attendu

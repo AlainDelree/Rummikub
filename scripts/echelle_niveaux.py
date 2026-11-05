@@ -193,7 +193,7 @@ def jouer_paire(niveau_faible: str, niveau_fort: str, nb_donnes: int,
 
 def _ecrire(sortie, lignes: list[str]) -> None:
     """Réécrit INTÉGRALEMENT le fichier de sortie (résultats partiels), comme
-    ``scripts/valider_bas_echelle.py``."""
+    ``scripts/calibrer_echelle.py`` (même principe)."""
     if sortie is None:
         return
     Path(sortie).write_text("\n".join(lignes) + "\n", encoding="utf-8")

@@ -124,8 +124,9 @@ def taux_oubli_effectif(taux: float, taille_main: int) -> float:
 # (comme la précaution déjà notée pour Intermédiaire pert=4, #216) ; le tournoi
 # de validation au budget de production, trop coûteux pour aboutir dans le temps
 # imparti de #217, est laissé à relancer par Alain (voir CONTEXTE.md §16,
-# ``scripts/valider_bas_echelle.py``). Le réglage s'appuie donc sur la garantie
-# structurelle ci-dessus plutôt que sur une mesure non significative.
+# ``scripts/calibrer_echelle.py`` depuis #240, qui remplace l'ancien
+# ``scripts/valider_bas_echelle.py``). Le réglage s'appuie donc sur la
+# garantie structurelle ci-dessus plutôt que sur une mesure non significative.
 BRIDAGES: dict[str, Bridage] = {
     "Débutant":          Bridage(perturbation_max=0,    taux_oubli=0.42),
     "Facile":            Bridage(perturbation_max=1,    taux_oubli=0.30),

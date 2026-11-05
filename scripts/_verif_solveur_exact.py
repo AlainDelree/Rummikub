@@ -12,7 +12,7 @@ impossible, aucun rapport avec la vitesse » — ce qui était faux. Toute la
 mesure a porté sur un Expert qui n'était, en réalité, jamais Expert.
 
 Les scripts de mesure listés par l'issue (``comparer_niveaux_ia.py``,
-``valider_bas_echelle.py``, ``echelle_niveaux.py``, et tout autre script qui
+``calibrer_echelle.py``, ``echelle_niveaux.py``, et tout autre script qui
 fait jouer Avancé/Expert) doivent donc échouer FRANCHEMENT
 (code de sortie non nul, message explicite nommant l'interpréteur utilisé)
 si le solveur exact n'est pas importable — sauf si l'appelant a

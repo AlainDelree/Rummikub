@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Mise en forme commune des rapports de tournoi de duels (issue #220).
 
-Partagé par ``scripts/echelle_niveaux.py`` et ``scripts/valider_bas_echelle.py``
+Partagé par ``scripts/echelle_niveaux.py`` et ``scripts/calibrer_echelle.py``
 depuis que le seul critère de force retenu est le duel entre niveaux voisins
 (CONTEXTE.md §16) : en-tête machine/Python (pour comparer des tournois lancés
 sur des machines différentes) et verdict d'écart (« net » entre 60 et 75 %,

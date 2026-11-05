@@ -2,7 +2,7 @@
 """Garde-fou de limite de temps FERME pour les tournois de validation (issue
 #220, suite de #216/#217).
 
-Partagé par ``scripts/echelle_niveaux.py`` et ``scripts/valider_bas_echelle.py``.
+Partagé par ``scripts/echelle_niveaux.py`` et ``scripts/calibrer_echelle.py``.
 Les deux boucles de tournoi s'arrêtent déjà PROPREMENT d'elles-mêmes dès que
 ``--limite-temps`` est dépassée (plus de nouvelle donne lancée, voir
 ``deadline`` dans chaque script) — mais une donne déjà EN COURS peut, dans un
