@@ -2,7 +2,7 @@
 
 // Avatars SVG et helpers genrés : voir commun.js (AVATARS, avatarPour,
 // elementAvatar, avatarAleatoirePourPrenom) + genres.js (genrePrénom).
-const NIVEAUX = ["Débutant", "Facile", "Intermédiaire", "Avancé", "Expert", "Champion du Monde"];
+const NIVEAUX = ["Débutant", "Facile", "Intermédiaire", "Avancé", "Expert"];
 const MAX_ADVERSAIRES = 3;
 
 // État local de l'accueil
