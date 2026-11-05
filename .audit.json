@@ -4,5 +4,6 @@
     "interface": ["src/rummikub/ui"],
     "métier": ["src/rummikub/moteur"],
     "persistance": ["src/rummikub/persistance"]
-  }
+  },
+  "donnees_personnelles": ["config.json", "data/parties.db", "data/logs_parties"]
 }
