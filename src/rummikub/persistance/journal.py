@@ -134,6 +134,9 @@ def _rotation(dossier: Path) -> None:
         try:
             f.unlink()
         except OSError:
+            # Rotation best-effort (libère de l'espace disque) : si le
+            # fichier est verrouillé ou déjà supprimé, on continue sans
+            # bloquer la partie en cours.
             pass
 
 

@@ -512,6 +512,9 @@ def executer_serie(serie: dict, configs: list, dossier: Path,
         try:
             pid_path.unlink(missing_ok=True)
         except OSError:
+            # Nettoyage best-effort du fichier PID : un échec ici (verrou,
+            # suppression concurrente) n'a aucun impact sur la série déjà
+            # exécutée.
             pass
 
 
