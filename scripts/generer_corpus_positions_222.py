@@ -210,7 +210,7 @@ def main(argv: list[str]) -> int:
 
     # Échec franc sans solveur exact (issue #224, suite de #223) : les
     # parties génératrices font jouer tous les niveaux d'IA (dont Avancé/
-    # Expert/Champion du Monde, selon le décalage de ``_PLANS``), sans option
+    # Expert, selon le décalage de ``_PLANS``), sans option
     # ``--sans-exact``. Voir l'incident documenté dans
     # ``_verif_solveur_exact.py``.
     exiger_solveur_exact_ou_quitter()

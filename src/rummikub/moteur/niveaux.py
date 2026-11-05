@@ -1,8 +1,8 @@
-"""Échelle des six niveaux d'IA et paramètres d'affaiblissement (issue #213).
+"""Échelle des cinq niveaux d'IA et paramètres d'affaiblissement (issue #213).
 
-**Un seul moteur exact pour tous les niveaux.** Depuis #213, les six niveaux
+**Un seul moteur exact pour tous les niveaux.** Depuis #213, les cinq niveaux
 d'IA sont bâtis sur le même modèle exact d'un tour (``moteur/solveur_exact.py``,
-le joueur d'Expert depuis #206). Leur force n'est plus réglée par six
+le joueur d'Expert depuis #206). Leur force n'est plus réglée par des
 algorithmes différents mais par **deux paramètres réunis ICI**, appliqués au
 même moteur (voir ``moteur/ia.jouer_niveau_bride``) :
 
@@ -26,17 +26,16 @@ même moteur (voir ``moteur/ia.jouer_niveau_bride``) :
   pour qu'un joueur ne « pioche » pas bêtement en toute fin de partie, quand il
   est sur le point de sortir.
 
-**Structure cible de l'échelle** (issue #213 §2) :
+**Structure de l'échelle** (issue #213 §2) :
 
 * **Débutant, Facile, Intermédiaire** : le solveur un-tour AFFAIBLI (de plus en
   plus bridé vers le bas) ;
 * **Avancé** : le solveur un-tour COMPLET, tel quel ;
-* **Expert, Champion du Monde** : le solveur un-tour complet PLUS des stratégies
-  multi-tours (réserve d'un coup, non-don de joker, rétention défensive — pistes
-  de CONTEXTE.md §13). Ces stratégies ne sont **pas** implémentées par #213 :
-  Expert et Champion du Monde sont donc **provisoirement identiques à Avancé**
-  (solveur un-tour complet), jusqu'à ce que des issues ultérieures développent
-  les stratégies multi-tours. Signalé clairement ici et dans CONTEXTE.md.
+* **Expert** : le solveur un-tour complet PLUS la vérification de finition en
+  fin de partie (#221). Un sixième niveau, « Champion du Monde », a porté
+  d'autres stratégies multi-tours ; retiré par l'issue #235, voir CONTEXTE.md
+  (archive : aucun effet mesurable sur le taux de victoire, code récupérable
+  au tag git ``archive-strategies-champion``).
 
 Les valeurs ci-dessous sont les valeurs de départ INDICATIVES de l'issue, à
 resserrer par les mesures (``scripts/echelle_niveaux.py``,
@@ -61,43 +60,10 @@ class Bridage:
     (solveur complet) ; ``taux_oubli`` ∈ [0, 1] ; ``verif_finition`` (issue
     #221, étape 1 de la brique « Deux tours ») active la vérification de
     finition en fin de partie pour ce niveau — ``False`` par défaut, pour que
-    Débutant à Avancé restent strictement inchangés. ``garder_joker_fin_partie``
-    (issue #225, deuxième stratégie multi-tours de la brique « Deux tours »,
-    SEULEMENT pour Champion du Monde) : en fin de partie, si le chevalet
-    contient un joker et qu'aucun adversaire n'est trop proche de finir (voir
-    ``SEUIL_PRUDENCE_ADVERSAIRE_GARDE_JOKER`` ci-dessous), ajoute comme
-    candidat de la vérification de finition le meilleur coup qui NE JOUE PAS
-    le joker du chevalet — ``False`` par défaut, y compris pour Expert, qui
-    reste le niveau de référence inchangé. ``reserve_tuile`` (issue #229,
-    hypothèse H2, Champion du Monde SEUL) : après le coup du solveur,
-    essaie de jouer un coup qui GARDE une tuile que ce même coup aurait
-    posée, pour disposer d'un coup au tour suivant plutôt que de piocher —
-    ``False`` par défaut. ``retenue_debut`` (issue #229, hypothèse H1,
-    Champion du Monde SEUL) : pendant les premiers tours qui suivent SA
-    PROPRE ouverture, plafonne le nombre de tuiles posées par tour —
-    ``False`` par défaut. ``petits_chiffres`` (issue #230, hypothèse H4,
-    Champion du Monde SEUL) : à nombre de tuiles posées égal, préfère le
-    coup qui pose le MOINS de petites tuiles (valeur 1 à
-    ``VALEUR_MAX_PETITS`` ci-dessous), pour les garder en main et bloquer
-    l'adversaire — ``False`` par défaut. ``chances_prochain_tour`` (issue
-    #231, Champion du Monde SEUL) : à nombre de tuiles posées égal, préfère
-    le coup qui laisse le chevalet le plus susceptible de pouvoir encore
-    jouer au tour suivant (score ``moteur/sorties.py``, somme des
-    probabilités de piocher une « sortie ») — ``False`` par défaut.
-    ``placement_joker`` (issue #232, Champion du Monde SEUL) : pour un coup
-    qui pose un joker du chevalet, à nombre de tuiles posées égal, préfère
-    le placement dont l'exposition (nombre d'exemplaires encore INCONNUS des
-    tuiles qui pourraient le remplacer, brique « Inconnues » #219) est la
-    plus faible — ``False`` par défaut."""
+    Débutant à Avancé restent strictement inchangés."""
     perturbation_max: int | None
     taux_oubli: float
     verif_finition: bool = False
-    garder_joker_fin_partie: bool = False
-    reserve_tuile: bool = False
-    retenue_debut: bool = False
-    petits_chiffres: bool = False
-    chances_prochain_tour: bool = False
-    placement_joker: bool = False
 
     @property
     def complet(self) -> bool:
@@ -169,21 +135,15 @@ BRIDAGES: dict[str, Bridage] = {
     "Facile":            Bridage(perturbation_max=1,    taux_oubli=0.30),
     "Intermédiaire":     Bridage(perturbation_max=4,    taux_oubli=0.08),
     "Avancé":            Bridage(perturbation_max=None, taux_oubli=0.0),
-    # Expert et Champion du Monde : solveur un-tour complet PLUS, depuis
-    # #221 (étape 1 de la brique « Deux tours »), la vérification de
-    # finition en fin de partie (voir moteur/verification_finition.py et
-    # SEUIL_FIN_PARTIE_VERIF_FINITION ci-dessous).
-    #
-    # Champion du Monde SEUL reçoit en plus, depuis #225, « garder un joker
-    # en main » (deuxième stratégie multi-tours de la brique « Deux tours »,
-    # §13) : Expert reste le niveau de RÉFÉRENCE, strictement inchangé — le
-    # duel Expert contre Champion du Monde mesure l'effet de cette seule
-    # stratégie. D'autres stratégies multi-tours de #213/§13 restent À FAIRE.
+    # Expert : solveur un-tour complet PLUS, depuis #221 (étape 1 de la
+    # brique « Deux tours »), la vérification de finition en fin de partie
+    # (voir moteur/verification_finition.py et SEUIL_FIN_PARTIE_VERIF_
+    # FINITION ci-dessous). Un sixième niveau, « Champion du Monde », a
+    # porté d'autres stratégies multi-tours (#225/#229/#230/#231/#232) ;
+    # retiré par #235 (aucun effet mesurable sur le taux de victoire face à
+    # Expert — voir CONTEXTE.md). Expert n'est pas modifié par ce retrait.
     "Expert":            Bridage(perturbation_max=None, taux_oubli=0.0,
                                   verif_finition=True),
-    "Champion du Monde": Bridage(perturbation_max=None, taux_oubli=0.0,
-                                  verif_finition=True,
-                                  garder_joker_fin_partie=True),
 }
 
 
@@ -196,255 +156,31 @@ BRIDAGES: dict[str, Bridage] = {
 SEUIL_FIN_PARTIE_VERIF_FINITION = 5
 
 
-# Seuil de prudence sur l'adversaire pour « garder un joker en main » (#225) :
-# en dessous de ce nombre de tuiles dans la main d'un adversaire, Champion du
-# Monde ne tente PAS de garder son joker (l'adversaire pourrait finir avant
-# que le tour de garder le joker ne paie). Information PUBLIQUE (le nombre de
-# tuiles restantes de chaque joueur est visible de tous, voir CONTEXTE.md §13)
-# — jamais le contenu de sa main, jamais lu dans sa main. Valeur de départ
-# INDICATIVE de l'issue (3), réglable ICI uniquement.
-SEUIL_PRUDENCE_ADVERSAIRE_GARDE_JOKER = 3
+# Compatibilité (issue #235) : « Champion du Monde », niveau retiré (aucun
+# effet mesurable de ses stratégies multi-tours sur le taux de victoire face
+# à Expert — voir CONTEXTE.md, code récupérable au tag git
+# ``archive-strategies-champion``). Un réglage, une partie sauvegardée ou un
+# journal antérieur qui nomme encore ce niveau ne doit jamais planter : il
+# est remplacé par « Expert », le niveau le plus proche restant — jamais par
+# le repli générique « Débutant » (ci-dessous) réservé aux noms vraiment
+# inconnus.
+NIVEAU_RETIRE = "Champion du Monde"
+NIVEAU_RETIRE_REMPLACEMENT = "Expert"
 
 
-# Paramètres de « réserve d'une tuile » (#229, hypothèse H2) : écart maximal
-# ACCEPTÉ, en nombre de tuiles, entre le meilleur coup du solveur et le coup
-# qui en garde une (condition (b) de l'issue) — au-delà, la perte immédiate
-# de tuiles posées n'est plus jugée compensée par le coup gardé pour le tour
-# suivant. Valeur de départ INDICATIVE de l'issue (1), réglable ICI
-# uniquement (même emplacement que les autres paramètres de ce fichier).
-ECART_MAX_RESERVE = 1
-
-# Paramètres de « retenue au début » (#229, hypothèse H1) : nombre de tours
-# du JOUEUR LUI-MÊME (pas le tour global de la partie), comptés à partir de
-# SA PROPRE ouverture (mise initiale), pendant lesquels le plafond
-# ``POSE_MAX_DEBUT`` s'applique ; désactivé au-delà de
-# ``TUILES_TAPIS_MAX_RETENUE`` tuiles sur le tapis (le tapis est déjà assez
-# fourni pour que la retenue n'ait plus de sens) ou en dessous de 9 tuiles en
-# main (on se rapproche de la fin, la retenue devient contre-productive).
-# Valeurs de départ INDICATIVES de l'issue, réglables ICI uniquement.
-TOURS_RETENUE_DEBUT = 4
-TUILES_TAPIS_MAX_RETENUE = 20
-POSE_MAX_DEBUT = 2
-
-
-# Paramètres de « petits chiffres » (#230, hypothèse H4) : un ex-champion du
-# monde néerlandais (Matthijs Delvers, 2026, voir CONTEXTE.md §13) conseille
-# de garder les petites tuiles (p. ex. les 3) pour bloquer l'adversaire —
-# elles coûtent aussi peu de points si l'on perd. ``VALEUR_MAX_PETITS`` :
-# valeur maximale (incluse) d'une tuile RÉELLE considérée « petite » — valeur
-# de départ INDICATIVE de l'issue (3), réglable ICI uniquement.
-# ``ECART_TUILES_PETITS`` : écart maximal ACCEPTÉ, en nombre de tuiles, entre
-# le meilleur coup du solveur et un coup qui pose au moins une petite tuile
-# de moins (variante tolérante, point 3 de l'issue) — ``0`` (défaut) désactive
-# cette variante (seul le départage à nombre de tuiles posées égal
-# s'applique) ; à ``1``, un coup qui pose une tuile de moins peut être
-# préféré s'il évite de poser une petite tuile.
-VALEUR_MAX_PETITS = 3
-ECART_TUILES_PETITS = 0
-
-
-# Paramètres de « chances de poser au prochain tour » (#231, anciennement
-# « tuiles vivantes ») : à nombre de tuiles posées égal, préfère le coup qui
-# laisse le chevalet au score ``moteur/sorties.score_chevalet`` le plus élevé
-# — somme, sur les « sorties » (types de tuile qui permettraient de jouer au
-# prochain tour), des probabilités de les piocher. ``ECART_TUILES_SORTIES`` :
-# écart maximal ACCEPTÉ, en nombre de tuiles, entre le meilleur coup du
-# solveur et un coup qui en pose moins mais laisse un bien meilleur score
-# (variante tolérante) — ``0`` (défaut) désactive cette variante (seul le
-# départage à nombre de tuiles posées égal s'applique). ``SEUIL_GAIN_SORTIES``
-# : gain de score minimal exigé pour que la variante tolérante préfère un
-# coup qui pose une tuile de moins — valeur de départ INDICATIVE de l'issue
-# (0,15), réglable ICI uniquement, SANS EFFET tant que ``ECART_TUILES_
-# SORTIES`` reste à 0.
-ECART_TUILES_SORTIES = 0
-SEUIL_GAIN_SORTIES = 0.15
-
-
-# Paramètres de « placement du joker » (#232) : variante d'asymétrie,
-# DÉSACTIVÉE par défaut (``ASYMETRIE_JOKER_ACTIVE = False``). Quand active,
-# le départage ne compare plus l'exposition brute (nombre d'exemplaires
-# inconnus des tuiles de remplacement, exposées à l'ADVERSAIRE) mais un score
-# ajusté ``exposition - POIDS_ASYMETRIE_JOKER * ma_chance_de_reprise``, où
-# ``ma_chance_de_reprise`` est la probabilité (brique « Inconnues », #219)
-# que CE JOUEUR pioche lui-même une des tuiles de remplacement — nuance
-# d'Alain (#232, point 5) : un joker difficile à reprendre pour l'adversaire
-# l'est aussi pour moi, donc préférer, à exposition égale, le placement que
-# j'ai le plus de chances de récupérer moi-même. Valeur de départ INDICATIVE
-# (1.0), réglable ICI uniquement, SANS EFFET tant qu'``ASYMETRIE_JOKER_
-# ACTIVE`` reste à ``False``.
-ASYMETRIE_JOKER_ACTIVE = False
-POIDS_ASYMETRIE_JOKER = 1.0
+def niveau_compatible(nom_niveau: str | None) -> str | None:
+    """Remplace :data:`NIVEAU_RETIRE` par :data:`NIVEAU_RETIRE_REMPLACEMENT` ;
+    retourne ``nom_niveau`` inchangé sinon (y compris ``None`` ou un nom
+    inconnu pour une autre raison, laissés à ``bridage_pour``/``ia.jouer_ia``)."""
+    if nom_niveau == NIVEAU_RETIRE:
+        return NIVEAU_RETIRE_REMPLACEMENT
+    return nom_niveau
 
 
 def bridage_pour(nom_niveau: str | None) -> Bridage:
     """Bridage d'un niveau. Un niveau inconnu (ou ``None``) — p. ex. une partie
     sauvegardée avec un libellé disparu — retombe sur « Débutant », jamais
-    d'erreur (parties anciennes toujours valides)."""
+    d'erreur (parties anciennes toujours valides). ``NIVEAU_RETIRE``
+    (« Champion du Monde ») est d'abord traduit par ``niveau_compatible``."""
+    nom_niveau = niveau_compatible(nom_niveau)
     return BRIDAGES.get(nom_niveau, BRIDAGES["Débutant"])
-
-
-# --------------------------------------------------------------------------- #
-# Registre unique des stratégies multi-tours (issue #228).
-#
-# Avant #228, chaque stratégie avait son propre drapeau de script
-# (``--sans-verif-finition``, ``--sans-garde-joker``) et aucune liste ne les
-# réunissait : ajouter des stratégies une à une aurait multiplié les
-# drapeaux et les commandes à retenir. Ce registre est désormais LA seule
-# source de vérité sur « quelles stratégies multi-tours existent » — y
-# ajouter une entrée (plus son branchement dans ``_bridage_champion``
-# ci-dessous si la stratégie a un effet sur le bridage) suffit pour qu'elle
-# apparaisse dans les options de campagne et les rapports (voir
-# ``scripts/comparer_niveaux_ia.py``, CONTEXTE.md §13).
-# --------------------------------------------------------------------------- #
-
-@dataclass(frozen=True)
-class Strategie:
-    """Une entrée du registre. ``niveaux`` : les niveaux auxquels la
-    stratégie s'applique (p. ex. ``verif_finition`` s'applique à Expert ET
-    Champion du Monde, ``garde_joker`` à Champion du Monde seul — Expert
-    reste le témoin, jamais concerné). ``active_par_defaut`` : vrai si la
-    stratégie est active par défaut, DANS LE JEU, pour les niveaux où elle
-    s'applique (reflet de ce qui est câblé dans ``BRIDAGES`` — ne détermine
-    PAS, à lui seul, ce que Champion du Monde utilise : voir
-    :data:`STRATEGIES_CHAMPION_PAR_DEFAUT`, la liste qui fait foi pour le
-    jeu). ``compteurs`` : noms des compteurs génériques que la stratégie
-    déclare (voir ``scripts/comparer_niveaux_ia.py``, qui les affiche sans
-    code spécifique par stratégie dans la boucle de rapport)."""
-    id: str
-    description: str
-    niveaux: tuple[str, ...]
-    active_par_defaut: bool
-    compteurs: tuple[str, ...] = ("declenchee", "a_change_le_coup")
-
-
-STRATEGIES: dict[str, Strategie] = {
-    "verif_finition": Strategie(
-        id="verif_finition",
-        description=("Vérification de finition en fin de partie (#221) : "
-                     "préfère, parmi quelques coups candidats, celui qui "
-                     "permet de vider le chevalet au tour suivant."),
-        niveaux=("Expert", "Champion du Monde"),
-        active_par_defaut=True,
-    ),
-    "garde_joker": Strategie(
-        id="garde_joker",
-        description=("Garder un joker en main en fin de partie si aucun "
-                     "adversaire n'est trop proche de finir (#225)."),
-        niveaux=("Champion du Monde",),
-        active_par_defaut=True,
-    ),
-    "reserve_tuile": Strategie(
-        id="reserve_tuile",
-        description=("Garder une tuile du chevalet que le meilleur coup "
-                     "aurait posée, pour avoir un coup au tour suivant "
-                     "plutôt que de piocher (#229, hypothèse H2)."),
-        niveaux=("Champion du Monde",),
-        active_par_defaut=False,
-        compteurs=("declenchee", "a_change_le_coup", "nb_tuiles_gardees",
-                  "pioche_evitee", "tuile_gardee_posee"),
-    ),
-    "retenue_debut": Strategie(
-        id="retenue_debut",
-        description=("Se retenir en début de partie : plafonner le nombre "
-                     "de tuiles posées par tour pendant les premiers tours "
-                     "qui suivent sa propre ouverture (#229, hypothèse H1)."),
-        niveaux=("Champion du Monde",),
-        active_par_defaut=False,
-    ),
-    "petits_chiffres": Strategie(
-        id="petits_chiffres",
-        description=("Garder les petites tuiles (valeur ≤ VALEUR_MAX_PETITS) "
-                     "en main pour bloquer l'adversaire : à nombre de "
-                     "tuiles posées égal, préfère le coup qui en pose le "
-                     "moins (#230, hypothèse H4)."),
-        niveaux=("Champion du Monde",),
-        active_par_defaut=False,
-        compteurs=("declenchee", "a_change_le_coup",
-                  "nb_petites_main_moyenne"),
-    ),
-    "chances_prochain_tour": Strategie(
-        id="chances_prochain_tour",
-        description=("À nombre de tuiles posées égal, préférer le coup qui "
-                     "laisse le chevalet le plus susceptible de pouvoir "
-                     "encore jouer au tour suivant (#231, anciennement "
-                     "« tuiles vivantes »)."),
-        niveaux=("Champion du Monde",),
-        active_par_defaut=False,
-        compteurs=("declenchee", "a_change_le_coup",
-                  "score_chevalet_moyen", "pioche_evitee_tour_suivant"),
-    ),
-    "placement_joker": Strategie(
-        id="placement_joker",
-        description=("Pour un coup qui pose un joker du chevalet, à nombre "
-                     "de tuiles posées égal, préférer le placement le "
-                     "moins exposé à une reprise par l'adversaire (#232)."),
-        niveaux=("Champion du Monde",),
-        active_par_defaut=False,
-        compteurs=("declenchee", "a_change_le_coup", "nb_jokers_poses",
-                  "exposition_moyenne", "joker_repris_par_adversaire"),
-    ),
-}
-
-
-# Ce que Champion du Monde utilise AUJOURD'HUI dans le JEU (inchangé par
-# #228) : reproduit à l'identique l'état actuel (``verif_finition`` +
-# ``garde_joker``, voir ``BRIDAGES`` ci-dessus). Une stratégie du registre
-# n'est ajoutée à cette liste qu'après validation par les tests/campagnes —
-# être dans ``STRATEGIES`` ne suffit pas à être jouée dans le jeu (une
-# stratégie peut exister dans le registre, à l'étude via les options de
-# campagne, SANS être encore active en production).
-STRATEGIES_CHAMPION_PAR_DEFAUT: tuple[str, ...] = ("verif_finition", "garde_joker")
-
-
-def strategies_champion_valides() -> tuple[str, ...]:
-    """Identifiants du registre applicables à Champion du Monde (ordre du
-    registre) — utilisé pour valider les options de campagne et lister les
-    noms valides en cas d'erreur."""
-    return tuple(s.id for s in STRATEGIES.values() if "Champion du Monde" in s.niveaux)
-
-
-def valider_noms_strategies(noms) -> None:
-    """Lève ``ValueError`` (message listant les noms valides) si ``noms``
-    contient un identifiant de stratégie inconnu pour Champion du Monde."""
-    valides = set(strategies_champion_valides())
-    inconnus = [n for n in noms if n not in valides]
-    if inconnus:
-        raise ValueError(
-            f"stratégie(s) inconnue(s) : {', '.join(sorted(set(inconnus)))} — "
-            f"noms valides : {', '.join(sorted(valides))}")
-
-
-def bridage_champion_personnalise(strategies_actives) -> "Bridage":
-    """Construit le ``Bridage`` de Champion du Monde pour un jeu de
-    stratégies actives donné (ids du registre, p. ex. ``{"garde_joker"}``) —
-    utilisé par les campagnes de mesure (``--strategies-champion``,
-    ``scripts/matrice_strategies.py``) pour substituer, DURANT la campagne
-    seulement, la liste de stratégies de Champion du Monde sans jamais
-    toucher au jeu (``BRIDAGES`` n'est modifié que temporairement par
-    l'appelant, voir ``comparer_niveaux_ia._strategies_champion_forcees``).
-    La perturbation et le taux d'oubli restent ceux du solveur complet
-    (Champion du Monde n'est jamais bridé sur ces deux paramètres)."""
-    actives = frozenset(strategies_actives)
-    valider_noms_strategies(actives)
-    return Bridage(
-        perturbation_max=None, taux_oubli=0.0,
-        verif_finition="verif_finition" in actives,
-        garder_joker_fin_partie="garde_joker" in actives,
-        reserve_tuile="reserve_tuile" in actives,
-        retenue_debut="retenue_debut" in actives,
-        petits_chiffres="petits_chiffres" in actives,
-        chances_prochain_tour="chances_prochain_tour" in actives,
-        placement_joker="placement_joker" in actives,
-    )
-
-
-# Garde-fou de cohérence (vérifié à l'import) : ``STRATEGIES_CHAMPION_PAR_
-# DEFAUT`` doit reproduire EXACTEMENT le ``Bridage`` câblé en dur pour
-# Champion du Monde ci-dessus — sinon le registre mentirait sur ce que le
-# jeu joue réellement. Si ce test échoue, c'est que l'un des deux a été
-# modifié sans l'autre : ne JAMAIS faire taire cette assertion, corriger le
-# registre ou ``BRIDAGES`` pour qu'ils concordent à nouveau.
-assert bridage_champion_personnalise(STRATEGIES_CHAMPION_PAR_DEFAUT) == \
-    BRIDAGES["Champion du Monde"], (
-    "STRATEGIES_CHAMPION_PAR_DEFAUT ne reproduit plus BRIDAGES['Champion du "
-    "Monde'] — voir moteur/niveaux.py (issue #228).")

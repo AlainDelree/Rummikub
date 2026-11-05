@@ -36,14 +36,6 @@ Options :
                         Expert (#199, activé par défaut) — relancer la
                         même commande (même --seed) avec et sans ce
                         drapeau pour comparer les deux versions.
-    --sans-verif-finition
-                        Désactive la vérification de finition en fin de
-                        partie (#221, Expert/Champion du Monde).
-    --sans-garde-joker  Désactive « garder un joker en main » en fin de
-                        partie (#225, Champion du Monde SEUL) — relancer
-                        la même commande (même --seed) avec et sans ce
-                        drapeau pour comparer Champion du Monde avec et
-                        sans la stratégie.
     --export-resultats FICHIER
                         Écrit un fichier JSON Lines (un match par ligne)
                         pour la comparaison appariée de deux campagnes
@@ -74,15 +66,10 @@ for _p in (SRC, SCRIPTS):
     if _p.is_dir() and str(_p) not in sys.path:
         sys.path.insert(0, str(_p))
 
-import contextlib  # noqa: E402
-
 from rummikub.config import NIVEAUX  # noqa: E402
-from rummikub import reglages  # noqa: E402
 from rummikub.moteur.ia import jouer_niveau_bride  # noqa: E402
 from rummikub.moteur import evaluation_main  # noqa: E402
-from rummikub.moteur import niveaux  # noqa: E402
 from rummikub.moteur import solveur_exact  # noqa: E402
-from rummikub.moteur import verification_finition  # noqa: E402
 from _verif_solveur_exact import (  # noqa: E402
     entete_dependances, exiger_solveur_exact_ou_quitter,
 )
@@ -101,198 +88,10 @@ from rummikub.moteur.tuiles import creer_sac  # noqa: E402
 logger = logging.getLogger("comparer_niveaux_ia")
 
 
-@contextlib.contextmanager
-def _verif_finition_desactivee():
-    """Désactive temporairement la vérification de finition en fin de
-    partie (#221) pour Expert ET Champion du Monde — pour la campagne
-    « avant / après » demandée par l'issue (``--sans-verif-finition``),
-    dans le même esprit que ``--sans-exact``/``--sans-preferer-simple``.
-    Restaure les réglages d'origine à la sortie, même en cas d'exception."""
-    originaux = {}
-    for nom in ("Expert", "Champion du Monde"):
-        b = niveaux.BRIDAGES[nom]
-        originaux[nom] = b
-        niveaux.BRIDAGES[nom] = niveaux.Bridage(
-            perturbation_max=b.perturbation_max, taux_oubli=b.taux_oubli,
-            verif_finition=False)
-    try:
-        yield
-    finally:
-        niveaux.BRIDAGES.update(originaux)
-
-
-@contextlib.contextmanager
-def _strategies_champion_forcees(strategies_actives):
-    """Remplace temporairement la liste de stratégies ACTIVES de Champion du
-    Monde par ``strategies_actives`` (ids de ``moteur.niveaux.STRATEGIES``,
-    issue #228, point 2 — options ``--strategies-champion``/``--sans-
-    strategie``) — DURANT la campagne seulement, jamais dans le jeu. Restaure
-    le réglage d'origine à la sortie, même en cas d'exception. N'affecte
-    jamais Expert ni les niveaux inférieurs (dans le même esprit que
-    ``_garde_joker_desactive`` ci-dessous, qu'il ne remplace pas — les deux
-    mécanismes peuvent se combiner, voir ``main``)."""
-    nom = "Champion du Monde"
-    original = niveaux.BRIDAGES[nom]
-    niveaux.BRIDAGES[nom] = niveaux.bridage_champion_personnalise(strategies_actives)
-    try:
-        yield
-    finally:
-        niveaux.BRIDAGES[nom] = original
-
-
-def _parser_strategies_champion(valeur: str | None) -> set:
-    """Traduit l'option ``--strategies-champion`` (issue #228, point 2) : une
-    liste séparée par des virgules, ou l'un des mots-clés ``aucune``/
-    ``defaut``/``toutes``. ``None`` (option absente) équivaut à ``defaut``.
-    Lève ``ValueError`` (message listant les noms valides) sur un nom de
-    stratégie inconnu."""
-    if valeur is None or valeur == "defaut":
-        return set(niveaux.STRATEGIES_CHAMPION_PAR_DEFAUT)
-    if valeur == "aucune":
-        return set()
-    if valeur == "toutes":
-        return set(niveaux.strategies_champion_valides())
-    noms = [n.strip() for n in valeur.split(",") if n.strip()]
-    niveaux.valider_noms_strategies(noms)
-    return set(noms)
-
-
-# Extracteurs de compteurs génériques (issue #228, point 3) : UNE entrée par
-# stratégie du registre, chacune traduisant les compteurs internes propres à
-# CETTE stratégie (``stats_verif_finition``/``stats_garde_joker`` ci-dessous,
-# conservés inchangés depuis #221/#225) vers les deux compteurs génériques
-# déclarés par ``moteur.niveaux.Strategie.compteurs`` : « déclenchée » et « a
-# changé le coup ». Le rapport de campagne et l'export par partie
-# (``comparer``, ``afficher_rapport``) consomment ce dict SANS connaître le
-# détail propre à chaque stratégie — ajouter une stratégie plus tard n'exige
-# qu'une entrée ici, jamais de modifier la boucle d'affichage ou d'export.
-def _compteurs_verif_finition(resume: dict) -> dict:
-    stats = resume.get("stats_verif_finition") or {}
-    statuts_executes = (
-        verification_finition.BUDGET_EPUISE,
-        verification_finition.APPLIQUEE_MEILLEUR_SUFFIT,
-        verification_finition.APPLIQUEE_AUCUN_CANDIDAT,
-        verification_finition.APPLIQUEE_AUTRE_COUP,
-        verification_finition.APPLIQUEE_GARDE_JOKER,
-    )
-    declenchee = sum(stats.get(c, 0) for c in statuts_executes)
-    change = (stats.get(verification_finition.APPLIQUEE_AUTRE_COUP, 0)
-             + stats.get(verification_finition.APPLIQUEE_GARDE_JOKER, 0))
-    return {"declenchee": declenchee, "a_change_le_coup": change}
-
-
-def _compteurs_garde_joker(resume: dict) -> dict:
-    stats = resume.get("stats_garde_joker") or {}
-    return {"declenchee": stats.get("tours_joker_en_main", 0),
-           "a_change_le_coup": stats.get("choisi", 0)}
-
-
-def _compteurs_reserve_tuile(resume: dict) -> dict:
-    stats = resume.get("stats_reserve_tuile") or {}
-    return {"declenchee": stats.get("declenchee", 0),
-           "a_change_le_coup": stats.get("choisi", 0)}
-
-
-def _compteurs_retenue_debut(resume: dict) -> dict:
-    stats = resume.get("stats_retenue_debut") or {}
-    return {"declenchee": stats.get("declenchee", 0),
-           "a_change_le_coup": stats.get("choisi", 0)}
-
-
-def _compteurs_petits_chiffres(resume: dict) -> dict:
-    stats = resume.get("stats_petits_chiffres") or {}
-    return {"declenchee": stats.get("declenchee", 0),
-           "a_change_le_coup": stats.get("choisi", 0)}
-
-
-def _compteurs_chances_prochain_tour(resume: dict) -> dict:
-    stats = resume.get("stats_chances_prochain_tour") or {}
-    return {"declenchee": stats.get("declenchee", 0),
-           "a_change_le_coup": stats.get("choisi", 0)}
-
-
-def _compteurs_placement_joker(resume: dict) -> dict:
-    stats = resume.get("stats_placement_joker") or {}
-    return {"declenchee": stats.get("declenchee", 0),
-           "a_change_le_coup": stats.get("choisi", 0)}
-
-
-EXTRACTEURS_COMPTEURS_STRATEGIES = {
-    "verif_finition": _compteurs_verif_finition,
-    "garde_joker": _compteurs_garde_joker,
-    "reserve_tuile": _compteurs_reserve_tuile,
-    "retenue_debut": _compteurs_retenue_debut,
-    "petits_chiffres": _compteurs_petits_chiffres,
-    "chances_prochain_tour": _compteurs_chances_prochain_tour,
-    "placement_joker": _compteurs_placement_joker,
-}
-
-
-def compteurs_strategies(resume: dict) -> dict:
-    """Compteurs génériques (« déclenchée »/« a changé le coup ») de chaque
-    stratégie du registre, à partir du résumé de campagne ``resume`` (issue
-    #228, point 3)."""
-    return {sid: extracteur(resume)
-           for sid, extracteur in EXTRACTEURS_COMPTEURS_STRATEGIES.items()}
-
-
-@contextlib.contextmanager
-def _garde_joker_desactive():
-    """Désactive temporairement « garder un joker en main » (#225) pour
-    Champion du Monde SEUL (Expert n'y a jamais eu droit) — pour la campagne
-    « avec / sans » demandée par l'issue (``--sans-garde-joker``), dans le
-    même esprit que ``--sans-verif-finition``. Restaure le réglage d'origine
-    à la sortie, même en cas d'exception."""
-    nom = "Champion du Monde"
-    original = niveaux.BRIDAGES[nom]
-    niveaux.BRIDAGES[nom] = niveaux.Bridage(
-        perturbation_max=original.perturbation_max,
-        taux_oubli=original.taux_oubli,
-        verif_finition=original.verif_finition,
-        garder_joker_fin_partie=False)
-    try:
-        yield
-    finally:
-        niveaux.BRIDAGES[nom] = original
-
-
-@contextlib.contextmanager
-def _compter_appels_solveur_verif(compteur: list):
-    """Compte, dans ``compteur`` (liste à un seul élément, mutable), le
-    nombre d'appels à ``resoudre_exact`` faits DEPUIS ``verification_
-    finition.py`` (donc les appels SUPPLÉMENTAIRES de la vérification de
-    finition, #221 point 7 — jamais l'appel normal du coup du tour, qui
-    passe par ``moteur/ia.py`` et n'est pas concerné par ce compteur)."""
-    original = verification_finition.resoudre_exact
-
-    def _compte(*args, **kwargs):
-        compteur[0] += 1
-        return original(*args, **kwargs)
-
-    verification_finition.resoudre_exact = _compte
-    try:
-        yield
-    finally:
-        verification_finition.resoudre_exact = original
-
-
 # Les 106 IDs de référence (#187) : utilisés pour vérifier, à chaque coup,
 # qu'aucune tuile n'a disparu ni n'a été dupliquée entre les mains, le
 # plateau et la pioche (voir ``_anomalies_conservation``).
 _IDS_REFERENCE = frozenset(t.id for t in creer_sac())
-
-# Statuts qui font réellement tourner ``verification_finition.verifier``
-# (donc consultent le solveur) — les autres (#223, point 4) sont des
-# replis/non-exécutions AVANT d'y arriver (chevalet trop grand, pas de coup
-# à comparer, solveur non exact) et n'appellent jamais le solveur.
-_STATUTS_VERIFIES = frozenset((
-    verification_finition.BUDGET_EPUISE,
-    verification_finition.APPLIQUEE_MEILLEUR_SUFFIT,
-    verification_finition.APPLIQUEE_AUCUN_CANDIDAT,
-    verification_finition.APPLIQUEE_AUTRE_COUP,
-    verification_finition.APPLIQUEE_GARDE_JOKER,
-))
-
 
 def _anomalies_conservation(etat: dict) -> list[str]:
     """Vérifie que les 106 tuiles de référence sont chacune présentes une
@@ -318,47 +117,6 @@ def _anomalies_conservation(etat: dict) -> list[str]:
     for tid in sorted(compte):
         anomalies.append(f"{tid} inconnu (en trop)")
     return anomalies
-
-
-# --------------------------------------------------------------------------- #
-# Suivi du mécanisme VISÉ par ``placement_joker`` (issue #232, point 6) :
-# nombre de fois où un joker posé par CE joueur, SOUS la stratégie, a été
-# repris par un adversaire (échange direct, voir CONTEXTE.md §13).
-# --------------------------------------------------------------------------- #
-
-def _joker_encore_accompagne(plateau: list, id_joker: str, ids_autres: set) -> bool:
-    """Vrai si ``id_joker`` est encore présent sur ``plateau``, dans une
-    combinaison qui contient TOUJOURS toutes ses anciennes compagnes
-    (``ids_autres``, les autres tuiles de sa combinaison au moment où il a
-    été posé) — c'est-à-dire si rien n'indique qu'il ait été repris.
-    Introuvable (ne devrait jamais arriver, un joker posé doit toujours
-    être rejoué dans le même tour, CONTEXTE.md §13) : on ne compte rien."""
-    for combo in plateau:
-        ids_combo = {t["id"] for t in combo}
-        if id_joker in ids_combo:
-            return ids_autres <= ids_combo
-    return True
-
-
-def _detecter_reprises_joker(plateau_apres: list, mover_idx: int,
-                            suivi: dict, stats: dict) -> None:
-    """Pour chaque joker suivi (``suivi``, ``{id_joker: {"owner", "ids_
-    autres"}}``, voir ``jouer_un_tour``), détecte une reprise directe
-    (CONTEXTE.md §13 : la tuile qui le remplaçait a pris sa place) —
-    APPROXIMATION documentée : un réarrangement du plateau sans aucun
-    rapport avec ce joker précis pourrait, en théorie, produire le même
-    signal (il faudrait, par coïncidence, déplacer le joker hors du groupe
-    de SES compagnes d'origine) — négligeable en pratique. Compte dans
-    ``stats["joker_repris_par_adversaire"]`` seulement si le joueur qui
-    vient de jouer n'est PAS le propriétaire du joker, puis arrête de le
-    suivre (repris ou non, l'épisode est clos)."""
-    for id_joker, info in list(suivi.items()):
-        if _joker_encore_accompagne(plateau_apres, id_joker, info["ids_autres"]):
-            continue
-        if mover_idx != info["owner"] and stats is not None:
-            stats["joker_repris_par_adversaire"] = (
-                stats.get("joker_repris_par_adversaire", 0) + 1)
-        del suivi[id_joker]
 
 
 # --------------------------------------------------------------------------- #
@@ -434,22 +192,10 @@ def jouer_un_tour(etat: dict, idx: int, temps_par_niveau: dict,
                   replis_expert: dict, preferer_simple: bool,
                   perturbations_expert: list,
                   eval_configs: list = None,
-                  stats_verif_finition: dict = None,
-                  appels_solveur_verif: list = None,
                   aucun_coup_expert: list = None,
-                  stats_garde_joker: dict = None,
                   trace_ctx: dict = None,
                   manche_numero: int = 1,
-                  budget_temps: float = None,
-                  stats_reserve_tuile: dict = None,
-                  suivi_reserve_tuile: dict = None,
-                  stats_retenue_debut: dict = None,
-                  stats_petits_chiffres: dict = None,
-                  tuiles_petites_main: dict = None,
-                  stats_chances_prochain_tour: dict = None,
-                  suivi_chances_prochain_tour: dict = None,
-                  stats_placement_joker: dict = None,
-                  suivi_placement_joker: dict = None) -> tuple[dict, bool, bool]:
+                  budget_temps: float = None) -> tuple[dict, bool, bool]:
     """Joue le tour de l'IA à l'index ``idx``.
 
     ``budget_temps`` (issue #228, point 5) : budget de temps du solveur par
@@ -493,64 +239,17 @@ def jouer_un_tour(etat: dict, idx: int, temps_par_niveau: dict,
     plateau (``mesurer_perturbation``, voir ``moteur/solveur.py``) est
     ajoutée à ``perturbations_expert`` pour la mesure de campagne.
 
-    ``stats_verif_finition``/``appels_solveur_verif`` (issue #221, point 7) :
-    les deux niveaux jouent désormais par le MÊME chemin que le jeu (issue
-    #223, point 3) — ``jouer_niveau_bride`` (ce que ``jouer_ia`` appelle lui
-    aussi, après résolution du niveau). Aucun appel manuel à la vérification
-    de finition ni échéance propre au script : la vérification, l'échéance
-    PARTAGÉE avec le coup normal, et le statut qui en résulte (clé
-    ``verif_finition`` du coup renvoyé) viennent intégralement de
-    ``jouer_niveau_bride`` — seule différence avec ``jouer_ia`` : Expert
-    reçoit ``on_repli``/``on_aucun``/``preferer_simple``/``eval_config``
-    (points d'observation du moteur, pas une logique dupliquée) pour que la
-    campagne compte les replis et compare les réglages d'évaluation, comme
-    avant #223.
+    Les deux niveaux jouent par le MÊME chemin que le jeu (issue #223, point
+    3) — ``jouer_niveau_bride`` (ce que ``jouer_ia`` appelle lui aussi, après
+    résolution du niveau) : seule différence avec ``jouer_ia``, Expert reçoit
+    ``on_repli``/``on_aucun``/``preferer_simple``/``eval_config`` (points
+    d'observation du moteur, pas une logique dupliquée) pour que la campagne
+    compte les replis et compare les réglages d'évaluation, comme avant #223.
 
     ``trace_ctx``/``manche_numero`` (issue #226, mesure PURE — lit l'état
     complet pour ÉCRIRE une trace, ne décide jamais rien) : si ``trace_ctx``
     n'est pas ``None`` (``--export-trace``), écrit une ligne JSON par tour
-    via ``_ecrire_trace_tour`` (voir ce bloc plus haut).
-
-    ``stats_reserve_tuile``/``suivi_reserve_tuile``/``stats_retenue_debut``
-    (issue #229, point 4) : mêmes compteurs bruts que ``stats_garde_joker``
-    pour les deux nouvelles stratégies, à partir des clés ``reserve_tuile_
-    info``/``retenue_debut_info`` du coup renvoyé par ``jouer_niveau_bride``.
-    ``suivi_reserve_tuile`` (dict mutable ``{idx: id_tuile_gardee}``, créé
-    frais à CHAQUE MANCHE par l'appelant — les mains sont redistribuées à
-    chaque manche, rien à suivre d'une manche à l'autre) permet de détecter,
-    au TOUR SUIVANT du MÊME joueur, le mécanisme visé par la stratégie : une
-    pioche évitée (le joueur a joué plutôt que pioché) et la tuile gardée
-    effectivement posée.
-
-    ``stats_petits_chiffres`` (issue #230, point 5) : mêmes compteurs bruts
-    que ``stats_retenue_debut`` ci-dessus, à partir de la clé
-    ``petits_chiffres_info`` du coup renvoyé par ``jouer_niveau_bride``.
-    ``tuiles_petites_main`` (dict mutable ``{niveau: [n, ...]}``, même
-    convention que ``temps_par_niveau``) : nombre de petites tuiles (valeur
-    ≤ ``niveaux.VALEUR_MAX_PETITS``) dans le chevalet de CE joueur AVANT de
-    jouer ce tour, pour TOUS les niveaux (mesure pure, jamais de décision —
-    pour vérifier que ``petits_chiffres`` les conserve réellement en main,
-    comparé à un niveau qui ne l'active pas).
-
-    ``stats_chances_prochain_tour``/``suivi_chances_prochain_tour`` (issue
-    #231, point 6) : mêmes compteurs bruts que ``stats_reserve_tuile``
-    ci-dessus, à partir de la clé ``chances_prochain_tour_info`` du coup
-    renvoyé par ``jouer_niveau_bride`` — ``score_liste`` (score du chevalet
-    CONSERVÉ, ``meilleur_score``, à chaque tour où la stratégie s'est
-    déclenchée) et ``pioche_evitee`` (au tour SUIVANT du même joueur, a-t-il
-    joué plutôt que pioché, à comparer avec le témoin — même mécanisme de
-    suivi que ``suivi_reserve_tuile``).
-
-    ``stats_placement_joker``/``suivi_placement_joker`` (issue #232, point
-    6) : compteurs bruts (``declenchee``/``choisi``, clé ``placement_joker_
-    info`` du coup renvoyé par ``jouer_niveau_bride``) + ``nb_jokers_
-    poses``/``exposition_liste`` (un ajout par joker mesurable posé, qu'il
-    ait ou non changé le coup) — et le mécanisme VISÉ par la stratégie
-    (``joker_repris_par_adversaire``, voir ``_detecter_reprises_joker``) :
-    contrairement à ``suivi_reserve_tuile``/``suivi_chances_prochain_tour``
-    (qui ne regardent que le tour SUIVANT du MÊME joueur), ``suivi_
-    placement_joker`` est vérifié à CHAQUE tour (de n'importe quel joueur)
-    jusqu'à ce qu'une reprise soit détectée ou que la manche se termine."""
+    via ``_ecrire_trace_tour`` (voir ce bloc plus haut)."""
     niveau = etat["joueurs"][idx]["niveau"]
     backup_debut_tour(etat)
     plateau_avant = etat["plateau"]
@@ -563,18 +262,8 @@ def jouer_un_tour(etat: dict, idx: int, temps_par_niveau: dict,
     taille_pioche_avant = len(etat["pioche"])
     joker_avant = any(t.get("est_joker") for t in joueur_avant["chevalet"])
 
-    if tuiles_petites_main is not None:
-        petites_avant = sum(
-            1 for t in joueur_avant["chevalet"]
-            if not t.get("est_joker")
-            and (t.get("valeur") or 0) <= niveaux.VALEUR_MAX_PETITS)
-        tuiles_petites_main.setdefault(niveau, []).append(petites_avant)
-
     def _issue(etat_final, invalide, tuiles_disparues, action,
               nb_tuiles_posees=0, points_poses=0):
-        if suivi_placement_joker:
-            _detecter_reprises_joker(etat_final.get("plateau", []), idx,
-                                     suivi_placement_joker, stats_placement_joker)
         if trace_ctx is not None:
             joueur_apres = etat_final["joueurs"][idx]
             _ecrire_trace_tour(
@@ -597,7 +286,6 @@ def jouer_un_tour(etat: dict, idx: int, temps_par_niveau: dict,
         if aucun_coup_expert is not None:
             aucun_coup_expert[0] += 1
 
-    avant_appels = appels_solveur_verif[0] if appels_solveur_verif else 0
     debut = time.monotonic()
     try:
         if niveau == "Expert":
@@ -620,132 +308,6 @@ def jouer_un_tour(etat: dict, idx: int, temps_par_niveau: dict,
         annuler_tour(etat)
         return _issue(piocher(etat)["etat"], True, False, "pioche")
     temps_par_niveau.setdefault(niveau, []).append(time.monotonic() - debut)
-
-    if stats_verif_finition is not None and res_ia.get("verif_finition") is not None:
-        statut_verif = res_ia["verif_finition"]
-        stats_verif_finition.setdefault(statut_verif, 0)
-        stats_verif_finition[statut_verif] += 1
-        # Nombre d'appels supplémentaires au solveur : seulement sur les
-        # tours où la vérification a été réellement TENTÉE.
-        if appels_solveur_verif and statut_verif in _STATUTS_VERIFIES:
-            stats_verif_finition.setdefault("appels_par_tour", []).append(
-                appels_solveur_verif[0] - avant_appels)
-
-    if stats_garde_joker is not None and res_ia.get("garde_joker_info") is not None:
-        info = res_ia["garde_joker_info"]
-        if info.get("joker_en_main"):
-            stats_garde_joker["tours_joker_en_main"] = (
-                stats_garde_joker.get("tours_joker_en_main", 0) + 1)
-        if info.get("candidat_existe"):
-            stats_garde_joker["candidat_existe"] = (
-                stats_garde_joker.get("candidat_existe", 0) + 1)
-        if info.get("permet_de_finir"):
-            stats_garde_joker["permet_de_finir"] = (
-                stats_garde_joker.get("permet_de_finir", 0) + 1)
-        if info.get("choisi"):
-            stats_garde_joker["choisi"] = stats_garde_joker.get("choisi", 0) + 1
-
-    # « Réserve d'une tuile » (#229, point 4) : d'abord le mécanisme VISÉ par
-    # la stratégie — au tour suivant du MÊME joueur, a-t-il joué plutôt que
-    # pioché (pioche évitée), et la tuile gardée a-t-elle été effectivement
-    # posée ? — AVANT de mettre à jour ``suivi_reserve_tuile`` avec la
-    # décision de CE tour (sinon on comparerait un coup à lui-même).
-    if suivi_reserve_tuile is not None:
-        tuile_en_attente = suivi_reserve_tuile.get(idx)
-        if tuile_en_attente is not None:
-            if stats_reserve_tuile is not None:
-                if res_ia.get("action") == "jouer":
-                    stats_reserve_tuile["pioche_evitee"] = (
-                        stats_reserve_tuile.get("pioche_evitee", 0) + 1)
-                    if tuile_en_attente in (res_ia.get("ids_tuiles") or []):
-                        stats_reserve_tuile["tuile_gardee_posee"] = (
-                            stats_reserve_tuile.get("tuile_gardee_posee", 0) + 1)
-            suivi_reserve_tuile[idx] = None
-
-    info_reserve = res_ia.get("reserve_tuile_info")
-    if info_reserve is not None:
-        if stats_reserve_tuile is not None:
-            if info_reserve.get("declenchee"):
-                stats_reserve_tuile["declenchee"] = (
-                    stats_reserve_tuile.get("declenchee", 0) + 1)
-            if info_reserve.get("choisi"):
-                stats_reserve_tuile["choisi"] = (
-                    stats_reserve_tuile.get("choisi", 0) + 1)
-                stats_reserve_tuile.setdefault("nb_tuiles_gardees_liste", []).append(
-                    info_reserve["nb_tuiles_gardees"])
-        if suivi_reserve_tuile is not None and info_reserve.get("choisi"):
-            suivi_reserve_tuile[idx] = info_reserve.get("id_tuile_gardee")
-
-    if stats_retenue_debut is not None and res_ia.get("retenue_debut_info") is not None:
-        info_retenue = res_ia["retenue_debut_info"]
-        if info_retenue.get("declenchee"):
-            stats_retenue_debut["declenchee"] = (
-                stats_retenue_debut.get("declenchee", 0) + 1)
-        if info_retenue.get("choisi"):
-            stats_retenue_debut["choisi"] = (
-                stats_retenue_debut.get("choisi", 0) + 1)
-
-    info_petits = res_ia.get("petits_chiffres_info")
-    if stats_petits_chiffres is not None and info_petits is not None:
-        if info_petits.get("declenchee"):
-            stats_petits_chiffres["declenchee"] = (
-                stats_petits_chiffres.get("declenchee", 0) + 1)
-        if info_petits.get("choisi"):
-            stats_petits_chiffres["choisi"] = (
-                stats_petits_chiffres.get("choisi", 0) + 1)
-
-    # « Chances de poser au prochain tour » (#231, point 6) : d'abord le
-    # mécanisme VISÉ par la stratégie — au tour suivant du MÊME joueur, a-t-il
-    # joué plutôt que pioché (pioche évitée) ? — AVANT de mettre à jour
-    # ``suivi_chances_prochain_tour`` avec la décision de CE tour (même ordre
-    # que ``reserve_tuile`` ci-dessus, pour la même raison).
-    if suivi_chances_prochain_tour is not None:
-        en_attente = suivi_chances_prochain_tour.get(idx)
-        if en_attente:
-            if stats_chances_prochain_tour is not None:
-                if res_ia.get("action") == "jouer":
-                    stats_chances_prochain_tour["pioche_evitee"] = (
-                        stats_chances_prochain_tour.get("pioche_evitee", 0) + 1)
-                stats_chances_prochain_tour["verifications"] = (
-                    stats_chances_prochain_tour.get("verifications", 0) + 1)
-            suivi_chances_prochain_tour[idx] = False
-
-    info_chances = res_ia.get("chances_prochain_tour_info")
-    if stats_chances_prochain_tour is not None and info_chances is not None:
-        if info_chances.get("declenchee"):
-            stats_chances_prochain_tour["declenchee"] = (
-                stats_chances_prochain_tour.get("declenchee", 0) + 1)
-            stats_chances_prochain_tour.setdefault("score_liste", []).append(
-                info_chances["meilleur_score"])
-        if info_chances.get("choisi"):
-            stats_chances_prochain_tour["choisi"] = (
-                stats_chances_prochain_tour.get("choisi", 0) + 1)
-        if suivi_chances_prochain_tour is not None and info_chances.get("choisi"):
-            suivi_chances_prochain_tour[idx] = True
-
-    # « Placement du joker » (#232, point 6) : compteurs bruts + mesure DIRECTE
-    # (``nb_jokers_poses``/``exposition_liste``, un ajout par joker mesurable
-    # posé CE tour, que le départage ait ou non changé le coup) ; la détection
-    # de reprise elle-même (le mécanisme VISÉ) se fait à CHAQUE tour via
-    # ``_issue``/``_detecter_reprises_joker`` ci-dessus, pas seulement au tour
-    # suivant du même joueur (un adversaire quelconque peut reprendre).
-    info_joker = res_ia.get("placement_joker_info")
-    if info_joker is not None:
-        if stats_placement_joker is not None and info_joker.get("declenchee"):
-            stats_placement_joker["declenchee"] = (
-                stats_placement_joker.get("declenchee", 0) + 1)
-            for detail in info_joker.get("details", []):
-                stats_placement_joker["nb_jokers_poses"] = (
-                    stats_placement_joker.get("nb_jokers_poses", 0) + 1)
-                stats_placement_joker.setdefault("exposition_liste", []).append(
-                    detail["exposition"])
-        if stats_placement_joker is not None and info_joker.get("choisi"):
-            stats_placement_joker["choisi"] = (
-                stats_placement_joker.get("choisi", 0) + 1)
-        if suivi_placement_joker is not None:
-            for detail in info_joker.get("details", []):
-                suivi_placement_joker[detail["id_joker"]] = {
-                    "owner": idx, "ids_autres": set(detail["ids_autres"])}
 
     if niveau == "Expert" and res_ia.get("action") == "jouer":
         perturbations_expert.append(
@@ -787,35 +349,18 @@ def _jouer_une_manche(etat: dict, max_tours: int, temps_par_niveau: dict,
                       replis_expert: dict, preferer_simple: bool,
                       perturbations_expert: list,
                       eval_configs: list = None,
-                      stats_verif_finition: dict = None,
-                      appels_solveur_verif: list = None,
                       aucun_coup_expert: list = None,
-                      stats_garde_joker: dict = None,
                       trace_ctx: dict = None,
                       manche_numero: int = 1,
-                      budget_temps: float = None,
-                      stats_reserve_tuile: dict = None,
-                      stats_retenue_debut: dict = None,
-                      stats_petits_chiffres: dict = None,
-                      tuiles_petites_main: dict = None,
-                      stats_chances_prochain_tour: dict = None,
-                      stats_placement_joker: dict = None) -> dict:
+                      budget_temps: float = None) -> dict:
     """Joue la manche courante de ``etat`` jusqu'à sa fin naturelle (chevalet
     vidé ou pioche épuisée) ou jusqu'au garde-fou ``max_tours``. Retourne les
-    statistiques de CETTE manche ; ``etat`` est muté en place.
-
-    ``suivi_reserve_tuile``/``suivi_chances_prochain_tour``/``suivi_
-    placement_joker`` (issues #229/#231/#232) sont créés ICI, frais à chaque
-    manche (les mains sont redistribuées à chaque nouvelle manche, voir
-    ``jouer_un_tour``) — jamais transmis par l'appelant."""
+    statistiques de CETTE manche ; ``etat`` est muté en place."""
     tours = 0
     coups_invalides = 0
     coups_tuiles_disparues = 0
     anomalies_conservation = 0
     arretee_garde_fou = False
-    suivi_reserve_tuile: dict = {}
-    suivi_chances_prochain_tour: dict = {}
-    suivi_placement_joker: dict = {}
 
     while not etat["manche_terminee"]:
         tours += 1
@@ -826,17 +371,7 @@ def _jouer_une_manche(etat: dict, max_tours: int, temps_par_niveau: dict,
         etat, invalide, tuiles_disparues = jouer_un_tour(
             etat, idx, temps_par_niveau, replis_expert, preferer_simple,
             perturbations_expert, eval_configs,
-            stats_verif_finition, appels_solveur_verif, aucun_coup_expert,
-            stats_garde_joker, trace_ctx, manche_numero, budget_temps,
-            stats_reserve_tuile=stats_reserve_tuile,
-            suivi_reserve_tuile=suivi_reserve_tuile,
-            stats_retenue_debut=stats_retenue_debut,
-            stats_petits_chiffres=stats_petits_chiffres,
-            tuiles_petites_main=tuiles_petites_main,
-            stats_chances_prochain_tour=stats_chances_prochain_tour,
-            suivi_chances_prochain_tour=suivi_chances_prochain_tour,
-            stats_placement_joker=stats_placement_joker,
-            suivi_placement_joker=suivi_placement_joker)
+            aucun_coup_expert, trace_ctx, manche_numero, budget_temps)
         if invalide:
             coups_invalides += 1
         if tuiles_disparues:
@@ -868,33 +403,14 @@ def jouer_match(config_joueurs: list[dict], nb_manches: int, max_tours: int,
                 temps_par_niveau: dict, replis_expert: dict,
                 preferer_simple: bool, perturbations_expert: list,
                 eval_configs: list = None, graine_ia=None,
-                stats_verif_finition: dict = None,
-                appels_solveur_verif: list = None,
                 aucun_coup_expert: list = None,
-                stats_garde_joker: dict = None,
                 trace_ctx: dict = None,
-                budget_temps: float = None,
-                stats_reserve_tuile: dict = None,
-                stats_retenue_debut: dict = None,
-                stats_petits_chiffres: dict = None,
-                tuiles_petites_main: dict = None,
-                stats_chances_prochain_tour: dict = None,
-                stats_placement_joker: dict = None) -> dict:
+                budget_temps: float = None) -> dict:
     """Joue un MATCH complet à 2 joueurs de ``nb_manches`` manches (issue
     #203). Les manches s'enchaînent via ``nouvelle_manche`` (score cumulé
     conservé, nouvelle donne et mise initiale remise à zéro à chaque manche).
     Si une manche est arrêtée par le garde-fou ``max_tours``, le match entier
     est marqué comme arrêté (``arretee_garde_fou``) et abandonné.
-
-    ``garde_joker_applique`` (issue #225, point 3), dans le résultat : vrai si
-    « garder un joker en main » a été CHOISI au moins une fois pendant ce
-    match (détecté par la variation de ``stats_garde_joker["choisi"]`` avant/
-    après) — permet à ``comparer`` d'enregistrer qui a gagné les parties où la
-    stratégie a réellement changé un coup. ``strategies_changees`` (issue
-    #228, point 3) généralise cette détection à TOUTE stratégie du registre
-    (``EXTRACTEURS_COMPTEURS_STRATEGIES``), sans code spécifique par
-    stratégie : ``{id_strategie: bool}``, vrai si son compteur « a changé le
-    coup » a progressé pendant ce match précis.
 
     ``trace_ctx`` (issue #226) : si fourni, chaque tour de chaque manche est
     tracé (``jouer_un_tour``) et une ligne de résultat est écrite à la fin
@@ -912,30 +428,13 @@ def jouer_match(config_joueurs: list[dict], nb_manches: int, max_tours: int,
     manches = []
     coups_invalides = coups_tuiles_disparues = anomalies_conservation = 0
     arretee_garde_fou = False
-    choisi_avant = stats_garde_joker.get("choisi", 0) if stats_garde_joker else 0
-    _resume_partiel = {"stats_verif_finition": stats_verif_finition,
-                       "stats_garde_joker": stats_garde_joker,
-                       "stats_reserve_tuile": stats_reserve_tuile,
-                       "stats_retenue_debut": stats_retenue_debut,
-                       "stats_petits_chiffres": stats_petits_chiffres,
-                       "stats_chances_prochain_tour": stats_chances_prochain_tour,
-                       "stats_placement_joker": stats_placement_joker}
-    compteurs_avant = {sid: extracteur(_resume_partiel)["a_change_le_coup"]
-                       for sid, extracteur in EXTRACTEURS_COMPTEURS_STRATEGIES.items()}
 
     for numero in range(1, nb_manches + 1):
         res = _jouer_une_manche(etat, max_tours, temps_par_niveau,
                                 replis_expert, preferer_simple,
                                 perturbations_expert, eval_configs,
-                                stats_verif_finition, appels_solveur_verif,
-                                aucun_coup_expert, stats_garde_joker,
-                                trace_ctx, numero, budget_temps,
-                                stats_reserve_tuile=stats_reserve_tuile,
-                                stats_retenue_debut=stats_retenue_debut,
-                                stats_petits_chiffres=stats_petits_chiffres,
-                                tuiles_petites_main=tuiles_petites_main,
-                                stats_chances_prochain_tour=stats_chances_prochain_tour,
-                                stats_placement_joker=stats_placement_joker)
+                                aucun_coup_expert,
+                                trace_ctx, numero, budget_temps)
         coups_invalides += res["coups_invalides"]
         coups_tuiles_disparues += res["coups_tuiles_disparues"]
         anomalies_conservation += res["anomalies_conservation"]
@@ -951,22 +450,13 @@ def jouer_match(config_joueurs: list[dict], nb_manches: int, max_tours: int,
             etat = nouvelle_manche(etat)
             backup_debut_tour(etat)
 
-    garde_joker_applique = (stats_garde_joker is not None
-                            and stats_garde_joker.get("choisi", 0) > choisi_avant)
-    compteurs_apres = {sid: extracteur(_resume_partiel)["a_change_le_coup"]
-                       for sid, extracteur in EXTRACTEURS_COMPTEURS_STRATEGIES.items()}
-    strategies_changees = {sid: compteurs_apres[sid] > compteurs_avant[sid]
-                           for sid in EXTRACTEURS_COMPTEURS_STRATEGIES}
-
     return {
         "etat": etat,
         "manches": manches,
         "arretee_garde_fou": arretee_garde_fou,
-        "strategies_changees": strategies_changees,
         "coups_invalides": coups_invalides,
         "coups_tuiles_disparues": coups_tuiles_disparues,
         "anomalies_conservation": anomalies_conservation,
-        "garde_joker_applique": garde_joker_applique,
     }
 
 
@@ -1072,47 +562,6 @@ def comparer(niveau_a: str, niveau_b: str, nb_donnes: int, seed: int,
     # liste de ``(tuiles_deplacees, combos_modifiees)`` (voir
     # ``mesurer_perturbation``, ``moteur/solveur.py``).
     perturbations_expert: list[tuple[int, int]] = []
-    # Vérification de finition en fin de partie (#221, point 7 ; statuts
-    # affinés par #223, point 4 — voir ``verification_finition.LIBELLES``)
-    # : compte des statuts + nombre d'appels SUPPLÉMENTAIRES au solveur par
-    # tour concerné (clé ``"appels_par_tour"``, liste).
-    stats_verif_finition: dict = {}
-    appels_solveur_verif = [0]
-    # « Garder un joker en main » (#225, point 3) : compteurs bruts (voir
-    # ``jouer_un_tour``) + liste des parties où la stratégie a CHOISI un coup
-    # au moins une fois, avec le niveau vainqueur de CETTE partie (ou ``None``
-    # si nulle) — pour répondre à « qui a gagné quand la stratégie s'est
-    # appliquée ? ».
-    stats_garde_joker: dict = {}
-    parties_garde_joker: list = []
-    # « Réserve d'une tuile »/« Retenue au début » (#229, point 4) : mêmes
-    # compteurs bruts que ``stats_garde_joker`` ci-dessus, voir
-    # ``jouer_un_tour``/``_compteurs_reserve_tuile``/``_compteurs_retenue_debut``.
-    stats_reserve_tuile: dict = {}
-    stats_retenue_debut: dict = {}
-    # « Petits chiffres » (#230, point 5) : mêmes compteurs bruts, voir
-    # ``jouer_un_tour``/``_compteurs_petits_chiffres``, + la mesure de
-    # l'EFFET visé par la stratégie — nombre de petites tuiles (valeur ≤
-    # ``niveaux.VALEUR_MAX_PETITS``) dans le chevalet à chaque tour du
-    # joueur, par niveau (``{niveau: [n, ...]}``, même convention que
-    # ``temps_par_niveau``) — mesure PURE, toujours collectée (jamais de
-    # décision), pour vérifier que la stratégie les conserve réellement.
-    stats_petits_chiffres: dict = {}
-    tuiles_petites_main: dict = {}
-    # « Chances de poser au prochain tour » (#231, point 6) : mêmes
-    # compteurs bruts, voir ``jouer_un_tour``/``_compteurs_chances_
-    # prochain_tour`` — ``score_liste`` (score moyen des chevalets
-    # CONSERVÉS) et ``pioche_evitee``/``verifications`` (au tour suivant du
-    # même joueur, a-t-il pu jouer plutôt que piocher).
-    stats_chances_prochain_tour: dict = {}
-    # « Placement du joker » (#232, point 6) : mêmes compteurs bruts, voir
-    # ``jouer_un_tour``/``_compteurs_placement_joker`` — ``exposition_liste``
-    # (une entrée par joker mesurable posé) et ``joker_repris_par_
-    # adversaire`` (mécanisme VISÉ, détecté à CHAQUE tour via ``_detecter_
-    # reprises_joker``, pas seulement au tour suivant du même joueur).
-    stats_placement_joker: dict = {}
-    pile_appels = contextlib.ExitStack()
-    pile_appels.enter_context(_compter_appels_solveur_verif(appels_solveur_verif))
 
     for i, graine in graines_jouees:
         for ordre, camps in enumerate((("A", "B"), ("B", "A"))):
@@ -1133,17 +582,8 @@ def comparer(niveau_a: str, niveau_b: str, nb_donnes: int, seed: int,
                                    temps_par_niveau, replis_expert,
                                    preferer_simple, perturbations_expert,
                                    eval_configs, graine_ia=graine,
-                                   stats_verif_finition=stats_verif_finition,
-                                   appels_solveur_verif=appels_solveur_verif,
                                    aucun_coup_expert=aucun_coup_expert,
-                                   stats_garde_joker=stats_garde_joker,
-                                   trace_ctx=trace_ctx, budget_temps=budget_temps,
-                                   stats_reserve_tuile=stats_reserve_tuile,
-                                   stats_retenue_debut=stats_retenue_debut,
-                                   stats_petits_chiffres=stats_petits_chiffres,
-                                   tuiles_petites_main=tuiles_petites_main,
-                                   stats_chances_prochain_tour=stats_chances_prochain_tour,
-                                   stats_placement_joker=stats_placement_joker)
+                                   trace_ctx=trace_ctx, budget_temps=budget_temps)
             coups_invalides_total += resultat["coups_invalides"]
             coups_tuiles_disparues_total += resultat["coups_tuiles_disparues"]
             anomalies_conservation_total += resultat["anomalies_conservation"]
@@ -1193,16 +633,8 @@ def comparer(niveau_a: str, niveau_b: str, nb_donnes: int, seed: int,
                     "niveau_a": niveau_a, "niveau_b": niveau_b,
                     "vainqueur_camp": camp_gagnant, "arretee_garde_fou": False,
                     "score_a": cumul_a, "score_b": cumul_b,
-                    "strategies_changees": resultat["strategies_changees"],
                 }, ensure_ascii=False) + "\n")
                 fichier_export.flush()
-
-            if resultat["garde_joker_applique"]:
-                parties_garde_joker.append({
-                    "donne": i + 1, "ordre": list(camps),
-                    "vainqueur_niveau": (None if camp_gagnant is None
-                                        else niveau_camp[camp_gagnant]),
-                })
 
             if logger.isEnabledFor(logging.INFO):
                 logger.info(
@@ -1213,7 +645,6 @@ def comparer(niveau_a: str, niveau_b: str, nb_donnes: int, seed: int,
                     else f"gagné par {camp_gagnant} ({niveau_camp[camp_gagnant]})",
                     len(resultat["manches"]), cumul_a, cumul_b)
 
-    pile_appels.close()
     if fichier_export:
         fichier_export.close()
     if fichier_trace:
@@ -1222,15 +653,6 @@ def comparer(niveau_a: str, niveau_b: str, nb_donnes: int, seed: int,
         "niveau_a": niveau_a,
         "niveau_b": niveau_b,
         "nb_manches": nb_manches,
-        "stats_verif_finition": stats_verif_finition,
-        "stats_garde_joker": stats_garde_joker,
-        "parties_garde_joker": parties_garde_joker,
-        "stats_reserve_tuile": stats_reserve_tuile,
-        "stats_retenue_debut": stats_retenue_debut,
-        "stats_petits_chiffres": stats_petits_chiffres,
-        "tuiles_petites_main": tuiles_petites_main,
-        "stats_chances_prochain_tour": stats_chances_prochain_tour,
-        "stats_placement_joker": stats_placement_joker,
         "victoires": victoires,
         "matchs_nuls": matchs_nuls,
         "matchs_decides": matchs_decides,
@@ -1258,12 +680,6 @@ def comparer(niveau_a: str, niveau_b: str, nb_donnes: int, seed: int,
         "nb_donnes_jouees": len(graines_jouees),
         "nb_parties": 2 * len(graines_jouees),
         "sans_exact": sans_exact,
-        # Coût d'un joker resté en main en fin de manche (issue #225, point
-        # 4) : lu depuis les réglages par défaut du moteur (``valeur_joker_
-        # penalite``, ``reglages.DEFAUTS``) — les campagnes ne passent jamais
-        # de config personnalisée pour ce réglage (voir ``jouer_match`` /
-        # ``creer_partie``).
-        "valeur_joker_penalite": reglages.DEFAUTS.get("valeur_joker_penalite", 30),
     }
 
 
@@ -1394,170 +810,6 @@ def afficher_rapport(resume: dict) -> None:
              f"{aucun_coup}/{tours_expert} tour(s) "
              f"({aucun_coup / tours_expert * 100:.1f} %)")
 
-    stats_verif = resume.get("stats_verif_finition") or {}
-    statuts_verif = {k: v for k, v in stats_verif.items() if k != "appels_par_tour"}
-    if statuts_verif:
-        statuts_executes = (
-            verification_finition.BUDGET_EPUISE,
-            verification_finition.APPLIQUEE_MEILLEUR_SUFFIT,
-            verification_finition.APPLIQUEE_AUCUN_CANDIDAT,
-            verification_finition.APPLIQUEE_AUTRE_COUP,
-            verification_finition.APPLIQUEE_GARDE_JOKER,
-        )
-        tentes = sum(statuts_verif.get(c, 0) for c in statuts_executes)
-        changes = (statuts_verif.get(verification_finition.APPLIQUEE_AUTRE_COUP, 0)
-                  + statuts_verif.get(verification_finition.APPLIQUEE_GARDE_JOKER, 0))
-        print("-" * 70)
-        print("  Vérification de finition en fin de partie (#221, statuts "
-             "affinés par #223, #225) :")
-        for code in (
-                verification_finition.NON_APPLICABLE,
-                verification_finition.PAS_DE_COUP_A_COMPARER,
-                verification_finition.SOLVEUR_NON_EXACT,
-                verification_finition.BUDGET_EPUISE,
-                verification_finition.APPLIQUEE_MEILLEUR_SUFFIT,
-                verification_finition.APPLIQUEE_AUCUN_CANDIDAT,
-                verification_finition.APPLIQUEE_AUTRE_COUP,
-                verification_finition.APPLIQUEE_GARDE_JOKER):
-            n = statuts_verif.get(code, 0)
-            print(f"    {verification_finition.LIBELLES[code]:52s} : {n}")
-        if tentes:
-            print(f"    Fréquence d'activation (coup changé / tours où la "
-                 f"vérification a tourné jusqu'au bout) : {changes}/{tentes} "
-                 f"({changes / tentes * 100:.1f} %)")
-        appels = stats_verif.get("appels_par_tour") or []
-        if appels:
-            print(f"    Appels supplémentaires au solveur par tour concerné : "
-                 f"moyenne {moyenne(appels):.2f}, maximum {max(appels)}, "
-                 f"sur {len(appels)} tour(s).")
-
-    stats_gj = resume.get("stats_garde_joker") or {}
-    if stats_gj.get("tours_joker_en_main"):
-        tours_joker = stats_gj["tours_joker_en_main"]
-        existe = stats_gj.get("candidat_existe", 0)
-        permet = stats_gj.get("permet_de_finir", 0)
-        choisi = stats_gj.get("choisi", 0)
-        parties_gj = resume.get("parties_garde_joker") or []
-        print("-" * 70)
-        print("  Garder un joker en main en fin de partie (#225, Champion du "
-             "Monde seul) :")
-        print(f"    Coût d'un joker resté en main en fin de manche : "
-             f"{resume.get('valeur_joker_penalite')} point(s) (réglage "
-             f"\"valeur_joker_penalite\", défaut 30, configurable).")
-        print(f"    Tours de fin de partie avec un joker en main : {tours_joker}")
-        print(f"    Troisième candidat (garder le joker) construit : "
-             f"{existe}/{tours_joker} tour(s)")
-        print(f"    ... permettant de finir au tour suivant (évalué jusqu'au "
-             f"bout seulement) : {permet}/{tours_joker} tour(s)")
-        print(f"    ... choisi : {choisi}/{tours_joker} tour(s)")
-        if parties_gj:
-            gagnees = {}
-            for p in parties_gj:
-                v = p["vainqueur_niveau"] or "nulle"
-                gagnees[v] = gagnees.get(v, 0) + 1
-            detail = ", ".join(f"{v} : {n}" for v, n in sorted(gagnees.items()))
-            print(f"    Parties où la stratégie a été CHOISIE au moins une "
-                 f"fois : {len(parties_gj)} ({detail})")
-
-    stats_rt = resume.get("stats_reserve_tuile") or {}
-    if stats_rt.get("declenchee"):
-        declenchee_rt = stats_rt["declenchee"]
-        choisi_rt = stats_rt.get("choisi", 0)
-        gardees = stats_rt.get("nb_tuiles_gardees_liste") or []
-        print("-" * 70)
-        print("  Réserve d'une tuile (#229, hypothèse H2, Champion du Monde "
-             "seul) :")
-        print(f"    Tours examinés : {declenchee_rt}")
-        print(f"    ... coup changé (conditions (a)-(d) réunies) : "
-             f"{choisi_rt}/{declenchee_rt} tour(s)")
-        if gardees:
-            print(f"    Tuiles gardées par coup changé : moyenne "
-                 f"{moyenne(gardees):.2f}, sur {len(gardees)} coup(s).")
-        print(f"    ... pioche évitée au tour suivant du même joueur : "
-             f"{stats_rt.get('pioche_evitee', 0)}/{choisi_rt} coup(s) changé(s)")
-        print(f"    ... tuile gardée effectivement posée au tour suivant : "
-             f"{stats_rt.get('tuile_gardee_posee', 0)}/{choisi_rt} coup(s) changé(s)")
-
-    stats_rd = resume.get("stats_retenue_debut") or {}
-    if stats_rd.get("declenchee"):
-        declenchee_rd = stats_rd["declenchee"]
-        print("-" * 70)
-        print("  Retenue au début (#229, hypothèse H1, Champion du Monde "
-             "seul) :")
-        print(f"    Tours examinés (fenêtre d'ouverture) : {declenchee_rd}")
-        print(f"    ... coup plafonné : {stats_rd.get('choisi', 0)}/"
-             f"{declenchee_rd} tour(s)")
-
-    stats_pc = resume.get("stats_petits_chiffres") or {}
-    tuiles_petites_main = resume.get("tuiles_petites_main") or {}
-    if stats_pc.get("declenchee") or tuiles_petites_main:
-        print("-" * 70)
-        print("  Petits chiffres (#230, hypothèse H4, Champion du Monde "
-             "seul) :")
-        if stats_pc.get("declenchee"):
-            declenchee_pc = stats_pc["declenchee"]
-            print(f"    Tours examinés (variante tolérante) : {declenchee_pc}")
-            print(f"    ... coup changé (garde une petite tuile de plus) : "
-                 f"{stats_pc.get('choisi', 0)}/{declenchee_pc} tour(s)")
-        if tuiles_petites_main:
-            print(f"    Petites tuiles (valeur ≤ "
-                 f"{niveaux.VALEUR_MAX_PETITS}) en main, en moyenne par "
-                 f"tour, par niveau :")
-            for niveau, valeurs in sorted(tuiles_petites_main.items()):
-                print(f"      {niveau:15s} : moyenne {moyenne(valeurs):.2f}, "
-                     f"sur {len(valeurs)} tour(s)")
-
-    stats_cpt = resume.get("stats_chances_prochain_tour") or {}
-    if stats_cpt.get("declenchee"):
-        declenchee_cpt = stats_cpt["declenchee"]
-        choisi_cpt = stats_cpt.get("choisi", 0)
-        scores = stats_cpt.get("score_liste") or []
-        verifs_cpt = stats_cpt.get("verifications", 0)
-        print("-" * 70)
-        print("  Chances de poser au prochain tour (#231, Champion du Monde "
-             "seul) :")
-        print(f"    Tours examinés (chevalet restant > 1 tuile) : "
-             f"{declenchee_cpt}")
-        print(f"    ... coup changé (chevalet de meilleur score) : "
-             f"{choisi_cpt}/{declenchee_cpt} tour(s)")
-        if scores:
-            print(f"    Score du chevalet conservé : moyenne "
-                 f"{moyenne(scores):.4f}, sur {len(scores)} tour(s).")
-        if verifs_cpt:
-            print(f"    ... a pu jouer (plutôt que piocher) au tour suivant "
-                 f"du même joueur, après un coup changé : "
-                 f"{stats_cpt.get('pioche_evitee', 0)}/{verifs_cpt} tour(s)")
-
-    stats_pj = resume.get("stats_placement_joker") or {}
-    if stats_pj.get("declenchee"):
-        declenchee_pj = stats_pj["declenchee"]
-        choisi_pj = stats_pj.get("choisi", 0)
-        expositions = stats_pj.get("exposition_liste") or []
-        nb_jokers = stats_pj.get("nb_jokers_poses", 0)
-        repris_pj = stats_pj.get("joker_repris_par_adversaire", 0)
-        print("-" * 70)
-        print("  Placement du joker (#232, Champion du Monde seul) :")
-        print(f"    Tours examinés (coup posant un joker mesurable) : "
-             f"{declenchee_pj}")
-        print(f"    ... coup changé (placement moins exposé trouvé) : "
-             f"{choisi_pj}/{declenchee_pj} tour(s)")
-        print(f"    Jokers posés mesurés : {nb_jokers}")
-        if expositions:
-            print(f"    Exposition moyenne (exemplaires inconnus) : "
-                 f"{moyenne(expositions):.2f}, sur {len(expositions)} "
-                 f"placement(s).")
-        print(f"    ... repris par un adversaire (mécanisme visé) : "
-             f"{repris_pj}/{nb_jokers} joker(s) posé(s)")
-
-    compteurs = compteurs_strategies(resume)
-    if any(c["declenchee"] for c in compteurs.values()):
-        print("-" * 70)
-        print("  Compteurs génériques par stratégie (registre, #228) :")
-        for sid, c in compteurs.items():
-            strat = niveaux.STRATEGIES[sid]
-            print(f"    {sid:15s} : déclenchée {c['declenchee']}, a changé "
-                 f"le coup {c['a_change_le_coup']} — {strat.description}")
-
     perturbations = resume["perturbations_expert"]
     if perturbations:
         deplacees = [d for d, _ in perturbations]
@@ -1613,38 +865,6 @@ def main(argv: list[str]) -> int:
                              "modèle exact HiGHS (#206) — pour la campagne "
                              "« avant / après » (relancer la même commande "
                              "avec et sans ce drapeau, même --seed).")
-    parser.add_argument("--sans-verif-finition", action="store_true",
-                        help="Désactive la vérification de finition en fin "
-                             "de partie (#221, activée par défaut pour "
-                             "Expert et Champion du Monde) — pour la "
-                             "campagne « avant / après » (relancer la même "
-                             "commande avec et sans ce drapeau, même "
-                             "--seed).")
-    parser.add_argument("--sans-garde-joker", action="store_true",
-                        help="Désactive « garder un joker en main » en fin "
-                             "de partie (#225, activée par défaut pour "
-                             "Champion du Monde SEUL — Expert n'y a jamais "
-                             "eu droit) — pour comparer Champion du Monde "
-                             "avec et sans cette stratégie (relancer la "
-                             "même commande avec et sans ce drapeau, même "
-                             "--seed).")
-    parser.add_argument("--strategies-champion", default=None,
-                        help="Stratégies ACTIVES pour Champion du Monde "
-                             "PENDANT la campagne (issue #228), remplace la "
-                             "liste par défaut sans jamais toucher au jeu : "
-                             "une liste séparée par des virgules, ou "
-                             "'aucune'/'defaut' (= ce que joue le jeu, "
-                             "défaut de cette option)/'toutes'. Noms valides "
-                             "du registre (moteur/niveaux.py) : "
-                             + ", ".join(niveaux.strategies_champion_valides())
-                             + ".")
-    parser.add_argument("--sans-strategie", action="append", default=[],
-                        metavar="NOM",
-                        help="Retire NOM (répétable) de la liste de "
-                             "stratégies de Champion du Monde pour cette "
-                             "campagne, appliqué APRÈS --strategies-champion "
-                             "(issue #228) — p. ex. --sans-strategie "
-                             "garde_joker.")
     parser.add_argument("--budget-solveur-expert", type=float, default=None,
                         help="Budget de temps du solveur par coup, en "
                              "secondes, appliqué à TOUS les niveaux joués "
@@ -1703,46 +923,18 @@ def main(argv: list[str]) -> int:
     except ValueError as exc:
         parser.error(str(exc))
 
-    if args.sans_verif_finition:
-        print("[#221] Vérification de finition en fin de partie DÉSACTIVÉE "
-             "(Expert/Champion du Monde).")
-    if args.sans_garde_joker:
-        print("[#225] « Garder un joker en main » DÉSACTIVÉE (Champion du "
-             "Monde).")
     if args.export_trace:
         print(f"[#226] Trace brute par tour activée : {args.export_trace}")
 
-    # Option unique de stratégies de Champion du Monde (issue #228, point 2) :
-    # --strategies-champion fixe la base (défaut : ce que joue le jeu),
-    # --sans-strategie en retire ensuite — validation précoce, message
-    # listant les noms valides sur un nom inconnu.
-    try:
-        strategies_champion = _parser_strategies_champion(args.strategies_champion)
-        if args.sans_strategie:
-            niveaux.valider_noms_strategies(args.sans_strategie)
-            strategies_champion -= set(args.sans_strategie)
-    except ValueError as exc:
-        parser.error(str(exc))
-    champion_personnalise = bool(args.strategies_champion) or bool(args.sans_strategie)
-    if champion_personnalise:
-        print(f"[#228] Stratégies de Champion du Monde pour cette campagne : "
-             f"{', '.join(sorted(strategies_champion)) or '(aucune)'}.")
-
     debut = time.monotonic()
-    with (_strategies_champion_forcees(strategies_champion)
-          if champion_personnalise else contextlib.nullcontext()), \
-         (_verif_finition_desactivee() if args.sans_verif_finition
-          else contextlib.nullcontext()), \
-         (_garde_joker_desactive() if args.sans_garde_joker
-          else contextlib.nullcontext()):
-        resume = comparer(args.niveau_a, args.niveau_b, args.donnes, args.seed,
-                          args.max_tours, nb_manches=args.manches,
-                          preferer_simple=not args.sans_preferer_simple,
-                          eval_a=args.eval_a, eval_b=args.eval_b,
-                          sans_exact=args.sans_exact,
-                          export_resultats=args.export_resultats,
-                          export_trace=args.export_trace,
-                          budget_temps=args.budget_solveur_expert)
+    resume = comparer(args.niveau_a, args.niveau_b, args.donnes, args.seed,
+                      args.max_tours, nb_manches=args.manches,
+                      preferer_simple=not args.sans_preferer_simple,
+                      eval_a=args.eval_a, eval_b=args.eval_b,
+                      sans_exact=args.sans_exact,
+                      export_resultats=args.export_resultats,
+                      export_trace=args.export_trace,
+                      budget_temps=args.budget_solveur_expert)
     duree = time.monotonic() - debut
 
     afficher_rapport(resume)

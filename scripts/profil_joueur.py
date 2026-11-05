@@ -529,7 +529,7 @@ def main(argv: list[str]) -> int:
         parser.error("Fournir au moins --niveau et/ou --journaux.")
 
     # Échec franc sans solveur exact (issue #224, suite de #223) : le chemin
-    # NIVEAU fait jouer Avancé/Expert/Champion du Monde, et le chemin HUMAIN
+    # NIVEAU fait jouer Avancé/Expert, et le chemin HUMAIN
     # juge chaque décision avec le solveur exact (``solveur_exact.
     # resoudre_coup_exact``) — les deux chemins en dépendent, sans option
     # ``--sans-exact``. Voir l'incident documenté dans

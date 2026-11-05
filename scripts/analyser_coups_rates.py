@@ -727,7 +727,7 @@ def main(argv=None) -> int:
 
     # Juge de l'analyse (issue #213, suite de #204) :
     #   * PAR DÉFAUT = modèle exact de la MAISON (``moteur/solveur_exact.py``,
-    #     celui qui joue Expert/Avancé/Champion) — optimum exact du tour, plus
+    #     celui qui joue Expert/Avancé) — optimum exact du tour, plus
     #     aucune décision « inconclusive » ni coup manqué par gel de
     #     combinaisons (contrairement à l'ancien défaut, la recherche
     #     arborescente ``moteur/solveur.py``, désormais simple repli si

@@ -277,8 +277,8 @@ def main(argv: list[str]) -> int:
         return 2
 
     # Échec franc sans solveur exact (issue #224, suite de #223) : ce script
-    # fait jouer tous les niveaux d'IA, y compris Avancé/Expert/Champion du
-    # Monde, sans option ``--sans-exact`` — voir l'incident documenté dans
+    # fait jouer tous les niveaux d'IA, y compris Avancé/Expert, sans option
+    # ``--sans-exact`` — voir l'incident documenté dans
     # ``_verif_solveur_exact.py``.
     exiger_solveur_exact_ou_quitter()
 

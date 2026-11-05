@@ -378,10 +378,10 @@ def afficher_rapport(resume: dict) -> None:
 # --------------------------------------------------------------------------- #
 # Analyse PAR NIVEAU (issue #228, point 4) : les mêmes mesures (durée de
 # phase, tuiles posées par tour, fréquence de pioche) regroupées par niveau
-# d'IA plutôt que par rôle gagnant/perdant — pour voir, par exemple, si
-# Champion du Monde pioche moins souvent qu'Expert en phase Fin. Indépendant
-# de ``analyser`` (pas besoin du résultat de manche : parcourt directement
-# les lignes de type "tour").
+# d'IA plutôt que par rôle gagnant/perdant — pour comparer, par exemple, la
+# fréquence de pioche de deux niveaux en phase Fin. Indépendant de
+# ``analyser`` (pas besoin du résultat de manche : parcourt directement les
+# lignes de type "tour").
 # --------------------------------------------------------------------------- #
 
 def analyser_par_niveau(lignes: list[dict], seuil: int) -> dict:
@@ -431,9 +431,9 @@ def afficher_rapport_par_niveau(resume: dict) -> None:
 
 # --------------------------------------------------------------------------- #
 # Comparaison de deux traces, PAR PHASE (issue #228, point 4) — p. ex. une
-# campagne témoin (Champion sans stratégie) et une campagne avec stratégies,
-# même graine. Compare deux résumés ``analyser(...)`` déjà calculés au même
-# seuil ; ne rejoue jamais rien.
+# campagne témoin et une campagne avec un réglage différent, même graine.
+# Compare deux résumés ``analyser(...)`` déjà calculés au même seuil ; ne
+# rejoue jamais rien.
 # --------------------------------------------------------------------------- #
 
 def comparer_traces(resume1: dict, resume2: dict) -> dict:

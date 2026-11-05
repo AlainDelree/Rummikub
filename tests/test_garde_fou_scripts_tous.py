@@ -62,7 +62,6 @@ def test_inventaire_connu():
         "echelle_niveaux.py",
         "generer_corpus_positions_222.py",
         "match_solveurs.py",
-        "matrice_strategies.py",
         "profil_joueur.py",
         "simulation_ia.py",
         "valider_bas_echelle.py",

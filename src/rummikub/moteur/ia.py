@@ -39,8 +39,6 @@ from rummikub.moteur.solveur_exact import (
 from rummikub.moteur import evaluation_main
 from rummikub.moteur import niveaux as _niveaux
 from rummikub.moteur import verification_finition
-from rummikub.moteur import sorties as _sorties
-from rummikub.moteur import inconnues as _inconnues
 
 
 # --------------------------------------------------------------------------- #
@@ -838,8 +836,7 @@ def _coup_recherche(etat, idx, budget_temps, preferer_simple):
         return None, True
 
 
-def _coup_exact(etat, idx, budget_temps, preferer_simple, eval_config=None,
-                max_tuiles_posees=None, valeur_max_petits=None):
+def _coup_exact(etat, idx, budget_temps, preferer_simple, eval_config=None):
     """Modèle exact (#206). Ne lève JAMAIS. Retourne ``(statut, charge)`` :
 
     * ``("coup", coup)`` — un coup optimal a été trouvé ;
@@ -850,19 +847,11 @@ def _coup_exact(etat, idx, budget_temps, preferer_simple, eval_config=None,
     * ``("echec", cause_timeout)`` — le modèle n'a pas pu conclure (dépendances
       absentes, budget dépassé sans solution, résultat non valide, erreur) :
       l'appelant se replie sur la recherche arborescente. ``cause_timeout``
-      vaut ``True`` pour un dépassement de budget, ``False`` sinon.
-
-    ``max_tuiles_posees`` (issue #229, ``retenue_debut``) : relais vers
-    ``resoudre_exact``, ``None`` (défaut) → comportement inchangé.
-
-    ``valeur_max_petits`` (issue #230, ``petits_chiffres``) : relais vers
-    ``resoudre_exact``, ``None`` (défaut) → comportement inchangé."""
+      vaut ``True`` pour un dépassement de budget, ``False`` sinon."""
     try:
         res = resoudre_exact(etat, idx, budget_temps=budget_temps,
                              preferer_simple=preferer_simple,
-                             eval_config=eval_config,
-                             max_tuiles_posees=max_tuiles_posees,
-                             valeur_max_petits=valeur_max_petits)
+                             eval_config=eval_config)
     except BudgetExactDepasse:
         return "echec", True
     except SolveurExactIndisponible:
@@ -889,43 +878,12 @@ SOLVEUR_RECHERCHE = "recherche"  # recherche arborescente de repli (solveur.py)
 SOLVEUR_AVANCE = "avance"        # Avancé en dernier repli
 # Affaiblissement des niveaux bridés (issue #213) :
 SOLVEUR_SANS_REARR = "sans-rearrangement"  # coup sans toucher au plateau (pert. max nulle)
-# « Garder un joker en main » (issue #225, Champion du Monde seul) : meilleur
-# coup qui ne joue PAS le joker du chevalet (voir _coup_sans_joker_chevalet).
-SOLVEUR_SANS_JOKER = "sans-joker"
-# « Réserve d'une tuile » (issue #229, hypothèse H2, Champion du Monde seul) :
-# meilleur coup qui GARDE une tuile que le coup du solveur aurait posée
-# (voir _coup_qui_garde_une_tuile).
-SOLVEUR_RESERVE_TUILE = "reserve-tuile"
-# « Retenue au début » (issue #229, hypothèse H1, Champion du Monde seul) :
-# meilleur coup plafonné en nombre de tuiles posées (voir
-# _appliquer_retenue_debut).
-SOLVEUR_RETENUE_DEBUT = "retenue-debut"
-# « Petits chiffres » (issue #230, hypothèse H4, Champion du Monde seul) :
-# meilleur coup qui GARDE une petite tuile que le coup du solveur aurait
-# posée (variante tolérante, voir _coup_qui_garde_une_petite_tuile).
-SOLVEUR_PETITS_CHIFFRES = "petits-chiffres"
-# « Chances de poser au prochain tour » (issue #231, Champion du Monde seul) :
-# coup équivalent (même nombre de tuiles posées, ou une de moins avec la
-# variante tolérante) qui laisse un chevalet de meilleur score (voir
-# _appliquer_chances_prochain_tour, moteur/sorties.py).
-SOLVEUR_CHANCES_PROCHAIN_TOUR = "chances-prochain-tour"
-# « Placement du joker » (issue #232, Champion du Monde seul) : coup
-# équivalent (même nombre de tuiles posées) qui place le joker du chevalet
-# dans une combinaison moins exposée à une reprise par l'adversaire (voir
-# _appliquer_placement_joker).
-SOLVEUR_PLACEMENT_JOKER = "placement-joker"
 
 LIBELLES_SOLVEUR = {
     SOLVEUR_EXACT: "modèle exact",
     SOLVEUR_RECHERCHE: "recherche de repli",
     SOLVEUR_AVANCE: "Avancé en repli",
     SOLVEUR_SANS_REARR: "sans réarrangement (bridé)",
-    SOLVEUR_SANS_JOKER: "garde un joker en main",
-    SOLVEUR_RESERVE_TUILE: "réserve d'une tuile",
-    SOLVEUR_RETENUE_DEBUT: "retenue au début",
-    SOLVEUR_PETITS_CHIFFRES: "garde une petite tuile",
-    SOLVEUR_CHANCES_PROCHAIN_TOUR: "meilleures chances au prochain tour",
-    SOLVEUR_PLACEMENT_JOKER: "placement du joker le moins exposé",
 }
 
 
@@ -939,8 +897,7 @@ def _marquer_solveur(coup, code):
 
 def jouer_niveau_expert(etat, idx, budget_temps=None, on_repli=None,
                         preferer_simple=None, utiliser_exact=None,
-                        eval_config=None, on_aucun=None,
-                        valeur_max_petits=None):
+                        eval_config=None, on_aucun=None):
     """Niveau Expert : joue le coup qui pose le plus grand nombre de tuiles du
     chevalet, en conservant toutes les tuiles du plateau (#206).
 
@@ -969,13 +926,7 @@ def jouer_niveau_expert(etat, idx, budget_temps=None, on_repli=None,
     ``utiliser_exact`` (``None`` → lit ``UTILISER_SOLVEUR_EXACT``) à ``False``
     rejoue l'ancien comportement (recherche seule) pour la comparaison
     « avant / après ». ``preferer_simple`` et ``budget_temps`` sont transmis
-    aux deux moteurs (lus à l'appel pour rester ajustables en simulation).
-
-    ``valeur_max_petits`` (issue #230, ``petits_chiffres``, Champion du
-    Monde seul) : relais vers le modèle exact (voir ``solveur_exact.
-    resoudre_exact``) — ``None`` (défaut) → comportement inchangé pour tout
-    appelant existant, y compris le repli sur la recherche arborescente
-    (qui ne connaît pas ce critère)."""
+    aux deux moteurs (lus à l'appel pour rester ajustables en simulation)."""
     if budget_temps is None:
         budget_temps = BUDGET_TEMPS_EXPERT
     if preferer_simple is None:
@@ -987,8 +938,7 @@ def jouer_niveau_expert(etat, idx, budget_temps=None, on_repli=None,
 
     if utiliser_exact:
         statut, charge = _coup_exact(etat, idx, budget_temps, preferer_simple,
-                                     eval_config,
-                                     valeur_max_petits=valeur_max_petits)
+                                     eval_config)
         if statut == "coup":
             return _marquer_solveur(charge, SOLVEUR_EXACT)
         if statut == "aucun":
@@ -1016,9 +966,9 @@ def jouer_niveau_expert(etat, idx, budget_temps=None, on_repli=None,
 
 
 # --------------------------------------------------------------------------- #
-# Échelle des six niveaux : un SEUL moteur exact, réglé par des paramètres
+# Échelle des cinq niveaux : un SEUL moteur exact, réglé par des paramètres
 # (issue #213). Voir moteur/niveaux.py pour les paramètres (le seul endroit à
-# régler) et la structure cible de l'échelle.
+# régler) et la structure de l'échelle.
 # --------------------------------------------------------------------------- #
 
 # Fonctions HEURISTIQUES historiques conservées (jouer_niveau_debutant/facile/
@@ -1053,10 +1003,10 @@ def _coup_sans_rearrangement(etat, idx):
 
 def _coup_selon_perturbation(etat, idx, perturbation_max, budget_temps, on_repli,
                              preferer_simple=None, eval_config=None,
-                             on_aucun=None, valeur_max_petits=None):
+                             on_aucun=None):
     """Meilleur coup « vu » compte tenu de la perturbation autorisée.
 
-    ``perturbation_max is None`` → solveur complet (Avancé/Expert/Champion).
+    ``perturbation_max is None`` → solveur complet (Avancé/Expert).
     ``perturbation_max == 0`` → coup sans réarrangement (jamais de déplacement).
     ``perturbation_max > 0`` → coup complet s'il ne déplace pas plus de
     ``perturbation_max`` tuiles du plateau, sinon on retombe sur le coup sans
@@ -1065,18 +1015,15 @@ def _coup_selon_perturbation(etat, idx, perturbation_max, budget_temps, on_repli
     ``preferer_simple``/``eval_config``/``on_aucun`` (``None`` → réglages par
     défaut, comportement inchangé) : simples relais vers
     ``jouer_niveau_expert``, ajoutés par #223 pour que les scripts de mesure
-    puissent faire jouer Expert/Champion du Monde par CE chemin
-    (``jouer_niveau_bride``) plutôt que d'appeler ``jouer_niveau_expert``
-    directement en dupliquant la logique de vérification de finition.
-    ``valeur_max_petits`` (issue #230, ``petits_chiffres``) : même relais,
-    ``None`` par défaut."""
+    puissent faire jouer Expert par CE chemin (``jouer_niveau_bride``) plutôt
+    que d'appeler ``jouer_niveau_expert`` directement en dupliquant la
+    logique de vérification de finition."""
     if perturbation_max is None:
         return jouer_niveau_expert(etat, idx, budget_temps=budget_temps,
                                    on_repli=on_repli,
                                    preferer_simple=preferer_simple,
                                    eval_config=eval_config,
-                                   on_aucun=on_aucun,
-                                   valeur_max_petits=valeur_max_petits)
+                                   on_aucun=on_aucun)
 
     sans_rearr = _coup_sans_rearrangement(etat, idx)
     if perturbation_max <= 0:
@@ -1095,825 +1042,41 @@ def _coup_selon_perturbation(etat, idx, perturbation_max, budget_temps, on_repli
     return sans_rearr if sans_rearr is not None else _piocher_ou_passer(etat)
 
 
-def _peut_tenter_garde_joker(etat, idx):
-    """Portes d'activation de « garder un joker en main » (issue #225, point
-    1, Champion du Monde seul) : le chevalet doit contenir un joker, ET aucun
-    adversaire ne doit être trop proche de finir — en dessous de
-    ``niveaux.SEUIL_PRUDENCE_ADVERSAIRE_GARDE_JOKER`` tuiles en main, il
-    pourrait finir avant que garder le joker n'ait payé. Le nombre de tuiles
-    d'un adversaire est une information PUBLIQUE (visible de tous les
-    joueurs) : ce test ne lit JAMAIS le contenu de sa main."""
-    chevalet = etat["joueurs"][idx]["chevalet"]
-    if not any(t.get("est_joker") for t in chevalet):
-        return False
-    seuil = _niveaux.SEUIL_PRUDENCE_ADVERSAIRE_GARDE_JOKER
-    for j, joueur in enumerate(etat["joueurs"]):
-        if j == idx:
-            continue
-        if len(joueur["chevalet"]) < seuil:
-            return False
-    return True
-
-
-def _coup_sans_joker_chevalet(etat, idx, budget_temps):
-    """Meilleur coup qui ne joue AUCUN joker du chevalet (issue #225, point
-    2) : résout la position avec un joker du chevalet retiré pour ce calcul
-    seulement (le joker réapparaît dans le chevalet restant une fois ce coup
-    appliqué par ``verification_finition._etat_apres_coup`` sur l'ÉTAT
-    D'ORIGINE, qui le contient toujours — c'est bien ce joker-là qui doit
-    permettre de finir au tour suivant).
-
-    Retourne un coup ``{"action": "jouer", ...}`` marqué ``SOLVEUR_SANS_JOKER``,
-    ou ``None`` si aucun joker en main, budget nul, ou si le modèle exact ne
-    produit pas de coup (dépendances absentes, budget dépassé, aucun coup
-    posable sans le joker)."""
-    if budget_temps is None or budget_temps <= 0:
-        return None
-    joueur = etat["joueurs"][idx]
-    chevalet = joueur["chevalet"]
-    idx_joker = next((i for i, t in enumerate(chevalet) if t.get("est_joker")),
-                     None)
-    if idx_joker is None:
-        return None
-    chevalet_sans_joker = chevalet[:idx_joker] + chevalet[idx_joker + 1:]
-    joueur2 = dict(joueur)
-    joueur2["chevalet"] = chevalet_sans_joker
-    joueurs2 = list(etat["joueurs"])
-    joueurs2[idx] = joueur2
-    etat2 = dict(etat)
-    etat2["joueurs"] = joueurs2
-    statut, charge = _coup_exact(etat2, idx, budget_temps, PREFERER_SIMPLICITE,
-                                 EVAL_MAIN_DEFAUT)
-    if statut != "coup":
-        return None
-    return _marquer_solveur(charge, SOLVEUR_SANS_JOKER)
-
-
-# --------------------------------------------------------------------------- #
-# « Réserve d'une tuile » (issue #229, hypothèse H2, Champion du Monde seul)
-# --------------------------------------------------------------------------- #
-
-def _coup_qui_garde_une_tuile(etat, idx, coup_solveur, deadline):
-    """Premier coup valide, parmi les tuiles posées par ``coup_solveur``,
-    obtenu en retirant CETTE tuile du chevalet avant de résoudre à nouveau —
-    même mécanisme que ``_coup_sans_joker_chevalet``, généralisé à une tuile
-    quelconque plutôt qu'un joker. Pas de recherche exhaustive du meilleur
-    candidat parmi toutes les tuiles possibles (budget) : même
-    simplification assumée que pour le joker (#225) — le premier qui
-    produit un coup valide est retenu, dans l'ordre où le solveur les a
-    posées.
-
-    Retourne ``(coup, id_tuile_gardee)`` marqué ``SOLVEUR_RESERVE_TUILE``,
-    ou ``(None, None)`` si budget insuffisant ou si aucune tuile ne
-    convient."""
-    ids_jouees = list(coup_solveur.get("ids_tuiles") or [])
-    if not ids_jouees:
-        return None, None
-    joueur = etat["joueurs"][idx]
-    chevalet = joueur["chevalet"]
-    for id_tuile in ids_jouees:
-        restant = deadline - time.monotonic()
-        if restant <= 0:
-            return None, None
-        idx_t = next((i for i, t in enumerate(chevalet) if t["id"] == id_tuile),
-                     None)
-        if idx_t is None:
-            continue
-        chevalet2 = chevalet[:idx_t] + chevalet[idx_t + 1:]
-        joueur2 = dict(joueur)
-        joueur2["chevalet"] = chevalet2
-        joueurs2 = list(etat["joueurs"])
-        joueurs2[idx] = joueur2
-        etat2 = dict(etat)
-        etat2["joueurs"] = joueurs2
-        statut, charge = _coup_exact(etat2, idx, restant, PREFERER_SIMPLICITE,
-                                     EVAL_MAIN_DEFAUT)
-        if statut != "coup" or not charge.get("ids_tuiles"):
-            continue
-        return _marquer_solveur(charge, SOLVEUR_RESERVE_TUILE), id_tuile
-    return None, None
-
-
-def _appliquer_reserve_tuile(etat, idx, coup, taille_main, deadline):
-    """Stratégie ``reserve_tuile`` (#229, hypothèse H2, Champion du Monde
-    seul) : après le coup du solveur (``coup``, qui ne vide PAS la main —
-    seul appelant, voir ``jouer_niveau_bride``), essaie de jouer un coup
-    qui GARDE une tuile que ``coup`` aurait posée, pour disposer d'un coup
-    au tour suivant plutôt que de piocher.
-
-    Joué à la place de ``coup`` seulement si TOUTES les conditions de
-    l'issue sont réunies : (a) le candidat pose au moins une tuile ; (b) il
-    pose au plus ``niveaux.ECART_MAX_RESERVE`` tuiles de moins que ``coup``;
-    (c) sur la position résultante (tapis supposé inchangé), le même
-    solveur peut poser au moins une tuile au tour suivant ; (d) le
-    chevalet après le coup reste plus grand que
-    ``niveaux.SEUIL_FIN_PARTIE_VERIF_FINITION`` (la stratégie ne gêne pas
-    la fin de partie, zone déjà couverte par ``verif_finition``/
-    ``garde_joker``). La condition (e) (« le meilleur coup ne vide pas la
-    main ») est déjà garantie par l'appelant.
-
-    Retourne ``(coup, info)`` — ``coup`` inchangé si la stratégie n'a pas
-    pu s'appliquer ; ``info`` un dict de compteurs (#229, point 4) :
-    ``{"declenchee": bool, "candidat_existe": bool,
-    "peut_jouer_au_tour_suivant": bool | None, "choisi": bool,
-    "nb_tuiles_gardees": int, "id_tuile_gardee": str | None}``."""
-    info = {"declenchee": True, "candidat_existe": False,
-           "peut_jouer_au_tour_suivant": None, "choisi": False,
-           "nb_tuiles_gardees": 0, "id_tuile_gardee": None}
-    restant = deadline - time.monotonic()
-    if restant <= 0:
-        return coup, info
-    candidat, id_tuile = _coup_qui_garde_une_tuile(etat, idx, coup, deadline)
-    if candidat is None:
-        return coup, info
-
-    ids_best = coup.get("ids_tuiles") or []
-    nb_candidat = len(candidat.get("ids_tuiles") or [])
-    if nb_candidat < 1:                                       # condition (a)
-        return coup, info
-    ecart = len(ids_best) - nb_candidat
-    if ecart > _niveaux.ECART_MAX_RESERVE:                    # condition (b)
-        return coup, info
-
-    info["candidat_existe"] = True
-    info["nb_tuiles_gardees"] = ecart
-    info["id_tuile_gardee"] = id_tuile
-
-    restant = deadline - time.monotonic()
-    peut_jouer = verification_finition.peut_poser_au_tour_suivant(
-        etat, idx, candidat, restant)
-    info["peut_jouer_au_tour_suivant"] = peut_jouer
-    if not peut_jouer:                                        # condition (c)
-        return coup, info
-
-    chevalet_apres = taille_main - nb_candidat
-    if chevalet_apres <= _niveaux.SEUIL_FIN_PARTIE_VERIF_FINITION:  # condition (d)
-        return coup, info
-
-    info["choisi"] = True
-    return candidat, info
-
-
-# --------------------------------------------------------------------------- #
-# « Retenue au début » (issue #229, hypothèse H1, Champion du Monde seul)
-# --------------------------------------------------------------------------- #
-
-def _nb_tours_joueur_depuis_ouverture(etat, idx):
-    """Nombre de tours déjà joués par le joueur ``idx`` depuis SA PROPRE
-    ouverture (mise initiale), sans compter l'ouverture elle-même.
-
-    Dérivé de ``etat["historique"]`` (déjà tenu par ``moteur/partie.py``
-    pour CHAQUE tour, tous niveaux et joueur humain confondus, voir
-    ``_ajouter_historique``) à partir d'un seul signal NUMÉRIQUE, jamais
-    du texte des descriptions : une pose (« jouer ») y est journalisée
-    avec ``points`` > 0 (la règle du jeu exige au moins
-    ``mise_initiale_min`` points pour la toute première, et toute pose
-    retient au moins la valeur d'une tuile réelle ensuite), alors qu'une
-    pioche/passe l'est TOUJOURS à 0 points (``partie.piocher``/
-    ``passer_tour``). La première entrée de ce joueur à ``points`` > 0 est
-    donc forcément son ouverture (elle ne peut pas avoir été précédée d'une
-    autre pose : la mise initiale n'était pas encore faite).
-
-    Retourne ``None`` si l'ouverture de ce joueur n'est pas retrouvée dans
-    l'historique (mise initiale pas encore faite, partie reprise sans
-    historique complet...) — l'appelant doit alors se replier sans
-    activer la stratégie (#229, point 3)."""
-    entrees = [h for h in (etat.get("historique") or [])
-              if h.get("joueur_index") == idx]
-    tour_ouverture = next((h.get("tour") for h in entrees
-                          if h.get("points", 0) > 0), None)
-    if tour_ouverture is None:
-        return None
-    return sum(1 for h in entrees if h.get("tour", 0) > tour_ouverture)
-
-
-def _appliquer_retenue_debut(etat, idx, coup, taille_main, budget_temps):
-    """Stratégie ``retenue_debut`` (#229, hypothèse H1, Champion du Monde
-    seul) : pendant les ``niveaux.TOURS_RETENUE_DEBUT`` premiers tours qui
-    suivent SA PROPRE ouverture, tant que le tapis compte moins de
-    ``niveaux.TUILES_TAPIS_MAX_RETENUE`` tuiles et que le chevalet compte
-    plus de 8 tuiles, plafonne le coup à ``niveaux.POSE_MAX_DEBUT`` tuiles
-    posées au plus (et au moins une — jamais de pioche si un coup existe,
-    voir la contrainte de l'issue).
-
-    N'a aucun effet (``coup`` inchangé) avant l'ouverture du joueur, hors
-    de la fenêtre, hors des seuils de tapis/chevalet, si ``coup`` pose
-    déjà au plus le plafond, ou si le modèle exact ne trouve, SOUS LE
-    PLAFOND, aucun coup : ``coup`` (potentiellement au-delà du plafond)
-    reste alors joué, pour ne jamais remplacer une pose par une pioche.
-
-    Retourne ``(coup, info)`` — ``info`` un dict de compteurs (#229, point
-    4) : ``{"declenchee": bool, "choisi": bool, "nb_tuiles_posees": int}``."""
-    info = {"declenchee": False, "choisi": False,
-           "nb_tuiles_posees": len(coup.get("ids_tuiles") or [])}
-    joueur = etat["joueurs"][idx]
-    if not joueur.get("mise_initiale_faite"):
-        return coup, info
-    nb_tours = _nb_tours_joueur_depuis_ouverture(etat, idx)
-    if nb_tours is None or nb_tours >= _niveaux.TOURS_RETENUE_DEBUT:
-        return coup, info
-    nb_tuiles_tapis = sum(len(combo) for combo in etat.get("plateau", []))
-    if nb_tuiles_tapis >= _niveaux.TUILES_TAPIS_MAX_RETENUE:
-        return coup, info
-    if taille_main <= 8:
-        return coup, info
-
-    info["declenchee"] = True
-    nb_best = len(coup.get("ids_tuiles") or [])
-    if nb_best <= _niveaux.POSE_MAX_DEBUT:
-        return coup, info
-    if budget_temps is None or budget_temps <= 0:
-        return coup, info
-
-    statut, charge = _coup_exact(etat, idx, budget_temps, PREFERER_SIMPLICITE,
-                                 EVAL_MAIN_DEFAUT,
-                                 max_tuiles_posees=_niveaux.POSE_MAX_DEBUT)
-    if statut != "coup" or not charge.get("ids_tuiles"):
-        # Aucun coup dans le plafond : on garde le coup normal (jamais de
-        # pioche si un coup existe, contrainte de l'issue).
-        return coup, info
-
-    info["choisi"] = True
-    info["nb_tuiles_posees"] = len(charge["ids_tuiles"])
-    return _marquer_solveur(charge, SOLVEUR_RETENUE_DEBUT), info
-
-
-# --------------------------------------------------------------------------- #
-# « Petits chiffres » (issue #230, hypothèse H4, Champion du Monde seul)
-# --------------------------------------------------------------------------- #
-
-def _ids_petites_tuiles(ids, chevalet):
-    """Sous-ensemble de ``ids`` dont la tuile — retrouvée dans ``chevalet``
-    — est RÉELLE (jamais un joker) et de valeur 1 à ``niveaux.
-    VALEUR_MAX_PETITS``, dans l'ORDRE de ``ids``."""
-    par_id = {t["id"]: t for t in chevalet}
-    petites = []
-    for id_t in ids:
-        t = par_id.get(id_t)
-        if (t is not None and not t.get("est_joker")
-                and (t.get("valeur") or 0) <= _niveaux.VALEUR_MAX_PETITS):
-            petites.append(id_t)
-    return petites
-
-
-def _coup_qui_garde_une_petite_tuile(etat, idx, ids_petites, deadline):
-    """Même mécanisme que ``_coup_qui_garde_une_tuile`` (#229), restreint aux
-    PETITES tuiles posées par le coup du solveur (``ids_petites``, voir
-    ``_ids_petites_tuiles``) : premier coup valide obtenu en retirant CETTE
-    petite tuile du chevalet avant de résoudre à nouveau (réapplique aussi
-    le critère de départage ``petits_chiffres`` sur cette nouvelle
-    résolution, pour rester cohérent avec la stratégie).
-
-    Retourne ``(coup, id_tuile_gardee)`` marqué ``SOLVEUR_PETITS_CHIFFRES``,
-    ou ``(None, None)`` si budget insuffisant ou si aucune petite tuile ne
-    convient."""
-    joueur = etat["joueurs"][idx]
-    chevalet = joueur["chevalet"]
-    for id_tuile in ids_petites:
-        restant = deadline - time.monotonic()
-        if restant <= 0:
-            return None, None
-        idx_t = next((i for i, t in enumerate(chevalet) if t["id"] == id_tuile),
-                     None)
-        if idx_t is None:
-            continue
-        chevalet2 = chevalet[:idx_t] + chevalet[idx_t + 1:]
-        joueur2 = dict(joueur)
-        joueur2["chevalet"] = chevalet2
-        joueurs2 = list(etat["joueurs"])
-        joueurs2[idx] = joueur2
-        etat2 = dict(etat)
-        etat2["joueurs"] = joueurs2
-        statut, charge = _coup_exact(
-            etat2, idx, restant, PREFERER_SIMPLICITE, EVAL_MAIN_DEFAUT,
-            valeur_max_petits=_niveaux.VALEUR_MAX_PETITS)
-        if statut != "coup" or not charge.get("ids_tuiles"):
-            continue
-        return _marquer_solveur(charge, SOLVEUR_PETITS_CHIFFRES), id_tuile
-    return None, None
-
-
-def _appliquer_petits_chiffres(etat, idx, coup, taille_main, deadline):
-    """Stratégie ``petits_chiffres`` (#230, hypothèse H4, Champion du Monde
-    seul), variante tolérante (point 3 de l'issue) : au-delà du départage à
-    nombre de tuiles posées égal (déjà intégré au modèle exact, voir
-    ``jouer_niveau_bride``), essaie de jouer un coup qui GARDE au moins une
-    petite tuile que ``coup`` aurait posée, MÊME s'il pose moins de tuiles
-    — dans la limite de ``niveaux.ECART_TUILES_PETITS`` (``0`` par défaut :
-    variante désactivée, ``coup`` toujours inchangé).
-
-    Joué à la place de ``coup`` seulement si : (a) le candidat pose au
-    moins une tuile ; (b) il pose au plus ``niveaux.ECART_TUILES_PETITS``
-    tuiles de moins que ``coup`` ; (c) il pose STRICTEMENT moins de petites
-    tuiles que ``coup`` (sinon rien n'est gagné à le préférer) ; (d) le
-    chevalet après le coup reste strictement supérieur à ``niveaux.
-    SEUIL_FIN_PARTIE_VERIF_FINITION`` (ne gêne pas la fin de partie, zone
-    déjà couverte par ``verif_finition``/``garde_joker``).
-
-    Retourne ``(coup, info)`` — ``coup`` inchangé si la stratégie n'a pas
-    pu s'appliquer ; ``info`` un dict de compteurs (point 5 de l'issue) :
-    ``{"declenchee": bool, "candidat_existe": bool, "choisi": bool,
-    "nb_petites_posees_avant": int, "nb_petites_posees_apres": int}``."""
-    ids_poses = list(coup.get("ids_tuiles") or [])
-    chevalet = etat["joueurs"][idx]["chevalet"]
-    ids_petites = _ids_petites_tuiles(ids_poses, chevalet)
-    info = {"declenchee": True, "candidat_existe": False, "choisi": False,
-           "nb_petites_posees_avant": len(ids_petites),
-           "nb_petites_posees_apres": len(ids_petites)}
-    if _niveaux.ECART_TUILES_PETITS <= 0 or not ids_petites:
-        return coup, info
-    restant = deadline - time.monotonic()
-    if restant <= 0:
-        return coup, info
-
-    candidat, _id_tuile = _coup_qui_garde_une_petite_tuile(
-        etat, idx, ids_petites, deadline)
-    if candidat is None:
-        return coup, info
-
-    ids_candidat = candidat.get("ids_tuiles") or []
-    nb_candidat = len(ids_candidat)
-    if nb_candidat < 1:                                       # condition (a)
-        return coup, info
-    ecart = len(ids_poses) - nb_candidat
-    if ecart > _niveaux.ECART_TUILES_PETITS:                  # condition (b)
-        return coup, info
-
-    ids_petites_candidat = _ids_petites_tuiles(ids_candidat, chevalet)
-    info["candidat_existe"] = True
-    if len(ids_petites_candidat) >= len(ids_petites):          # condition (c)
-        return coup, info
-
-    chevalet_apres = taille_main - nb_candidat
-    if chevalet_apres <= _niveaux.SEUIL_FIN_PARTIE_VERIF_FINITION:  # (d)
-        return coup, info
-
-    info["choisi"] = True
-    info["nb_petites_posees_apres"] = len(ids_petites_candidat)
-    return candidat, info
-
-
-# --------------------------------------------------------------------------- #
-# « Chances de poser au prochain tour » (issue #231, Champion du Monde seul,
-# anciennement « tuiles vivantes » — voir moteur/sorties.py, CONTEXTE.md §13)
-# --------------------------------------------------------------------------- #
-
-def _chevalet_restant(chevalet, ids_poses):
-    """Chevalet qui resterait après avoir posé les tuiles d'identifiants
-    ``ids_poses`` — ``chevalet`` inchangé (nouvelle liste)."""
-    ids = set(ids_poses)
-    return [t for t in chevalet if t["id"] not in ids]
-
-
-def _candidats_sorties(etat, idx, coup, deadline, ecart_max):
-    """Coups obtenus en retirant, tour à tour, CHACUNE des tuiles que
-    ``coup`` pose, puis en résolvant à nouveau — même mécanisme que
-    ``_coup_qui_garde_une_tuile``/``_coup_qui_garde_une_petite_tuile``
-    (#229/#230), ici pour trouver des arrangements DIFFÉRENTS du MÊME coup
-    (pas une main réduite exprès) : retirer une tuile de la pose peut forcer
-    le solveur à composer une combinaison concurrente, posant le MÊME
-    nombre de tuiles (un véritable « coup équivalent », découvert sans
-    reformuler le modèle exact — #231, point 2 : calcul direct en dehors du
-    solveur, celui-ci n'étant appelé que pour RETROUVER le coup, jamais pour
-    noter les chevalets).
-
-    Ne garde que les candidats posant au plus ``ecart_max`` tuiles de moins
-    que ``coup`` (``0`` → seulement les coups à nombre de tuiles STRICTEMENT
-    égal, les véritables « coups équivalents » du point 4 de l'issue ;
-    ``niveaux.ECART_TUILES_SORTIES`` au-delà, pour la variante tolérante).
-    Retourne une liste de coups marqués ``SOLVEUR_CHANCES_PROCHAIN_TOUR``
-    (doublons possibles, l'appelant ne garde que le meilleur score)."""
-    ids_jouees = list(coup.get("ids_tuiles") or [])
-    nb_best = len(ids_jouees)
-    joueur = etat["joueurs"][idx]
-    chevalet = joueur["chevalet"]
-    candidats = []
-    for id_tuile in ids_jouees:
-        restant = deadline - time.monotonic()
-        if restant <= 0:
-            break
-        idx_t = next((i for i, t in enumerate(chevalet) if t["id"] == id_tuile),
-                     None)
-        if idx_t is None:
-            continue
-        chevalet2 = chevalet[:idx_t] + chevalet[idx_t + 1:]
-        joueur2 = dict(joueur)
-        joueur2["chevalet"] = chevalet2
-        joueurs2 = list(etat["joueurs"])
-        joueurs2[idx] = joueur2
-        etat2 = dict(etat)
-        etat2["joueurs"] = joueurs2
-        statut, charge = _coup_exact(etat2, idx, restant, PREFERER_SIMPLICITE,
-                                     EVAL_MAIN_DEFAUT)
-        if statut != "coup" or not charge.get("ids_tuiles"):
-            continue
-        ecart = nb_best - len(charge["ids_tuiles"])
-        if 0 <= ecart <= ecart_max:
-            candidats.append((_marquer_solveur(charge, SOLVEUR_CHANCES_PROCHAIN_TOUR),
-                              ecart))
-    return candidats
-
-
-def _appliquer_chances_prochain_tour(etat, idx, coup, taille_main, deadline):
-    """Stratégie ``chances_prochain_tour`` (#231) : à nombre de tuiles posées
-    égal, entre ``coup`` et les coups équivalents trouvés par
-    ``_candidats_sorties`` (écart 0), préfère celui qui laisse le chevalet
-    au score ``moteur/sorties.score_chevalet`` le plus élevé.
-
-    Variante tolérante (``niveaux.ECART_TUILES_SORTIES``, ``0`` par défaut =
-    désactivée) : accepte aussi un candidat posant UNE tuile de moins (écart
-    1) si son score dépasse le meilleur score déjà trouvé de plus de
-    ``niveaux.SEUIL_GAIN_SORTIES``.
-
-    N'a aucun effet (point 5 de l'issue) si le chevalet qui resterait après
-    ``coup`` compte au plus une tuile — rien à comparer (les sorties
-    exigent une PAIRE). ``coup`` qui vide la main : déjà écarté par
-    l'appelant (``jouer_niveau_bride``), jamais modifié ici.
-
-    Retourne ``(coup, info)`` — ``info`` un dict de compteurs (point 6 de
-    l'issue) : ``{"declenchee": bool, "score_avant": float,
-    "meilleur_score": float, "choisi": bool,
-    "nb_candidats_equivalents": int}``."""
-    ids_poses = list(coup.get("ids_tuiles") or [])
-    chevalet = etat["joueurs"][idx]["chevalet"]
-    chevalet_restant = _chevalet_restant(chevalet, ids_poses)
-    info = {"declenchee": False, "score_avant": 0.0, "meilleur_score": 0.0,
-           "choisi": False, "nb_candidats_equivalents": 0}
-    if len(chevalet_restant) <= 1:
-        return coup, info
-
-    info["declenchee"] = True
-    plateau_avant = coup.get("nouveau_plateau") or []
-    score_avant = _sorties.score_chevalet(chevalet_restant, plateau_avant,
-                                          etat, idx)
-    info["score_avant"] = score_avant
-    info["meilleur_score"] = score_avant
-
-    restant = deadline - time.monotonic()
-    if restant <= 0:
-        return coup, info
-
-    ecart_max = max(0, _niveaux.ECART_TUILES_SORTIES)
-    candidats = _candidats_sorties(etat, idx, coup, deadline, ecart_max)
-
-    meilleur_coup = coup
-    meilleur_score = score_avant
-    for candidat, ecart in sorted(candidats, key=lambda c: c[1]):
-        info["nb_candidats_equivalents"] += 1
-        ids_cand = candidat.get("ids_tuiles") or []
-        chevalet_cand = _chevalet_restant(chevalet, ids_cand)
-        if len(chevalet_cand) <= 1:
-            continue
-        plateau_cand = candidat.get("nouveau_plateau") or []
-        score_cand = _sorties.score_chevalet(chevalet_cand, plateau_cand,
-                                              etat, idx)
-        if ecart == 0:
-            if score_cand > meilleur_score:
-                meilleur_score = score_cand
-                meilleur_coup = candidat
-        elif score_cand - meilleur_score > _niveaux.SEUIL_GAIN_SORTIES:
-            meilleur_score = score_cand
-            meilleur_coup = candidat
-
-    info["meilleur_score"] = meilleur_score
-    if meilleur_coup is not coup:
-        info["choisi"] = True
-    return meilleur_coup, info
-
-
-# --------------------------------------------------------------------------- #
-# « Placement du joker » (issue #232, Champion du Monde seul) : à nombre de
-# tuiles posées égal, préfère le placement d'un joker DEPUIS LE CHEVALET le
-# moins exposé à une reprise par l'adversaire — voir CONTEXTE.md §13 pour les
-# règles de libération d'un joker VÉRIFIÉES dans ce moteur (échange direct
-# uniquement ; les libérations sans remplacement, réservées aux combinaisons
-# de 4 tuiles ou plus, sont hors de portée de cette stratégie, déjà évitées
-# par le solveur de base).
-# --------------------------------------------------------------------------- #
-
-def _ids_jokers_poses(ids_poses, chevalet):
-    """Sous-ensemble (dans l'ordre de ``ids_poses``) des ids qui, retrouvés
-    dans ``chevalet``, sont des jokers."""
-    par_id = {t["id"]: t for t in chevalet}
-    return [id_t for id_t in ids_poses
-           if (t := par_id.get(id_t)) is not None and t.get("est_joker")]
-
-
-def _localiser_tuile_sur_plateau(plateau, id_tuile):
-    """Position ``(combi_index, position_index)`` de ``id_tuile`` sur
-    ``plateau`` (liste de combinaisons de dicts), ou ``(None, None)``."""
-    for ci, combo in enumerate(plateau):
-        for pi, t in enumerate(combo):
-            if t.get("id") == id_tuile:
-                return ci, pi
-    return None, None
-
-
-def _types_remplacement_joker(combo_dicts, position_index):
-    """Types de tuile (``(couleur, valeur)``) qui peuvent libérer le joker en
-    ``position_index`` de ``combo_dicts`` (échange direct OU, pour une suite
-    de 3 avec le joker en BOUT, prolongement de l'extrémité opposée puis
-    détachement sans remplacement — voir CONTEXTE.md §13, point 9 de #232,
-    corrigé par #233).
-
-    Restreint aux combinaisons de EXACTEMENT 3 tuiles (``None`` sinon) : une
-    combinaison de 4 tuiles ou plus peut déjà libérer son joker SANS tuile
-    de remplacement (voir CONTEXTE.md §8, ``_jokers_liberables_par_
-    groupe4_sans_remplacement``) — hors de portée de cette stratégie (issue
-    #232, déjà évité par le solveur de base).
-
-    Pour une suite de 3 :
-    - l'échange direct ne retient qu'UNE seule valeur, déduite de la
-      position du joker (``_tuile_correspond_au_joker``) ;
-    - si le joker est au MILIEU (``position_index == 1``), c'est la SEULE
-      voie : rien de plus (corrige l'issue #232, qui affirmait à tort que
-      milieu et bout étaient équivalents) ;
-    - si le joker est en BOUT (``position_index == 0`` ou ``2``), une
-      SECONDE voie existe : une tuile de même couleur qui prolonge
-      l'extrémité OPPOSÉE (valeur voisine de l'autre bout) transforme la
-      suite de 3 en suite de 4, où le joker — désormais en bout d'une
-      combinaison de 4 tuiles — se détache SANS remplacement (#150,
-      ``_jokers_detachables_par_extension``, vérifié sur le moteur réel par
-      ``tests/test_ia_placement_joker.py::
-      test_moteur_reel_detachement_par_prolongement_*``). Cette tuile de
-      prolongement est ajoutée aux types retournés si sa valeur reste dans
-      1..13 (sinon le joker est en bout CONTRE UNE BORNE : aucune seconde
-      voie, même exposition qu'au milieu).
-
-    Pour une série (groupe) de 3, les DEUX couleurs encore absentes
-    conviennent déjà (les deux voies possibles, échange direct avec l'une ou
-    l'autre couleur manquante — pas de voie supplémentaire par prolongement,
-    une série n'ayant pas d'« extrémité »)."""
-    combo = [tuile_depuis_dict(d) for d in combo_dicts]
-    if len(combo) != 3:
-        return None
-    r = valider_combinaison(combo)
-    if not r["valide"]:
-        return None
-    if r["type"] == "suite":
-        i0, t0 = next((i, t) for i, t in enumerate(combo) if not t.est_joker)
-        valeur_attendue = t0.valeur - i0 + position_index
-        if valeur_attendue < VALEUR_MIN or valeur_attendue > VALEUR_MAX:
-            return None
-        types = [(t0.couleur, valeur_attendue)]
-        if position_index == 0:
-            valeur_prolongement = valeur_attendue + 3
-        elif position_index == 2:
-            valeur_prolongement = valeur_attendue - 3
-        else:
-            valeur_prolongement = None
-        if (valeur_prolongement is not None
-                and VALEUR_MIN <= valeur_prolongement <= VALEUR_MAX):
-            types.append((t0.couleur, valeur_prolongement))
-        return types
-    valeur = next(t.valeur for t in combo if not t.est_joker)
-    couleurs_utilisees = {t.couleur for t in combo if not t.est_joker}
-    return [(c, valeur) for c in COULEURS if c not in couleurs_utilisees]
-
-
-def _exposition_coup_joker(etat, idx, coup):
-    """Exposition totale d'un coup qui pose un ou plusieurs jokers DEPUIS LE
-    CHEVALET (issue #232, point 3) : pour chacun, la somme des exemplaires
-    encore INCONNUS (brique « Inconnues », #219 — jamais la main adverse,
-    seulement sa taille) des types de tuile qui pourraient le remplacer dans
-    sa combinaison (voir ``_types_remplacement_joker``). Une exposition
-    nulle signifie que l'adversaire ne peut pas le reprendre (tous les
-    exemplaires sont déjà connus, sur le plateau ou dans NOTRE main).
-
-    Nuance d'Alain (point 4 de l'issue) : si, APRÈS le coup, notre propre
-    main contient encore la tuile qui remplacerait l'un des jokers posés,
-    ce placement est EXCLU du critère (``info["exclu"] = True``) — un bon
-    joueur jouerait cette tuile plutôt que le joker, question de génération
-    de coup hors de portée de cette stratégie de départage.
-
-    Retourne ``(score, info)`` — ``score`` est ``None`` si ``coup`` ne pose
-    aucun joker mesurable (aucun joker posé, ou chacun atterrit dans une
-    combinaison hors de portée — voir ``_types_remplacement_joker``) :
-    ``info`` vaut alors ``{"a_pose_un_joker": bool, "exclu": False,
-    "details": []}``. Sinon ``info`` contient aussi ``"exposition_brute"``
-    (somme, sans la variante d'asymétrie) et ``"details"`` (une entrée par
-    joker mesurable : ``{"id_joker", "combi_index", "position_index",
-    "types", "exposition", "en_main", "ids_autres"}``).
-
-    Variante d'asymétrie (point 5 de l'issue, ``niveaux.
-    ASYMETRIE_JOKER_ACTIVE``, ``False`` par défaut) : ``score`` devient
-    ``exposition - niveaux.POIDS_ASYMETRIE_JOKER * ma_chance_de_reprise``,
-    où ``ma_chance_de_reprise`` est la probabilité (brique « Inconnues »)
-    que CE JOUEUR pioche lui-même une tuile de remplacement — sans effet
-    tant que la variante reste désactivée (``score == exposition_brute``)."""
-    ids_poses = list(coup.get("ids_tuiles") or [])
-    chevalet = etat["joueurs"][idx]["chevalet"]
-    ids_jokers = _ids_jokers_poses(ids_poses, chevalet)
-    if not ids_jokers:
-        return None, {"a_pose_un_joker": False, "exclu": False, "details": []}
-
-    nouveau_plateau = coup.get("nouveau_plateau") or []
-    ids_poses_set = set(ids_poses)
-    chevalet_apres = [t for t in chevalet if t["id"] not in ids_poses_set]
-    tailles_adv = [len(j.get("chevalet", [])) for i, j in enumerate(etat["joueurs"])
-                  if i != idx]
-    taille_pioche = len(etat.get("pioche", []))
-    inconnues = _inconnues.calculer_inconnues(nouveau_plateau, chevalet_apres,
-                                              tailles_adv, taille_pioche)
-
-    total = 0
-    asym_total = 0.0
-    exclu = False
-    details = []
-    for id_j in ids_jokers:
-        ci, pi = _localiser_tuile_sur_plateau(nouveau_plateau, id_j)
-        if ci is None:
-            continue
-        combo = nouveau_plateau[ci]
-        types = _types_remplacement_joker(combo, pi)
-        if not types:
-            continue
-        expo = sum(inconnues.exemplaires_restants(t) for t in types)
-        en_main = any(not tt.get("est_joker") and (tt.get("couleur"), tt.get("valeur")) == t
-                     for t in types for tt in chevalet_apres)
-        total += expo
-        if _niveaux.ASYMETRIE_JOKER_ACTIVE:
-            asym_total += sum(_inconnues.proba_tuile_dans_pioche(inconnues, t)
-                              for t in types)
-        if en_main:
-            exclu = True
-        ids_autres = sorted(t["id"] for t in combo if t["id"] != id_j)
-        details.append({"id_joker": id_j, "combi_index": ci, "position_index": pi,
-                        "types": types, "exposition": expo, "en_main": en_main,
-                        "ids_autres": ids_autres})
-
-    if not details:
-        return None, {"a_pose_un_joker": True, "exclu": False, "details": []}
-
-    score = total
-    if _niveaux.ASYMETRIE_JOKER_ACTIVE:
-        score = total - _niveaux.POIDS_ASYMETRIE_JOKER * asym_total
-    return score, {"a_pose_un_joker": True, "exclu": exclu,
-                   "exposition_brute": total, "details": details}
-
-
-def _candidats_placement_joker(etat, idx, coup, deadline):
-    """Coups équivalents (MÊME nombre de tuiles posées, strictement — pas de
-    variante tolérante pour cette stratégie) obtenus en retirant, tour à
-    tour, CHACUNE des tuiles que ``coup`` pose, puis en résolvant à nouveau —
-    même mécanisme que ``_candidats_sorties`` (#231). Retourne une liste de
-    coups marqués ``SOLVEUR_PLACEMENT_JOKER``."""
-    ids_jouees = list(coup.get("ids_tuiles") or [])
-    nb_best = len(ids_jouees)
-    joueur = etat["joueurs"][idx]
-    chevalet = joueur["chevalet"]
-    candidats = []
-    for id_tuile in ids_jouees:
-        restant = deadline - time.monotonic()
-        if restant <= 0:
-            break
-        idx_t = next((i for i, t in enumerate(chevalet) if t["id"] == id_tuile),
-                     None)
-        if idx_t is None:
-            continue
-        chevalet2 = chevalet[:idx_t] + chevalet[idx_t + 1:]
-        joueur2 = dict(joueur)
-        joueur2["chevalet"] = chevalet2
-        joueurs2 = list(etat["joueurs"])
-        joueurs2[idx] = joueur2
-        etat2 = dict(etat)
-        etat2["joueurs"] = joueurs2
-        statut, charge = _coup_exact(etat2, idx, restant, PREFERER_SIMPLICITE,
-                                     EVAL_MAIN_DEFAUT)
-        if statut != "coup" or not charge.get("ids_tuiles"):
-            continue
-        if len(charge["ids_tuiles"]) != nb_best:
-            continue
-        candidats.append(_marquer_solveur(charge, SOLVEUR_PLACEMENT_JOKER))
-    return candidats
-
-
-def _appliquer_placement_joker(etat, idx, coup, taille_main, deadline):
-    """Stratégie ``placement_joker`` (#232) : à nombre de tuiles posées égal,
-    entre ``coup`` et les coups équivalents trouvés par
-    ``_candidats_placement_joker``, préfère celui dont l'exposition du/des
-    joker(s) posé(s) (``_exposition_coup_joker``) est la plus faible.
-
-    N'a aucun effet (``coup`` inchangé) si : ``coup`` ne pose aucun joker
-    mesurable depuis le chevalet ; ou si ``coup`` est lui-même EXCLU du
-    critère (point 4 de l'issue — notre main contient encore la tuile de
-    remplacement, voir ``_exposition_coup_joker``) ; ou si aucun candidat
-    équivalent n'a une exposition strictement meilleure. Les candidats
-    eux-mêmes EXCLUS (même nuance) ne sont jamais choisis.
-
-    Retourne ``(coup, info)`` — ``info`` un dict de compteurs (point 6 de
-    l'issue) : ``{"declenchee": bool, "exclu": bool,
-    "nb_candidats_equivalents": int, "choisi": bool,
-    "exposition_avant": float|None, "meilleure_exposition": float|None,
-    "details": [...]}`` (``details``, voir ``_exposition_coup_joker``, du
-    coup FINALEMENT retenu)."""
-    expo_avant, info_expo = _exposition_coup_joker(etat, idx, coup)
-    info = {"declenchee": bool(info_expo.get("details")),
-           "exclu": info_expo.get("exclu", False),
-           "nb_candidats_equivalents": 0, "choisi": False,
-           "exposition_avant": expo_avant, "meilleure_exposition": expo_avant,
-           "details": info_expo.get("details", [])}
-    if expo_avant is None or not info["declenchee"]:
-        return coup, info
-    if info_expo["exclu"]:
-        return coup, info
-
-    restant = deadline - time.monotonic()
-    if restant <= 0:
-        return coup, info
-
-    candidats = _candidats_placement_joker(etat, idx, coup, deadline)
-
-    meilleur_coup = coup
-    meilleure_expo = expo_avant
-    meilleure_info_expo = info_expo
-    for candidat in candidats:
-        info["nb_candidats_equivalents"] += 1
-        expo_cand, info_expo_cand = _exposition_coup_joker(etat, idx, candidat)
-        if expo_cand is None or info_expo_cand["exclu"]:
-            continue
-        if expo_cand < meilleure_expo:
-            meilleure_expo = expo_cand
-            meilleur_coup = candidat
-            meilleure_info_expo = info_expo_cand
-
-    info["meilleure_exposition"] = meilleure_expo
-    info["details"] = meilleure_info_expo.get("details", [])
-    if meilleur_coup is not coup:
-        info["choisi"] = True
-    return meilleur_coup, info
-
-
-def _candidats_finition(etat, idx, coup_solveur, budget_temps=None,
-                        garder_joker=False):
-    """Coups candidats pour la vérification de finition (#221, point 2 ;
-    troisième candidat ajouté par #225, point 2) : toujours ``coup_solveur``
-    (le meilleur coup du solveur, en premier — voir
-    ``verification_finition.verifier``) puis, s'ils existent et diffèrent :
-
-    1. le meilleur coup SANS réarrangement du plateau
-       (``_coup_sans_rearrangement``) — qui, ne déplaçant AUCUNE tuile du
-       plateau, ne reprend jamais un joker déjà posé. Approximation
-       documentée du point 2 de #221 (« le meilleur coup qui laisse en place
-       les jokers du tapis ») : plus restrictive qu'exigé (elle exclut aussi
-       les coups qui déplaceraient des tuiles RÉELLES sans toucher aux
-       jokers), mais réutilise un mécanisme déjà existant et testé sans
-       dupliquer de logique ;
-    2. si ``garder_joker`` (Champion du Monde seul, #225) et que les portes
-       d'activation (``_peut_tenter_garde_joker``) le permettent, le meilleur
-       coup qui NE JOUE PAS le joker du chevalet (``_coup_sans_joker_chevalet``).
-
-    Retourne ``(candidats, idx_garde_joker)`` — ``idx_garde_joker`` est
-    l'index, dans ``candidats``, du candidat « garder un joker en main »
-    s'il a été ajouté, sinon ``None``."""
+def _candidats_finition(etat, idx, coup_solveur):
+    """Coups candidats pour la vérification de finition (#221, point 2) :
+    toujours ``coup_solveur`` (le meilleur coup du solveur, en premier — voir
+    ``verification_finition.verifier``) puis, s'il existe et diffère, le
+    meilleur coup SANS réarrangement du plateau (``_coup_sans_rearrangement``)
+    — qui, ne déplaçant AUCUNE tuile du plateau, ne reprend jamais un joker
+    déjà posé. Approximation documentée du point 2 de #221 (« le meilleur
+    coup qui laisse en place les jokers du tapis ») : plus restrictive
+    qu'exigé (elle exclut aussi les coups qui déplaceraient des tuiles
+    RÉELLES sans toucher aux jokers), mais réutilise un mécanisme déjà
+    existant et testé sans dupliquer de logique."""
     candidats = [coup_solveur]
     sans_rearr = _coup_sans_rearrangement(etat, idx)
     if (isinstance(sans_rearr, dict) and sans_rearr.get("action") == "jouer"
             and sans_rearr.get("ids_tuiles")
             and verification_finition.coups_differents(sans_rearr, coup_solveur)):
         candidats.append(sans_rearr)
-
-    idx_garde_joker = None
-    if garder_joker and _peut_tenter_garde_joker(etat, idx):
-        sans_joker = _coup_sans_joker_chevalet(etat, idx, budget_temps)
-        if (isinstance(sans_joker, dict) and sans_joker.get("action") == "jouer"
-                and sans_joker.get("ids_tuiles")
-                and verification_finition.coups_differents(sans_joker, coup_solveur)):
-            candidats.append(sans_joker)
-            idx_garde_joker = len(candidats) - 1
-    return candidats, idx_garde_joker
+    return candidats
 
 
-def _verifier_finition_fin_de_partie(etat, idx, coup, taille_main, deadline,
-                                     garder_joker=False):
+def _verifier_finition_fin_de_partie(etat, idx, coup, taille_main, deadline):
     """Vérification de finition en fin de partie (issue #221, étape 1 de la
-    brique « Deux tours » — voir ``moteur/verification_finition.py`` ;
-    ``garder_joker`` ajouté par #225, point 2, ``False`` par défaut →
-    comportement strictement inchangé pour tout appelant existant).
+    brique « Deux tours » — voir ``moteur/verification_finition.py``).
 
-    Ne s'applique (appelée uniquement pour Expert/Champion du Monde, et
-    seulement si le coup du solveur ne vide pas déjà le chevalet — voir
-    ``jouer_niveau_bride``) que si le chevalet compte au plus
-    ``niveaux.SEUIL_FIN_PARTIE_VERIF_FINITION`` tuiles ET que ``coup`` a été
-    décidé par le modèle exact (``SOLVEUR_EXACT``) — si ce n'est pas le cas
-    (dépendances absentes, repli déjà survenu pour ce tour faute de budget),
-    la vérification, qui s'appuie sur CE MÊME solveur, ne peut de toute façon
-    pas s'exécuter non plus : repli silencieux, statut ``SOLVEUR_NON_EXACT``
-    (distingué de ``BUDGET_EPUISE`` depuis #223 — un budget réellement épuisé
-    PENDANT la vérification est une situation différente, voir
+    Ne s'applique (appelée uniquement pour Expert, et seulement si le coup
+    du solveur ne vide pas déjà le chevalet — voir ``jouer_niveau_bride``)
+    que si le chevalet compte au plus ``niveaux.SEUIL_FIN_PARTIE_VERIF_
+    FINITION`` tuiles ET que ``coup`` a été décidé par le modèle exact
+    (``SOLVEUR_EXACT``) — si ce n'est pas le cas (dépendances absentes,
+    repli déjà survenu pour ce tour faute de budget), la vérification, qui
+    s'appuie sur CE MÊME solveur, ne peut de toute façon pas s'exécuter non
+    plus : repli silencieux, statut ``SOLVEUR_NON_EXACT`` (distingué de
+    ``BUDGET_EPUISE`` depuis #223 — un budget réellement épuisé PENDANT la
+    vérification est une situation différente, voir
     ``verification_finition.verifier``).
-
-    Si ``garder_joker`` est actif (Champion du Monde seul) ET que le chevalet
-    contient un joker, annote le coup choisi de la clé ``garde_joker_info``
-    (issue #225, point 3 — compteurs de campagne) : ``{"joker_en_main": True,
-    "candidat_existe": bool, "permet_de_finir": bool | None, "choisi": bool}``.
-    ``permet_de_finir`` vaut ``None`` quand la question n'a pas été tranchée
-    (le candidat n'a jamais été atteint par ``verifier`` — ``candidats[0]``
-    ou le candidat sans réarrangement suffisait déjà — ou budget épuisé avant
-    de l'atteindre) : ce cas n'est compté ni comme « permet de finir » ni
-    comme « ne permet pas ». Clé TOUJOURS absente pour Expert/Avancé (
-    ``garder_joker=False``) : décisions et forme du coup strictement
-    inchangées pour ces niveaux.
 
     Retourne ``(coup, statut)`` — ``coup`` inchangé si la vérification ne
     s'applique pas ou n'aboutit à rien de nouveau."""
@@ -1922,28 +1085,9 @@ def _verifier_finition_fin_de_partie(etat, idx, coup, taille_main, deadline,
     if coup.get("solveur") != SOLVEUR_EXACT:
         return coup, verification_finition.SOLVEUR_NON_EXACT
 
-    budget_restant = deadline - time.monotonic()
-    candidats, idx_garde_joker = _candidats_finition(
-        etat, idx, coup, budget_restant, garder_joker)
+    candidats = _candidats_finition(etat, idx, coup)
     coup_choisi, statut = verification_finition.verifier(
-        etat, idx, candidats, deadline, idx_garde_joker)
-
-    joker_en_main = garder_joker and any(
-        t.get("est_joker") for t in etat["joueurs"][idx]["chevalet"])
-    if joker_en_main:
-        if statut == verification_finition.APPLIQUEE_GARDE_JOKER:
-            permet_de_finir = True
-        elif (statut == verification_finition.APPLIQUEE_AUCUN_CANDIDAT
-              and idx_garde_joker is not None):
-            permet_de_finir = False
-        else:
-            permet_de_finir = None
-        coup_choisi["garde_joker_info"] = {
-            "joker_en_main": True,
-            "candidat_existe": idx_garde_joker is not None,
-            "permet_de_finir": permet_de_finir,
-            "choisi": statut == verification_finition.APPLIQUEE_GARDE_JOKER,
-        }
+        etat, idx, candidats, deadline)
     return coup_choisi, statut
 
 
@@ -1972,32 +1116,17 @@ def jouer_niveau_bride(etat, idx, nom_niveau, budget_temps=None, rng=None,
     de production que le jeu, sans dupliquer la logique de vérification de
     finition ci-dessous avec sa propre échéance. ``on_aucun`` : voir
     ``jouer_niveau_expert`` — cas légitime (aucun coup posable, prouvé par le
-    modèle exact), distinct d'un repli.
-
-    ``petits_chiffres`` (#230, hypothèse H4, Champion du Monde seul) :
-    limité, comme toutes les stratégies ci-dessous, au chevalet strictement
-    supérieur à ``niveaux.SEUIL_FIN_PARTIE_VERIF_FINITION`` AVANT de jouer
-    (point 4 de l'issue — garder une petite tuile gêne la fin de partie) ;
-    le critère de départage à nombre de tuiles posées égal (point 2) est
-    intégré DIRECTEMENT au modèle exact ci-dessous (``valeur_max_petits``) ;
-    la variante tolérante (point 3) est appliquée plus bas, après le coup
-    normal, comme ``reserve_tuile``/``retenue_debut``."""
+    modèle exact), distinct d'un repli."""
     bridage = _niveaux.bridage_pour(nom_niveau)
     if rng is None:
         rng = _rng_oubli(etat, idx)
     taille_main = len(etat["joueurs"][idx]["chevalet"])
 
-    petits_chiffres_actif = (
-        bridage.petits_chiffres
-        and taille_main > _niveaux.SEUIL_FIN_PARTIE_VERIF_FINITION)
-    valeur_max_petits = (_niveaux.VALEUR_MAX_PETITS
-                         if petits_chiffres_actif else None)
-
     debut_tour = time.monotonic()
     coup = _coup_selon_perturbation(
         etat, idx, bridage.perturbation_max, budget_temps, on_repli,
         preferer_simple=preferer_simple, eval_config=eval_config,
-        on_aucun=on_aucun, valeur_max_petits=valeur_max_petits)
+        on_aucun=on_aucun)
 
     if not (isinstance(coup, dict) and coup.get("action") == "jouer"):
         # Aucun coup posable : pioche/passe (déjà décidé par le moteur). Tracé
@@ -2018,75 +1147,16 @@ def jouer_niveau_bride(etat, idx, nom_niveau, budget_temps=None, rng=None,
     if vide_la_main:
         return coup
 
-    # Limite de calcul PARTAGÉE avec le coup normal (#221, point 5), désormais
-    # commune à TOUTES les stratégies ci-dessous (#229) : une seule échéance
-    # pour tout le tour — ``debut_tour`` a été relevé avant le calcul du coup
-    # normal ci-dessus, qui en a donc déjà consommé une partie.
+    # Limite de calcul PARTAGÉE avec le coup normal (#221, point 5) : une
+    # seule échéance pour tout le tour — ``debut_tour`` a été relevé avant le
+    # calcul du coup normal ci-dessus, qui en a donc déjà consommé une partie.
     budget_total = budget_temps if budget_temps is not None \
         else BUDGET_TEMPS_EXPERT
     deadline = debut_tour + budget_total
 
-    if bridage.chances_prochain_tour:
-        # #231 : à nombre de tuiles posées égal (le départage "petits_
-        # chiffres" ci-dessus, s'il est actif, est déjà intégré au coup
-        # normal via ``valeur_max_petits``), préfère le chevalet restant au
-        # meilleur score ``sorties.score_chevalet``. Appliqué AVANT les
-        # variantes tolérantes ci-dessous (``reserve_tuile``/``retenue_
-        # debut``/``petits_chiffres``), qui peuvent réduire le nombre de
-        # tuiles posées : les comparer à CE stade reviendrait à comparer des
-        # coups qui ne posent déjà plus le même nombre de tuiles.
-        coup, info_sorties = _appliquer_chances_prochain_tour(
-            etat, idx, coup, taille_main, deadline)
-        coup["chances_prochain_tour_info"] = info_sorties
-
-    if bridage.placement_joker:
-        # #232 : à nombre de tuiles posées égal, préfère le placement d'un
-        # joker du chevalet le moins exposé à une reprise par l'adversaire.
-        # Même raisonnement d'ordre que ``chances_prochain_tour`` ci-dessus :
-        # appliqué AVANT les variantes tolérantes qui peuvent réduire le
-        # nombre de tuiles posées (``reserve_tuile``/``retenue_debut``/
-        # ``petits_chiffres``).
-        coup, info_joker = _appliquer_placement_joker(
-            etat, idx, coup, taille_main, deadline)
-        coup["placement_joker_info"] = info_joker
-
-    if bridage.reserve_tuile:
-        # #229, hypothèse H2 : garder une tuile que le coup aurait posée.
-        # Appliqué AVANT la vérification de finition ci-dessous — les deux
-        # zones ne se recoupent jamais par construction (la condition (d)
-        # de ``_appliquer_reserve_tuile`` exige un chevalet après coup
-        # strictement supérieur à ``SEUIL_FIN_PARTIE_VERIF_FINITION`` : si
-        # elle change le coup, la main AVANT ce tour est donc elle aussi
-        # au-delà de ce seuil, et la vérification de finition sera de toute
-        # façon ``NON_APPLICABLE``).
-        coup, info_reserve = _appliquer_reserve_tuile(
-            etat, idx, coup, taille_main, deadline)
-        coup["reserve_tuile_info"] = info_reserve
-
-    if bridage.retenue_debut:
-        # #229, hypothèse H1 : plafonner la pose pendant les premiers tours
-        # qui suivent l'ouverture — seuil chevalet > 8 utilisé par la
-        # stratégie elle-même place aussi cette zone au-delà de
-        # ``SEUIL_FIN_PARTIE_VERIF_FINITION``, même raisonnement que ci-dessus.
-        restant = deadline - time.monotonic()
-        coup, info_retenue = _appliquer_retenue_debut(
-            etat, idx, coup, taille_main, restant)
-        coup["retenue_debut_info"] = info_retenue
-
-    if petits_chiffres_actif:
-        # #230, hypothèse H4, variante tolérante (point 3) : le départage à
-        # nombre de tuiles posées égal est déjà intégré au coup normal
-        # ci-dessus (``valeur_max_petits``) — ceci est l'essai SUPPLÉMENTAIRE
-        # qui peut poser moins de tuiles pour garder une petite tuile,
-        # désactivé par défaut (``ECART_TUILES_PETITS == 0``).
-        coup, info_petits = _appliquer_petits_chiffres(
-            etat, idx, coup, taille_main, deadline)
-        coup["petits_chiffres_info"] = info_petits
-
     if bridage.verif_finition:
         coup, statut_verif = _verifier_finition_fin_de_partie(
-            etat, idx, coup, taille_main, deadline,
-            garder_joker=bridage.garder_joker_fin_partie)
+            etat, idx, coup, taille_main, deadline)
         coup["verif_finition"] = statut_verif
 
     p = _niveaux.taux_oubli_effectif(bridage.taux_oubli, taille_main)
@@ -2108,16 +1178,19 @@ def _fabriquer_niveau(nom_niveau):
     return _jouer
 
 
-# NIVEAUX_IA : les six niveaux (issue #213), tous branchés sur le moteur exact
-# bridé. Clés = libellés de ``config.NIVEAUX`` (« Champion du Monde » inclus).
+# NIVEAUX_IA : les cinq niveaux (issue #213), tous branchés sur le moteur
+# exact bridé. Clés = libellés de ``config.NIVEAUX``.
 NIVEAUX_IA = {nom: _fabriquer_niveau(nom) for nom in _niveaux.ECHELLE}
 
 
 def jouer_ia(etat, joueur_index):
     """Point d'entrée : joue le tour selon le niveau du joueur (défaut : le
     niveau le plus faible). Tous les niveaux passent par le même moteur exact
-    réglé par ``moteur/niveaux.py`` (issue #213)."""
+    réglé par ``moteur/niveaux.py`` (issue #213). ``NIVEAU_RETIRE`` (« Champion
+    du Monde », #235) est d'abord traduit par ``niveaux.niveau_compatible``,
+    pour qu'une partie sauvegardée ou un réglage antérieur reste valide."""
     niveau = etat["joueurs"][joueur_index].get("niveau")
+    niveau = _niveaux.niveau_compatible(niveau)
     if niveau not in NIVEAUX_IA:
         niveau = _niveaux.ECHELLE[0]
     return jouer_niveau_bride(etat, joueur_index, niveau)

@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """Vérification de la disponibilité du solveur exact (``highspy``/``numpy``)
-pour les scripts de mesure qui font jouer Avancé, Expert ou Champion du
-Monde — issue #223.
+pour les scripts de mesure qui font jouer Avancé ou Expert — issue #223.
 
 **Incident à l'origine de ce module** : une campagne de comparaison Avancé
 contre Expert (lancée pour mesurer la vérification de finition, #221) a
@@ -14,7 +13,7 @@ mesure a porté sur un Expert qui n'était, en réalité, jamais Expert.
 
 Les scripts de mesure listés par l'issue (``comparer_niveaux_ia.py``,
 ``valider_bas_echelle.py``, ``echelle_niveaux.py``, et tout autre script qui
-fait jouer Avancé/Expert/Champion du Monde) doivent donc échouer FRANCHEMENT
+fait jouer Avancé/Expert) doivent donc échouer FRANCHEMENT
 (code de sortie non nul, message explicite nommant l'interpréteur utilisé)
 si le solveur exact n'est pas importable — sauf si l'appelant a
 explicitement choisi ``--sans-exact`` (désactivation volontaire et assumée,
@@ -74,7 +73,7 @@ def exiger_solveur_exact_ou_quitter(sans_exact: bool = False) -> None:
         manquants = list(PAQUETS_REQUIS)
     print(
         "ERREUR : solveur exact indisponible dans cet interpréteur — ce "
-        "script fait jouer Avancé/Expert/Champion du Monde et SUPPOSE le "
+        "script fait jouer Avancé/Expert et SUPPOSE le "
         "solveur exact disponible (sauf --sans-exact, non demandé ici).\n"
         f"Interpréteur Python utilisé : {sys.executable}\n"
         f"Paquet(s) manquant(s) ou non importable(s) : {', '.join(manquants)}\n"

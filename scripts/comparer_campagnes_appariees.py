@@ -1,38 +1,36 @@
 #!/usr/bin/env python3
 """Compare deux campagnes APPARIÉES de ``comparer_niveaux_ia.py --export-
-resultats`` (issue #225, point 5bis) — typiquement une campagne Champion du
-Monde AVEC « garder un joker en main » et une campagne identique (même
-``--seed``, même ``--donnes``, mêmes niveaux) SANS (``--sans-garde-joker``).
+resultats`` (issue #225, point 5bis) — typiquement une campagne AVEC un
+réglage et une campagne identique (même ``--seed``, même ``--donnes``, mêmes
+niveaux) SANS ce réglage (p. ex. ``--sans-preferer-simple``).
 
 Avec la même graine, les deux campagnes jouent EXACTEMENT les mêmes donnes
 dans le même ordre : un match ne peut donc différer entre les deux fichiers
-QUE si un coup a réellement changé en cours de route (la stratégie testée, ou
+QUE si un coup a réellement changé en cours de route (le réglage testé, ou
 tout autre facteur non contrôlé — voir l'avertissement ci-dessous). C'est ce
 qui rend la comparaison appariée BEAUCOUP plus sensible qu'un simple taux de
-victoire global sur deux campagnes indépendantes (la plupart des 200+ parties
-d'une campagne ne sont de toute façon jamais concernées par la stratégie,
-voir CONTEXTE.md §13 — comparer les quelques parties qui ONT divergé est
-beaucoup plus informatif que de comparer deux taux de victoire noyés dans le
-bruit).
+victoire global sur deux campagnes indépendantes (comparer les quelques
+parties qui ONT divergé est beaucoup plus informatif que de comparer deux
+taux de victoire noyés dans le bruit).
 
 **Avertissement important** : deux campagnes à la même graine peuvent AUSSI
-diverger pour une raison SANS AUCUN LIEN avec la stratégie testée — une
-simple variation du budget de temps réellement consommé par le solveur exact
+diverger pour une raison SANS AUCUN LIEN avec le réglage testé — une simple
+variation du budget de temps réellement consommé par le solveur exact
 (charge de la machine au moment de l'exécution) peut faire basculer un coup
 d'un tour entre deux exécutions, même identiques par ailleurs (voir
 ``moteur/solveur_exact.BudgetExactDepasse``). Une partie divergente n'est
-donc pas la PREUVE que la stratégie a changé quelque chose : c'est un
-candidat à inspecter (regarder son statut ``garde_joker``/``verif_finition``
-dans le journal de la partie, si disponible) avant toute conclusion.
+donc pas la PREUVE que le réglage a changé quelque chose : c'est un candidat
+à inspecter (regarder son statut ``verif_finition`` dans le journal de la
+partie, si disponible) avant toute conclusion.
 
 Usage :
 
-    python scripts/comparer_niveaux_ia.py --niveau-a Expert \\
-        --niveau-b "Champion du Monde" --donnes 300 --seed 7 \\
+    python scripts/comparer_niveaux_ia.py --niveau-a Avancé \\
+        --niveau-b Expert --donnes 300 --seed 7 \\
         --export-resultats /tmp/avec.jsonl
-    python scripts/comparer_niveaux_ia.py --niveau-a Expert \\
-        --niveau-b "Champion du Monde" --donnes 300 --seed 7 \\
-        --sans-garde-joker --export-resultats /tmp/sans.jsonl
+    python scripts/comparer_niveaux_ia.py --niveau-a Avancé \\
+        --niveau-b Expert --donnes 300 --seed 7 \\
+        --sans-preferer-simple --export-resultats /tmp/sans.jsonl
     python scripts/comparer_campagnes_appariees.py /tmp/avec.jsonl /tmp/sans.jsonl
 
 Format d'un fichier (une ligne JSON par match, écrite par ``comparer_niveaux_

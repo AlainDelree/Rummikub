@@ -1,6 +1,7 @@
-"""Tests de l'échelle des six niveaux et de l'affaiblissement paramétré
+"""Tests de l'échelle des cinq niveaux et de l'affaiblissement paramétré
 (issue #213) : perturbation maximale, taux d'oubli, reproductibilité, repli
-sans dépendances, et niveau « Champion du Monde ».
+sans dépendances, et compatibilité du niveau retiré « Champion du Monde »
+(issue #235).
 """
 
 import copy
@@ -69,9 +70,9 @@ def _etat_joker_recuperable(niveau="Facile"):
 # L'échelle et le nouveau niveau
 # --------------------------------------------------------------------------- #
 
-def test_echelle_a_six_niveaux_avec_champion():
+def test_echelle_a_cinq_niveaux():
     assert NIVEAUX == ["Débutant", "Facile", "Intermédiaire", "Avancé",
-                       "Expert", "Champion du Monde"]
+                       "Expert"]
     assert list(NIVEAUX_IA) == NIVEAUX
     assert set(niveaux.BRIDAGES) == set(NIVEAUX)
 
@@ -93,11 +94,17 @@ def test_bridages_monotones_du_plus_faible_au_plus_fort():
     assert perturbations == sorted(perturbations), perturbations
     # Taux d'oubli NON CROISSANT (le fort oublie au plus autant que le faible).
     assert oublis == sorted(oublis, reverse=True), oublis
-    # Avancé (et donc Expert/Champion, identiques) jouent le solveur complet.
+    # Avancé (et donc Expert, identiques sur ces deux paramètres) jouent le
+    # solveur complet.
     assert niveaux.BRIDAGES["Avancé"].complet
 
 
-def test_champion_du_monde_action_valide():
+def test_niveau_champion_du_monde_retombe_sur_expert():
+    """Compatibilité (issue #235) : « Champion du Monde », niveau retiré,
+    ne doit jamais planter — une partie sauvegardée, un réglage ou un
+    journal qui le nomme encore est traité EXACTEMENT comme Expert."""
+    assert niveaux.niveau_compatible("Champion du Monde") == "Expert"
+    assert niveaux.bridage_pour("Champion du Monde") == niveaux.BRIDAGES["Expert"]
     etat = _partie_2j("Champion du Monde")
     etat["index_joueur_actuel"] = 1
     res = jouer_ia(etat, 1)
@@ -232,19 +239,19 @@ def test_reproductibilite_meme_graine():
 
 
 # --------------------------------------------------------------------------- #
-# Champion du Monde atteint le maximum exact
+# Expert atteint le maximum exact
 # --------------------------------------------------------------------------- #
 
 @pytest.mark.parametrize("fichier", [
     "reference_victoire_manquee_ines_tour85.json",
     "cas_expert_coup_simple_david_tour31.json",
 ])
-def test_champion_atteint_le_maximum_exact(fichier):
+def test_expert_atteint_le_maximum_exact(fichier):
     cas = json.loads((_DONNEES / fichier).read_text(encoding="utf-8"))
     etat = cas["etat"]
     idx = cas["idx"]
     etat.setdefault("config", {})["graine_ia"] = 0
-    coup = jouer_niveau_bride(etat, idx, "Champion du Monde", budget_temps=10.0)
+    coup = jouer_niveau_bride(etat, idx, "Expert", budget_temps=10.0)
     assert coup["action"] == "jouer"
     assert len(coup["ids_tuiles"]) == cas["attendu_exact_tuiles"]
 
@@ -258,8 +265,8 @@ def test_repli_sans_dependances(monkeypatch):
     erreur sur la recherche arborescente (puis Avancé), et le mécanisme est
     tracé (``solveur`` ≠ ``exact``)."""
     monkeypatch.setattr("rummikub.moteur.solveur_exact.DISPONIBLE", False)
-    etat = _etat_joker_recuperable("Champion du Monde")
-    coup = jouer_niveau_bride(etat, 1, "Champion du Monde", rng=_RngFixe(0.999))
+    etat = _etat_joker_recuperable("Expert")
+    coup = jouer_niveau_bride(etat, 1, "Expert", rng=_RngFixe(0.999))
     assert coup["action"] in ("jouer", "piocher", "passer")
     if coup["action"] == "jouer":
         assert coup.get("solveur") in (SOLVEUR_RECHERCHE, SOLVEUR_AVANCE)

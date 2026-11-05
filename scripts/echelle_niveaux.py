@@ -1,32 +1,30 @@
 #!/usr/bin/env python3
-"""Tournoi « en échelle » des six niveaux d'IA Rummikub, par DUELS entre
+"""Tournoi « en échelle » des cinq niveaux d'IA Rummikub, par DUELS entre
 niveaux voisins (issue #213, critère resserré par #220).
 
 Vérifie que l'échelle des niveaux (``config.NIVEAUX`` : Débutant → Facile →
-Intermédiaire → Avancé → Expert → Champion du Monde, voir ``moteur/niveaux.py``)
-est bien CROISSANTE : chaque niveau doit battre nettement le niveau juste en
-dessous. Joue des matchs à 2 joueurs EN MIROIR (donne rejouée places échangées,
+Intermédiaire → Avancé → Expert, voir ``moteur/niveaux.py``) est bien
+CROISSANTE : chaque niveau doit battre nettement le niveau juste en dessous.
+Joue des matchs à 2 joueurs EN MIROIR (donne rejouée places échangées,
 reproductible sous ``graine_ia`` — comme ``scripts/comparer_niveaux_ia.py``)
 entre des paires de niveaux, puis affiche, pour chaque paire, le taux de
 victoire du niveau le PLUS FORT avec son intervalle de confiance à 95 %.
 
 Paires jouées :
   - toutes les paires ADJACENTES de l'échelle (Débutant–Facile, Facile–
-    Intermédiaire, Intermédiaire–Avancé, Avancé–Expert, Expert–Champion du
-    Monde) ;
+    Intermédiaire, Intermédiaire–Avancé, Avancé–Expert) ;
   - quelques paires NON ADJACENTES de contrôle (Débutant–Intermédiaire,
     Facile–Avancé, Intermédiaire–Expert), qui doivent montrer un écart encore
     plus net.
 
-AVERTISSEMENT IMPORTANT (issue #213 §2) : Avancé, Expert et Champion du Monde
-sont PROVISOIREMENT IDENTIQUES — ils jouent tous le même solveur exact d'un
-tour, COMPLET et sans bridage ; les stratégies multi-tours (réserve, non-don de
-joker, rétention défensive — CONTEXTE.md §13) qui doivent distinguer Expert et
-Champion du Monde ne sont pas encore implémentées. Les paires formées
-uniquement de niveaux de ce trio (Avancé–Expert, Expert–Champion du Monde) sont
-donc ATTENDUES à ~50 % / égalité statistique : ce n'est PAS un échec de
-l'échelle, c'est le comportement documenté tant que ces stratégies n'existent
-pas. Le script le signale explicitement pour chaque paire concernée.
+AVERTISSEMENT IMPORTANT (issue #213 §2) : Avancé et Expert sont, à ce jour,
+PROVISOIREMENT IDENTIQUES en force — Expert ajoute seulement la vérification
+de finition en fin de partie (#221), dont l'effet mesuré est rare (voir
+CONTEXTE.md). La paire Avancé–Expert est donc ATTENDUE à ~50 % / égalité
+statistique : ce n'est PAS un échec de l'échelle. Le script le signale
+explicitement pour cette paire. Un sixième niveau, « Champion du Monde », a
+porté d'autres stratégies multi-tours ; retiré par l'issue #235 (aucun effet
+mesurable sur le taux de victoire face à Expert).
 
 **#220 retire le relevé des tuiles restantes en défaite** (miroir d'un niveau
 contre lui-même, option ``--donnes-profil``) : voir CONTEXTE.md §16 pour les
@@ -124,8 +122,7 @@ def _paires_tournoi() -> list[tuple[str, str]]:
 
 def _niveaux_identiques(niveau_a: str, niveau_b: str) -> bool:
     """Vrai si les deux niveaux jouent EXACTEMENT le même moteur : tous deux le
-    solveur un-tour complet sans bridage (Avancé/Expert/Champion du Monde tant
-    que les stratégies multi-tours ne sont pas implémentées, issue #213 §2)."""
+    solveur un-tour complet sans bridage (Avancé/Expert, issue #213 §2)."""
     ba = _niveaux.bridage_pour(niveau_a)
     bb = _niveaux.bridage_pour(niveau_b)
     return ba.complet and bb.complet
@@ -359,8 +356,8 @@ def afficher_rapport(rapport: dict) -> None:
 def _afficher_verdicts(res: dict) -> None:
     """Deux vérifications demandées par l'issue : (a) l'échelle est-elle
     strictement croissante sur les paires adjacentes ? (b) chaque écart
-    adjacent est-il « net » (60–75 %) ? — en excluant explicitement les paires
-    du trio identique Avancé/Expert/Champion du Monde (égalité ATTENDUE)."""
+    adjacent est-il « net » (60–75 %) ? — en excluant explicitement la paire
+    identique Avancé/Expert (égalité ATTENDUE)."""
     adjacentes = res["adjacentes"]
     distinctes = [r for r in adjacentes
                   if not r["identiques"] and r["matchs_decides"] > 0]
@@ -391,13 +388,12 @@ def _afficher_verdicts(res: dict) -> None:
               f"{sum(nets)}/{len(distinctes)} paire(s) distincte(s) dans la "
               f"cible visée par l'issue.")
 
-    # Rappel sur le trio identique.
+    # Rappel sur la paire identique.
     if identiques:
         libelles = ", ".join(f"{r['niveau_faible']}–{r['niveau_fort']}"
                              for r in identiques)
         print(f"  (!) Paires ATTENDUES à ~50 % car solveur IDENTIQUE "
-              f"(Avancé/Expert/Champion du Monde, stratégies multi-tours non "
-              f"implémentées, #213 §2) : {libelles}.")
+              f"(Avancé/Expert, #213 §2) : {libelles}.")
         print("      → Une égalité statistique sur ces paires est NORMALE, "
               "pas un échec de l'échelle.")
 
@@ -470,8 +466,8 @@ def main(argv: list[str]) -> int:
         parser.error("--budget-solveur doit être > 0")
 
     # Échec franc sans solveur exact (issue #223, point 1) : ce tournoi fait
-    # jouer Avancé/Expert/Champion du Monde ET Facile/Intermédiaire (qui
-    # consultent aussi le modèle exact, voir ia._coup_selon_perturbation) —
+    # jouer Avancé/Expert ET Facile/Intermédiaire (qui consultent aussi le
+    # modèle exact, voir ia._coup_selon_perturbation) —
     # pas de ``--sans-exact`` ici, donc toujours requis. AVANT la relance
     # surveillée ci-dessous, pour échouer vite sans sous-processus inutile.
     exiger_solveur_exact_ou_quitter()

@@ -1,6 +1,6 @@
 """Tests du garde-fou « échec franc sans solveur exact » (issue #223, point 1)
-et de ses relais dans tous les scripts qui font jouer Avancé/Expert/Champion
-du Monde (issue #224, qui étend la liste de #223) — l'incident qui a motivé
+et de ses relais dans tous les scripts qui font jouer Avancé/Expert
+(issue #224, qui étend la liste de #223) — l'incident qui a motivé
 cette issue : une campagne de comparaison lancée depuis un terminal pointant
 vers un AUTRE interpréteur Python, sans ``highspy``/``numpy``, tournant à vide
 sans que rien ne le signale.
