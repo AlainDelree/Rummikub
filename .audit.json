@@ -1,0 +1,8 @@
+{
+  "cas": ["C1"],
+  "roles": {
+    "interface": ["src/rummikub/ui"],
+    "métier": ["src/rummikub/moteur"],
+    "persistance": ["src/rummikub/persistance"]
+  }
+}

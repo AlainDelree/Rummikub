@@ -162,6 +162,8 @@ def executer_autotest(argv=None) -> int:
                 print(msg)
                 sys.stdout.flush()
         except Exception:
+            # Message déjà conservé dans ``lignes`` ; une erreur d'écriture/
+            # d'encodage sur stdout ne doit pas interrompre l'autotest.
             pass
 
     code = _executer(emettre)
@@ -174,6 +176,8 @@ def executer_autotest(argv=None) -> int:
                 if sys.stdout is not None:
                     print(f"[ATTENTION] Ecriture du rapport impossible ({exc!r}).")
             except Exception:
+                # Dernier repli : même l'affichage de cet avertissement a
+                # échoué (pas de console) ; il n'y a plus rien à faire.
                 pass
 
     return code

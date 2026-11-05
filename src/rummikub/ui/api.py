@@ -258,6 +258,9 @@ class Api:
                                    "plateau_apres": plateau_apres},
                                   f, ensure_ascii=False)
                 except Exception:
+                    # Le dump de diagnostic est lui-même best-effort : s'il
+                    # échoue (dossier inaccessible, disque plein...), on ne
+                    # bloque pas le tour de l'IA pour autant.
                     pass
                 etat["dernier_coup_ia"]["resume"] = ""
                 etat["dernier_coup_ia"]["etapes"] = []

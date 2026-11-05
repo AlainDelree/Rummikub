@@ -435,6 +435,8 @@ def _a_solution_primale(h) -> bool:
             # kSolutionStatusFeasible == 2 dans HiGHS.
             return int(statut) >= 2
     except Exception:
+        # Attribut absent selon la version de HiGHS : repli immédiat sur
+        # getModelStatus() ci-dessous, qui donne la même information.
         pass
     return h.getModelStatus() == highspy.HighsModelStatus.kOptimal
 
@@ -544,6 +546,9 @@ def _resoudre_modele(table_tiles, chevalet, mise_faite, mise_min,
             sol.col_value = v[:n]
             h.setSolution(sol)
         except Exception:
+            # Point de départ best-effort (accélère seulement la preuve
+            # d'optimalité) : en cas d'échec, HiGHS résout sans warm start,
+            # sans perte de correction du résultat.
             pass
 
     def _fixer(couts, valeur):

@@ -57,6 +57,9 @@ def limite_noeuds(mip_max_nodes: int | None):
                 compteur["noeuds"] += int(info.mip_node_count)
                 compteur["simplex_iters"] += int(info.simplex_iteration_count)
             except Exception:
+                # Compteurs purement informatifs pour la mesure de volume :
+                # si l'objet HiGHS ne les expose pas (version différente),
+                # on continue sans compter, sans affecter la résolution.
                 pass
             compteur["appels_run"] += 1
             return resultat

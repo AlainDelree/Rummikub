@@ -20,19 +20,35 @@ if not getattr(sys, "frozen", False):
 def _lancer_actualise_ui_si_flag():
     """Si Actualise a déposé un flag de mise à jour dans le dossier
     d'installation, lance ActualiseUI.exe avant l'ouverture de la fenêtre.
-    Ne doit JAMAIS bloquer le démarrage de Rummikub."""
+    Ne doit JAMAIS bloquer le démarrage de Rummikub. Les deux chemins du
+    flag (``actualise_ui``, ``bat``) sont validés avant tout lancement
+    (SEC-003, voir rummikub.actualise.valider_chemin_actualise) : un chemin
+    absent, de mauvaise extension ou hors de la racine Actualise autorisée
+    est ignoré, sans lancer quoi que ce soit."""
     _flag = Path(sys.executable).parent / "actualise_update.flag"
-    if _flag.exists():
-        try:
-            _data = json.loads(_flag.read_text(encoding="utf-8"))
-            subprocess.Popen([
-                _data["actualise_ui"],
-                "--bat", _data["bat"],
-                "--flag", str(_flag),
-                "--relancer", sys.executable,
-            ])
-        except Exception:
-            pass  # ne jamais bloquer le démarrage de Rummikub
+    if not _flag.exists():
+        return
+    try:
+        _data = json.loads(_flag.read_text(encoding="utf-8"))
+    except Exception:
+        return  # drapeau illisible : ne jamais bloquer le démarrage
+    from rummikub.actualise import valider_chemin_actualise
+    _actualise_ui = valider_chemin_actualise(_data.get("actualise_ui"))
+    _bat = valider_chemin_actualise(_data.get("bat"))
+    if _actualise_ui is None or _bat is None:
+        print("[Rummikub] Flag de mise a jour ignore : chemin actualise_ui/bat "
+              "invalide ou hors de la racine Actualise autorisee.",
+              file=sys.stderr)
+        return
+    try:
+        subprocess.Popen([
+            str(_actualise_ui),
+            "--bat", str(_bat),
+            "--flag", str(_flag),
+            "--relancer", sys.executable,
+        ])
+    except Exception:
+        pass  # ne jamais bloquer le démarrage de Rummikub
 
 
 def _lancer_actualise_au_demarrage():

@@ -11,15 +11,28 @@ _WEB = Path(__file__).parent / "web"
 def _handler_fermeture_actualise():
     """À la fermeture de Rummikub, si Actualise a déposé un flag de mise à
     jour, retire le flag et lance le bat de mise à jour. Ne doit JAMAIS
-    empêcher la fermeture de la fenêtre."""
+    empêcher la fermeture de la fenêtre. Le chemin ``bat`` est validé avant
+    lancement (SEC-003, voir rummikub.actualise.valider_chemin_actualise) et
+    lancé SANS shell : un chemin absent, de mauvaise extension ou hors de la
+    racine Actualise autorisée est ignoré, sans lancer quoi que ce soit."""
     _flag = Path(sys.executable).parent / "actualise_update.flag"
-    if _flag.exists():
-        try:
-            _data = json.loads(_flag.read_text(encoding="utf-8"))
-            _flag.unlink(missing_ok=True)
-            subprocess.Popen([_data["bat"]], shell=True)
-        except Exception:
-            pass
+    if not _flag.exists():
+        return
+    try:
+        _data = json.loads(_flag.read_text(encoding="utf-8"))
+    except Exception:
+        return  # drapeau illisible : ne jamais bloquer la fermeture
+    _flag.unlink(missing_ok=True)
+    from rummikub.actualise import valider_chemin_actualise
+    _bat = valider_chemin_actualise(_data.get("bat"))
+    if _bat is None:
+        print("[Rummikub] Bat de mise a jour ignore : chemin invalide ou "
+              "hors de la racine Actualise autorisee.", file=sys.stderr)
+        return
+    try:
+        subprocess.Popen([str(_bat)])
+    except Exception:
+        pass  # ne jamais empêcher la fermeture de Rummikub
 
 
 class ApplicationRummikub:
