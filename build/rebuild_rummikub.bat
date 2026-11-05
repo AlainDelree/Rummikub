@@ -176,6 +176,41 @@ call ".venv_build\Scripts\python.exe" -m pip install pyinstaller
 if errorlevel 1 ( echo [ERREUR] Echec de pip install pyinstaller & popd & exit /b 1 )
 
 REM ===========================================================================
+REM  ETAPE 2bis : liste exacte des versions installees (issue #238)
+REM  Ecrite ICI, juste apres l'installation des dependances (y compris
+REM  pyinstaller, ci-dessus) et AVANT la suppression de %BUILDDIR% a l'etape 9 :
+REM  c'est le seul moment ou .venv_build existe encore et contient les
+REM  versions REELLEMENT installees. Sortie non versionnee (comme
+REM  installeur\output) : copiee dans build\ du worktree ICI, puis vers le
+REM  dossier fixe hors worktree a l'etape 8, a cote de l'installeur et de
+REM  l'archive, dans tous les modes. Redondante une fois requirements.txt
+REM  epingle (issue separee, a partir de ce fichier). Fichier ASCII pur.
+REM ===========================================================================
+echo.
+echo [2bis/9] Liste des versions installees (versions_build.txt)...
+set "GITCOMMIT="
+for /f "usebackq delims=" %%C in (`git -C "%ORIGDIR%" rev-parse HEAD`) do set "GITCOMMIT=%%C"
+set "PYVER="
+for /f "usebackq delims=" %%V in (`.venv_build\Scripts\python.exe -c "import sys; print(sys.version.split()[0])"`) do set "PYVER=%%V"
+set "PIPVER="
+for /f "usebackq delims=" %%V in (`".venv_build\Scripts\python.exe" -m pip --version`) do set "PIPVER=%%V"
+set "VERSIONSFILE=%BUILDDIR%\versions_build.txt"
+> "!VERSIONSFILE!" echo Versions installees - build Rummikub
+>> "!VERSIONSFILE!" echo Date         : %date% %time%
+>> "!VERSIONSFILE!" echo Numero build : !EXEBUILD!
+>> "!VERSIONSFILE!" echo Commit       : !GITCOMMIT!
+>> "!VERSIONSFILE!" echo Python       : !PYVER!
+>> "!VERSIONSFILE!" echo pip          : !PIPVER!
+>> "!VERSIONSFILE!" echo.
+".venv_build\Scripts\python.exe" -m pip list --format=freeze >> "!VERSIONSFILE!"
+if errorlevel 1 ( echo [ERREUR] Echec de la generation de versions_build.txt & popd & exit /b 1 )
+
+if not exist "%ORIGDIR%\build" mkdir "%ORIGDIR%\build"
+copy /y "!VERSIONSFILE!" "%ORIGDIR%\build\versions_build.txt" >nul
+if errorlevel 1 ( echo [ERREUR] Echec de la copie de versions_build.txt vers le worktree. & popd & exit /b 1 )
+echo       Ecrit : %ORIGDIR%\build\versions_build.txt
+
+REM ===========================================================================
 REM  ETAPE 3 : signaler une instance de Rummikub.exe en cours (sans la fermer)
 REM  Le build se fait entierement dans %BUILDDIR% (copie locale), qui ne
 REM  verrouille aucun fichier reellement lu ou ecrit par une instance en cours
@@ -404,6 +439,8 @@ copy /y "%ORIGDIR%\installeur\output\!SETUPNAME!" "%FIXEDSHARE%\!SETUPNAME!" >nu
 if errorlevel 1 ( echo [ERREUR] Echec de la copie de !SETUPNAME! vers %FIXEDSHARE%. & exit /b 1 )
 copy /y "%ORIGDIR%\installeur\output\!ZIPNAME!" "%FIXEDSHARE%\!ZIPNAME!" >nul
 if errorlevel 1 ( echo [ERREUR] Echec de la copie de !ZIPNAME! vers %FIXEDSHARE%. & exit /b 1 )
+copy /y "%ORIGDIR%\build\versions_build.txt" "%FIXEDSHARE%\versions_build.txt" >nul
+if errorlevel 1 ( echo [ERREUR] Echec de la copie de versions_build.txt vers %FIXEDSHARE%. & exit /b 1 )
 
 set "FIXEDSETUPSIZE=0"
 for /f "usebackq delims=" %%S in (`powershell -NoProfile -Command "(Get-Item '%FIXEDSHARE%\!SETUPNAME!').Length"`) do set "FIXEDSETUPSIZE=%%S"
@@ -412,6 +449,7 @@ for /f "usebackq delims=" %%S in (`powershell -NoProfile -Command "(Get-Item '%F
 echo       Copie vers %FIXEDSHARE% terminee.
 echo       !SETUPNAME! : !FIXEDSETUPSIZE! octets
 echo       !ZIPNAME! : !FIXEDZIPSIZE! octets
+echo       versions_build.txt : copie
 
 REM ===========================================================================
 REM  ETAPE 8bis (--publier uniquement) : version.json + SHA-256 + commit local
@@ -461,6 +499,13 @@ echo   Inno Setup utilise : %ISCC%
 echo   Dossier fixe        : %FIXEDSHARE%
 echo     !SETUPNAME! : !FIXEDSETUPSIZE! octets
 echo     !ZIPNAME! : !FIXEDZIPSIZE! octets
+echo     versions_build.txt : copie
+echo ============================================================================
+echo   --- Versions installees (issue #238) ---
+echo   Fichier : %ORIGDIR%\build\versions_build.txt
+echo             %FIXEDSHARE%\versions_build.txt
+echo   Dependances directes (requirements.txt) :
+findstr /i /r /c:"^highspy==" /c:"^numpy==" /c:"^pywebview==" /c:"^pyinstaller==" /c:"^pytest==" /c:"^pythonnet==" "%ORIGDIR%\build\versions_build.txt"
 echo ============================================================================
 if "%PUBLIER%"=="1" (
     echo.
