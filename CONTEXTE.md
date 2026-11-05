@@ -52,7 +52,7 @@ src/rummikub/
     solveur.py              Solveur de réarrangement global du plateau,
                             utilisé par Expert (voir §8bis, #186).
     verification_finition.py  Vérification de finition en fin de partie,
-                            Expert/Champion du Monde (§13, issue #221).
+                            Expert (§13, issue #221).
     description_coup.py     Résumé écrit + étapes du rejeu pas-à-pas d'un
                             coup de l'IA, à partir du plateau avant/après
                             (voir §12, #189).
@@ -252,9 +252,9 @@ de manche intermédiaire, classement final, affichage de l'égalité).
 Tout le cœur du projet est en place et testé :
 - ✅ Moteur (tuiles, validation, partie, tours, pioche, backup/annulation,
   scores, manches).
-- ✅ **IA implémentée** (`moteur/ia.py`) : 6 niveaux — Débutant, Facile,
-  Intermédiaire, Avancé, Expert, Champion du Monde (issue #213, §16), tous sur
-  un même modèle exact réglé par des paramètres (`moteur/niveaux.py`). Point
+- ✅ **IA implémentée** (`moteur/ia.py`) : 5 niveaux — Débutant, Facile,
+  Intermédiaire, Avancé, Expert (issue #213, §16), tous sur un même modèle
+  exact réglé par des paramètres (`moteur/niveaux.py`). Point
   d'entrée `jouer_ia(etat, joueur_index)`
   → `{"action": "jouer"|"piocher"|"passer", "ids_tuiles": [...],
   "nouveau_plateau": [...]}`. Les fonctions ne mutent jamais l'état ; tout coup
@@ -276,7 +276,7 @@ icône `assets/rummikub.ico` (facultative, absente → aucune icône).
   plateau, mise initiale, tours, pioche, backup/annulation.
 - `tests/test_ia.py` : les niveaux ne plantent pas et renvoient une action
   valide (+ tactiques de joker testées directement sur les fonctions
-  heuristiques). `tests/test_niveaux.py` (#213) : l'échelle des six niveaux et
+  heuristiques). `tests/test_niveaux.py` (#213) : l'échelle des cinq niveaux et
   l'affaiblissement paramétré (perturbation, oubli, reproductibilité, repli).
 - `tests/test_bilan.py` : lecture des journaux de parties et calcul du bilan
   par niveau d'IA (voir §9).
@@ -2161,453 +2161,17 @@ une au fur et à mesure que de futures issues les testent/implémentent.
   probabilité qu'elle serve à l'adversaire est élevée et que la garder ne
   compromet pas sa propre sortie. À relier à la piste 1 (réserve) et à
   l'évaluation sur deux tours. **Piste avancée, très difficile** (l'IA ne voit
-  pas la main adverse) : à ne considérer que pour un niveau au SOMMET de
-  l'échelle (Champion du Monde) et après les pistes plus simples.
+  pas la main adverse) : à ne considérer que pour un niveau au-dessus
+  d'Expert, aujourd'hui inexistant, et après les pistes plus simples.
 
-> **Note #213 — ces pistes alimentent les deux niveaux du haut.** La structure
-> cible de l'échelle (§16) réserve les stratégies multi-tours à **Expert**
-> (versions PARTIELLES, dosées) et **Champion du Monde** (versions COMPLÈTES).
-> Les pistes 1, 8 et 9 ci-dessus en sont les briques. Elles ne sont PAS
-> implémentées par #213 (qui met en place l'échelle, l'affaiblissement des
-> niveaux du bas et les outils de calibrage) : Expert et Champion du Monde y
-> restent provisoirement calés sur le solveur un-tour complet (= Avancé).
-
-- [x] **Réalisée (#219) — brique « Inconnues »** : la précision de la piste 9
-  (« l'IA connaît les 106 tuiles, les siennes et celles du tapis ; par
-  soustraction, elle connaît l'ensemble exact des tuiles ailleurs ») est
-  désormais un **module de calcul autonome**, `moteur/inconnues.py`,
-  indépendant du solveur, des niveaux et de l'interface — il ne modifie AUCUN
-  comportement de jeu, c'est une pure brique de lecture.
-
-  **Ce que fournit le module** :
-  - `calculer_inconnues(plateau, main, tailles_mains_adversaires,
-    taille_pioche)` : cœur du calcul, à partir du tapis, de sa propre main et
-    des TAILLES (jamais le contenu) des mains adverses + de la pioche.
-    Retourne un `Inconnues` (tuiles inconnues avec leur nombre d'exemplaires
-    restants — 0, 1 ou 2 ; 2 pour les jokers, traités comme un seul type).
-  - `calculer_inconnues_depuis_etat(etat, index_joueur)` : raccourci depuis
-    l'état de partie complet (`moteur/partie.py`) — n'appelle que `len(...)`
-    sur les chevalets adverses, jamais leur contenu (garde-fou anti-triche
-    vérifié par un test dédié : changer le contenu d'une main adverse sans
-    changer sa taille ne change aucun résultat).
-  - Probabilités uniformes (sans historique, sans « Indices ») :
-    `proba_instance_chez_adversaire`/`proba_instance_dans_pioche` (une tuile
-    inconnue prise au hasard — taille de la main / nombre d'inconnues) ;
-    `proba_tuile_chez_adversaire`/`_chez_un_adversaire_quelconque`/
-    `_dans_pioche` (au moins un exemplaire d'une tuile donnée — formule
-    hypergéométrique exacte, qui se réduit à la formule uniforme simple de
-    l'issue quand il ne reste qu'un seul exemplaire) ; `proba_joker_*` pour
-    les jokers spécifiquement.
-  - `Inconnues.exemplaires_restants(cle_ou_tuile)` : nombre d'exemplaires
-    encore possibles d'une tuile (sert à détecter qu'elle n'a plus de
-    voisines utilisables, voir « Tuiles vivantes » ci-dessous).
-  - `diagnostiquer_coherence(...)` : liste des anomalies (tuile vue en trop,
-    total incohérent) sans jamais lever d'exception — utilisé pour passer en
-    revue des journaux de parties réels potentiellement corrompus.
-
-  **Vérification** (`tests/test_inconnues.py`, pas de journaux réels dans ce
-  worktree isolé — `data/logs_parties` vide, test dédié qui s'ignore
-  proprement dans ce cas et s'activera de lui-même sur la machine d'Alain) :
-  5 parties simulées (2 à 4 IA, niveaux variés), 254 tours, 686 vérifications
-  par-joueur, **0 anomalie** — nombre de tuiles inconnues = mains adverses +
-  pioche, somme des probabilités d'un adversaire = taille de sa main, aucune
-  tuile comptée en trop. **Performance** (indicatif, aucun seuil bloquant) :
-  ≈ 0,12 ms par appel sur la machine de développement — négligeable devant le
-  solveur (≈ 180–215 ms par tour, voir §16).
-
-  **Stratégies qui s'appuieront sur cette brique (aucune implémentée ici)** :
-  « Indices » (affiner ces probabilités uniformes à partir du comportement
-  observé de l'adversaire — ce qu'il pose, ce qu'il garde) ; « Tuiles
-  vivantes » (`exemplaires_restants == 0` → plus de voisines possibles pour
-  une suite/un groupe) ; « Joker et réserve » (probabilité qu'un joker
-  récupérable soit encore disponible à l'adversaire, piste 8) ; « Course »
-  (estimer qui finira le premier à partir des tailles de main et des
-  probabilités de pioche) ; « Rétention » (piste 9 : probabilité qu'une tuile
-  retenue prive réellement l'adversaire) ; « Ouverture » (probabilité qu'une
-  tuile d'ouverture soit encore disponible). Toutes restent à construire
-  au-dessus de cette brique, dans des issues séparées — y compris la
-  modification de la finition en fin de partie.
-
-- [x] **Réalisée (#221) — brique « Deux tours », étape 1 : vérification de
-  finition en fin de partie.**
-
-  **Arbre des stratégies multi-tours et dépendances** (vue d'ensemble, pour
-  resituer chaque brique) :
-
-  ```
-  Inconnues (#219, fait)
-    └─ Indices (affiner les probabilités par l'observation — PAS FAIT)
-  Deux tours
-    ├─ étape 1 : vérification de finition en fin de partie (#221, FAIT)
-    ├─ étape 2 : garder un joker en main (#225, FAIT, Champion du Monde SEUL)
-    └─ Deux tours NOTÉS (évaluer chaque candidat par une fonction de score
-       du plateau à deux tours, pas seulement « peut finir » — PAS FAIT ;
-       dépend de l'étape 1 et d'Indices pour évaluer la main adverse)
-  Main restante (évaluation fine de la main restante au-delà du simple
-    décompte — PAS FAIT, déjà amorcée par l'évaluation #211 désactivée)
-  Course (estimer qui finira le premier — PAS FAIT ; dépend d'Inconnues et de
-    Main restante)
-  Rétention (piste 9, §13 — PAS FAIT ; dépend d'Inconnues, Indices, Deux
-    tours ET Course)
-  Ouverture (probabilité qu'une tuile d'ouverture soit encore disponible —
-    PAS FAIT ; dépend de Main restante, Deux tours, Course ET Inconnues)
-  Joker et réserve (piste 8, §13 — PAS FAIT ; dépend d'Inconnues)
-  ```
-
-  **Ce que fait l'étape 1 (#221)** : pour **Expert et Champion du Monde
-  seulement**, et **seulement en fin de partie** (chevalet d'au plus
-  `niveaux.SEUIL_FIN_PARTIE_VERIF_FINITION` tuiles, **5** par défaut — seul
-  endroit à régler, avec l'interrupteur par niveau `Bridage.verif_finition`,
-  `moteur/niveaux.py`) : si le meilleur coup du solveur exact ne vide pas
-  déjà le chevalet, on construit jusqu'à deux candidats — ce meilleur coup, et
-  le meilleur coup SANS réarrangement du plateau (`ia._coup_sans_
-  rearrangement`, qui ne reprend jamais un joker déjà posé — approximation
-  documentée de « laisser les jokers en place », voir plus restrictive que
-  nécessaire mais sans jamais risquer l'inverse) — et on demande au MÊME
-  solveur exact si l'un d'eux permettrait de vider ENTIÈREMENT le chevalet
-  restant au tour suivant, en supposant le tapis inchangé par l'adversaire
-  entre les deux tours (hypothèse optimiste assumée, voir ci-dessous). Le
-  premier candidat qui permet de finir est joué (le meilleur coup du solveur
-  toujours vérifié en premier, donc préféré à égalité) ; si aucun ne permet
-  de finir, le meilleur coup du solveur est joué comme avant #221. **Priorité
-  absolue, qui prime sur tout** (§13) : un coup qui vide déjà le chevalet CE
-  tour-ci n'est jamais soumis à la vérification. Les appels supplémentaires
-  au solveur partagent la MÊME échéance de temps que le coup normal du tour
-  (pas de budget séparé) ; si elle est épuisée, si `highspy`/`numpy` manquent,
-  ou en cas d'erreur, l'IA joue comme avant #221, sans erreur visible — le
-  journal de partie trace quand même ce qui s'est passé (clé `verif_finition`
-  de l'action, **sept statuts affinés par #223** — `verification_finition.
-  LIBELLES` pour les libellés exacts, même esprit que la clé `solveur` de
-  #211) :
-  - `non_applicable` : chevalet trop grand (> `SEUIL_FIN_PARTIE_VERIF_FINITION`) ;
-  - `pas_de_coup_a_comparer` : pas de coup « jouer » à comparer (pioche/passe) ;
-  - `solveur_non_exact` : coup du tour pas décidé par le modèle exact
-    (dépendances absentes, ou repli déjà survenu faute de budget) ;
-  - `budget_epuise` : budget de temps RÉELLEMENT épuisé pendant la vérification
-    elle-même (distinct de `solveur_non_exact` depuis #223) ;
-  - `appliquee_meilleur_suffit` : le meilleur coup du solveur permettait déjà
-    de finir au tour suivant (aucun changement, mais pas faute de candidat) ;
-  - `appliquee_aucun_candidat` : aucun candidat ne permet de finir (aucun
-    changement, faute de candidat — avant #223, confondu avec le statut
-    précédent sous `appliquee_sans_changement`, masquant deux situations très
-    différentes dans les rapports de campagne) ;
-  - `appliquee_autre_coup` : un autre candidat permet de finir là où le
-    meilleur coup du solveur ne le permettait pas (changement réel).
-
-  Module dédié : `moteur/verification_finition.py` ; intégration dans
-  `moteur/ia.py` (`_verifier_finition_fin_de_partie`, `_candidats_finition`),
-  branchée dans `jouer_niveau_bride` juste après le court-circuit « coup
-  gagnant ». Le solveur lui-même, l'interface, et les niveaux Débutant à
-  Avancé ne sont PAS modifiés.
-
-  **Hypothèse optimiste assumée (limite connue)** : l'adversaire ne touche
-  pas au tapis entre les deux tours — faux en général, mais nécessaire pour
-  rester calculable sans les briques « Indices »/« Main restante » (ci-dessus,
-  pas encore faites). Ne peut jamais DÉGRADER le jeu (la règle de priorité au
-  coup gagnant protège toujours le cas réellement important), seulement
-  manquer parfois une occasion de mieux jouer si l'adversaire modifie
-  effectivement le tapis entre les deux tours.
-
-  **Constat mathématique inattendu, découvert en construisant les positions
-  de test de cette issue** : dans ce moteur, un coup peut librement
-  recomposer la TOTALITÉ du plateau en un seul tour (seule contrainte :
-  aucune tuile déjà posée ne disparaît, voir §4). Il en découle qu'un coup
-  PROUVÉ optimal (nombre de tuiles posées maximal, prouvé par le modèle
-  exact) qui ne vide pas le chevalet ne peut JAMAIS avoir de candidat qui
-  permette de finir au tour suivant sous l'hypothèse ci-dessus — sans quoi ce
-  coup aurait lui-même déjà pu finir CE tour en combinant les deux coups en
-  un seul (même conservation, même validité, un coup direct existerait donc
-  déjà et le solveur, cherchant le MAXIMUM, l'aurait trouvé). Vérifié par
-  construction sur plus d'une dizaine de positions pendant cette issue
-  (§ tests). **Conséquence pratique** : le mécanisme ne peut réellement
-  changer le coup joué (`appliquee_autre_coup`) que lorsque le coup marqué
-  comme venant du modèle exact n'a PAS été prouvé optimal (budget de temps
-  serré, cas rare mais réel) — pas dans le cas général qui a motivé l'exemple
-  d'Alain (« 3 jaune coincé »), qui suppose implicitement qu'un joueur humain
-  ne calcule PAS déjà le maximum global d'un coup, contrairement à ce solveur.
-  Documenté dans `moteur/verification_finition.py` et dans les tests
-  (`tests/test_verification_finition.py`), qui testent donc la DÉCISION (au
-  moins dix positions fixes, dont plusieurs avec l'oracle « peut finir »
-  contrôlé directement, puisqu'une position réelle où le solveur prouvé
-  optimal se tromperait sans raison n'existe pas dans ce moteur) plutôt que
-  d'imposer une position « naturelle » introuvable.
-
-  **Mesure par simulation** (`scripts/comparer_niveaux_ia.py`, nouveau
-  drapeau `--sans-verif-finition` dans le même esprit que `--sans-exact`/
-  `--sans-preferer-simple` ; nouvelles statistiques : fréquence d'activation,
-  appels supplémentaires au solveur par tour concerné moyenne/maximum) —
-  voir le rapport de clôture de #221 pour les chiffres (donnes, taux de
-  victoire avec IC, blocages par niveau). **Depuis #223, Expert ET Champion
-  du Monde jouent par le MÊME chemin que le jeu** (`ia.jouer_niveau_bride`,
-  ce que `jouer_ia` appelle aussi après résolution du niveau) : plus d'appel
-  manuel à la vérification de finition ni d'échéance propre au script —
-  seule différence avec `jouer_ia`, Expert reçoit `on_repli`/`on_aucun`/
-  `preferer_simple`/`eval_config` (points d'observation du moteur, pas une
-  logique dupliquée) pour que la campagne compte les replis et compare les
-  réglages d'évaluation. Le moteur détecte déjà un blocage par pioche
-  épuisée (`pioche_vide`, compté dans `fins` par la campagne) — **rien n'y
-  est changé par cette issue**, conformément à son périmètre (signaler
-  seulement).
-
-  **Incident à l'origine de #223, et garde-fou qui en résulte.** Une
-  campagne Avancé contre Expert, lancée pour mesurer #221, a tourné à vide :
-  le terminal d'Alain pointait par défaut vers un AUTRE interpréteur Python,
-  sans `highspy`/`numpy` — Expert s'est replié sur Avancé à CHAQUE tour
-  (766/766) sans que rien ne le signale, et le rapport a même étiqueté ces
-  replis « coup légitimement impossible, aucun rapport avec la vitesse »,
-  ce qui était faux (c'était en réalité un repli faute de dépendances).
-  **Conséquence (#223, point 1) : avant de lancer une campagne**, vérifier
-  que l'interpréteur Python du terminal courant a bien `highspy`/`numpy` :
-
-  ```
-  python3 -c "import highspy, numpy; print('OK', highspy, numpy)"
-  ```
-
-  `scripts/comparer_niveaux_ia.py`, `scripts/valider_bas_echelle.py` et
-  `scripts/echelle_niveaux.py` refusent maintenant de démarrer (code de
-  sortie non nul, message nommant l'interpréteur réellement utilisé) si ce
-  n'est pas le cas — sauf `--sans-exact` (désactivation volontaire et
-  assumée, uniquement disponible sur `comparer_niveaux_ia.py`), qui n'est
-  jamais concerné par ce garde-fou. Voir `scripts/_verif_solveur_exact.py`.
-  L'en-tête de chaque rapport/fichier de résultats indique l'interpréteur et
-  les versions de `highspy`/`numpy` (ou leur absence volontaire). Dans le
-  rapport de `comparer_niveaux_ia.py`, les causes de repli d'Expert sont
-  séparées (solveur exact indisponible / budget dépassé / autre anomalie),
-  avec un avertissement visible en tête de rapport si des replis par
-  indisponibilité ont eu lieu pendant la campagne ; le cas légitime
-  « aucun coup possible » (le modèle exact PROUVE qu'il n'y a rien à jouer)
-  est compté séparément, PAS comme un repli.
-
-  **#224 étend ce garde-fou à TOUS les scripts qui font jouer l'IA** (pas
-  seulement les trois ci-dessus) : `scripts/simulation_ia.py`,
-  `scripts/profil_joueur.py`, `scripts/calibrer_niveaux.py`,
-  `scripts/verifier_simplicite_expert.py`,
-  `scripts/generer_corpus_positions_222.py`, `scripts/match_solveurs.py` et
-  `scripts/_campagne_186.py` refusent désormais, eux aussi, de démarrer sans
-  highspy/numpy (même message, même code de sortie non nul ; aucun d'eux
-  n'offre `--sans-exact`, donc toujours exigé). `tests/
-  test_garde_fou_scripts_tous.py` parcourt `scripts/*.py`, repère par
-  recherche de texte les scripts qui font jouer l'IA (appel à `jouer_ia(`,
-  `jouer_niveau_bride(`, `jouer_niveau_expert(`, `creer_partie(`, ou import de
-  `comparer_niveaux_ia`) et échoue si l'un d'eux n'appelle pas le garde-fou et
-  ne figure pas dans sa liste d'exceptions justifiées — pour qu'un futur
-  script de mesure ne puisse plus être oublié. Scripts HORS de ce périmètre
-  (ne font PAS jouer l'IA, donc non concernés) : les scripts d'analyse de
-  journaux déjà joués (`analyser_coups_rates.py`, `analyser_partie.py`,
-  `bilan_parties.py`, `verifier_cas_reference.py`), les comparaisons de
-  solveur qui ne passent jamais par un niveau d'IA
-  (`comparer_solveur_exact.py` contre la bibliothèque `rummikub-solver`,
-  `verifier_solveur_exhaustif.py` contre une recherche exhaustive — aucun des
-  deux ne dépend de highspy/numpy), la mesure directe du solveur sur un
-  corpus figé (`mesurer_volume_solveur_222.py`, qui rapporte déjà
-  honnêtement un statut `indisponible` par position et inclut l'en-tête
-  machine/dépendances via `_rapport_duels.entete_machine`), et les modules
-  utilitaires internes (`_corpus_positions_222.py`, `_limite_temps_ferme.py`,
-  `_mesure_volume_222.py`, `_rapport_duels.py`, `solveur_exact.py`
-  l'adaptateur de bibliothèque). Pour vérifier l'interpréteur courant avant
-  toute campagne :
-
-  ```
-  python3 -c "import highspy, numpy; print('OK', highspy, numpy)"
-  ```
-
-  **Deux idées d'Alain, consignées, non implémentées :**
-  - **(a) Calcul pendant le tour de l'humain** : l'IA pourrait réfléchir
-    pendant que l'humain joue plutôt qu'à son propre tour seulement. Distinguo
-    important : pendant une PIOCHE de l'humain, le tapis ne change pas — un
-    calcul plus profond (plus de temps, éventuellement plusieurs coups à
-    l'avance) reste valable, avec sa main qui comptera une tuile de plus au
-    tour suivant ; pendant une POSE de l'humain, le tapis change — il faudrait
-    relancer le calcul (et, une fois les probabilités en place, les mettre à
-    jour d'après ce qu'il vient de poser). Lié à la brique Indices.
-  - **(b) Pioche vide** : ne pas s'en préoccuper pour l'instant (aucune
-    stratégie dédiée) — seulement la signaler lors des tournois/campagnes de
-    simulation (déjà fait par `comparer_niveaux_ia.py`, voir ci-dessus et
-    §9). Pas de piste à développer ici, juste une non-régression à vérifier :
-    le moteur approxime déjà « tous bloqués » par « pioche épuisée », voir §5.
-
-- [x] **Réalisée (#225) — brique « Deux tours », étape 2 : garder un joker en
-  main, Champion du Monde SEUL.**
-
-  Troisième candidat de la vérification de finition (§13, #221/#223
-  ci-dessus) : Alain a observé qu'un joueur avec un joker en main et peu de
-  tuiles peut avoir intérêt à NE PAS le jouer tout de suite, pour le garder
-  jusqu'au tour où il permettra de tout poser d'un coup. Sur la campagne de
-  mesure de #223 (200 parties Avancé/Expert, 100 donnes en miroir), la
-  vérification de finition a tourné jusqu'au bout 901 fois sans jamais
-  changer un coup dans 881 cas — ce cas précis (joker gardé) n'avait jamais
-  été testé, d'où cette issue.
-
-  **Contrairement à l'étape 1 (#221), réservée à Expert ET Champion du
-  Monde, cette étape 2 est réservée à Champion du Monde SEUL** —
-  `Bridage.garder_joker_fin_partie` (`moteur/niveaux.py`), `False` par
-  défaut, `True` uniquement pour `"Champion du Monde"`. **Expert reste donc
-  le niveau de RÉFÉRENCE, strictement inchangé** par cette issue — le test
-  de mesure attendu est un duel Expert/Champion du Monde (et non plus
-  Avancé/Expert comme pour #221), plus une comparaison de Champion du Monde
-  avec et sans la stratégie (voir plus bas).
-
-  **Deux réglages, au même endroit que `SEUIL_FIN_PARTIE_VERIF_FINITION`
-  (`moteur/niveaux.py`)** :
-  - `SEUIL_FIN_PARTIE_VERIF_FINITION` (réutilisé tel quel, pas de second
-    seuil de taille de chevalet) ;
-  - `SEUIL_PRUDENCE_ADVERSAIRE_GARDE_JOKER` (valeur de départ **3**) : en
-    dessous de ce nombre de tuiles dans la main d'un adversaire, Champion du
-    Monde ne tente PAS de garder son joker — l'adversaire pourrait finir
-    avant que ça ne paie. Information **publique** (le nombre de tuiles
-    restantes de chaque joueur est visible de tous dans ce jeu) : ce réglage
-    ne lit **jamais** le contenu de la main adverse, seulement sa taille
-    (`len(joueur["chevalet"])`).
-
-  **Le troisième candidat** (`moteur/ia._coup_sans_joker_chevalet`, appelé
-  depuis `_candidats_finition` quand `garder_joker` est actif ET que
-  `_peut_tenter_garde_joker` donne son accord — joker en main ET aucun
-  adversaire sous le seuil de prudence) : résout la position avec UN joker
-  du chevalet **retiré pour ce seul calcul**, via le même modèle exact
-  (`_coup_exact`). Ce candidat ne vaut (n'est ajouté à la liste) que s'il
-  pose au moins une tuile et diffère du meilleur coup du solveur
-  (`verification_finition.coups_differents`, déjà utilisé par le candidat
-  « sans réarrangement » de #221). **Pour savoir s'il permet de finir au
-  tour suivant, la vérification utilise le chevalet restant AVEC le
-  joker** : le joker retiré ne l'était que pour calculer QUEL coup jouer ce
-  tour-ci ; comme ce coup ne pose jamais le joker (par construction), celui-
-  ci reste dans le chevalet d'origine que `verification_finition.
-  _etat_apres_coup` réduit ensuite des seules tuiles réellement posées —
-  c'est donc bien le joker qui doit permettre de finir au tour suivant.
-  **Règle de décision inchangée** (point 4 de #221) : un coup qui vide déjà
-  le chevalet n'est jamais soumis à la vérification ; sinon le premier
-  candidat qui permet de finir au tour suivant est joué, dans l'ordre
-  [meilleur coup du solveur, sans réarrangement, garde le joker] — le
-  meilleur coup du solveur toujours préféré à égalité.
-
-  **Nouveau statut, 8e de `verification_finition.LIBELLES`** —
-  `appliquee_garde_joker` (« appliquée : un coup qui garde le joker a été
-  choisi ») : cas particulier d'`appliquee_autre_coup` (#221), distingué
-  pour les compteurs de campagne ci-dessous. Compte comme un coup
-  « changé » dans la fréquence d'activation du rapport, au même titre
-  qu'`appliquee_autre_coup`.
-
-  **Compteurs** (journal de partie, clé `garde_joker` de `logger_action`
-  — voir `persistance/journal.py` — et rapport de
-  `scripts/comparer_niveaux_ia.py`), portés par chaque coup de Champion du
-  Monde en fin de partie avec un joker en main (`coup["garde_joker_info"]`,
-  posée par `ia._verifier_finition_fin_de_partie`, **jamais** pour
-  Expert/Avancé puisque `garder_joker` y est toujours `False`) :
-  - `joker_en_main` : ce tour comptait un joker dans le chevalet (fin de
-    partie, Champion du Monde) ;
-  - `candidat_existe` : le troisième candidat a pu être construit (joker
-    présent, adversaire pas trop proche, coup valide et différent) ;
-  - `permet_de_finir` : `True`/`False` si la question a été **effectivement
-    tranchée** par `verifier` (elle ne l'est que si ce candidat a été
-    atteint — ni `candidats[0]` ni le candidat sans réarrangement ne
-    suffisaient déjà, et le budget de temps n'a pas été épuisé avant de
-    l'atteindre), `None` sinon (compté NI comme « permet » NI comme « ne
-    permet pas » — limite assumée du court-circuit de `verifier`, qui
-    s'arrête au premier candidat qui finit) ;
-  - `choisi` : ce candidat a été le coup réellement joué
-    (`appliquee_garde_joker`).
-
-  Pour les **parties où la stratégie a été CHOISIE au moins une fois**
-  (`comparer_niveaux_ia.comparer`, liste `parties_garde_joker`), le rapport
-  indique **qui a gagné** chacune (niveau vainqueur, ou « nulle ») — plus
-  informatif qu'un taux de victoire global noyé dans les parties où la
-  stratégie ne s'est jamais appliquée (rare par construction, voir
-  l'incitatif chiffré de #223/#221 ci-dessus).
-
-  **Nombre de manches** : le coût d'un joker resté en main en fin de manche
-  est lu depuis le moteur (`score._penalite_tuile`, réglage
-  `valeur_joker_penalite` — **30 points par défaut**, configurable,
-  `reglages.DEFAUTS`) et rapporté par `comparer_niveaux_ia.py`. **Première
-  version** : la règle du troisième candidat ci-dessus s'applique à
-  l'identique quel que soit `--manches` (le seul réglage de prudence est le
-  seuil sur l'adversaire, tâche 1) — **non implémenté, piste pour une
-  future issue** : en plusieurs manches, une manche perdue à cause d'un
-  joker resté en main coûte des points qui s'accumulent au score cumulé
-  (voir piste 7, §13 plus haut) ; le seuil de prudence sur l'adversaire
-  devrait sans doute être **relevé** quand une manche perdue coûte cher
-  (`nb_manches` élevé et/ou score déjà serré), pour ne risquer de garder le
-  joker que lorsque le gain probable dépasse largement ce risque. Alain
-  tranchera une fois les compteurs ci-dessus mesurés sur de vraies
-  campagnes à 1 et plusieurs manches.
-
-  **Comparaison « avec / sans »** : nouveau drapeau
-  `--sans-garde-joker` de `scripts/comparer_niveaux_ia.py` (même esprit que
-  `--sans-verif-finition`), qui désactive la stratégie pour Champion du
-  Monde SEUL (`comparer_niveaux_ia._garde_joker_desactive`) — permet de
-  lancer Champion du Monde contre lui-même, une fois avec et une fois sans,
-  même graine, pour isoler l'effet de cette seule stratégie.
-
-  **Comparaison appariée, plus sensible qu'un taux de victoire global**
-  (`--export-resultats FICHIER` de `comparer_niveaux_ia.py` +
-  `scripts/comparer_campagnes_appariees.py`, point 5bis) : à la même
-  graine, deux campagnes (avec/sans la stratégie) jouent EXACTEMENT les
-  mêmes donnes dans le même ordre, donc un match ne peut différer entre les
-  deux fichiers QUE si un coup a réellement changé en cours de route —
-  beaucoup plus sensible que de comparer deux taux de victoire globaux
-  noyés dans les parties (la grande majorité) jamais concernées par la
-  stratégie. `--export-resultats` écrit un fichier JSON Lines (un match par
-  ligne : donne, ordre des joueurs, vainqueur, scores) ;
-  `comparer_campagnes_appariees.py` lit deux fichiers et rapporte le nombre
-  de parties identiques, le nombre de parties dont le vainqueur diffère
-  dans chaque sens, et un **test des signes** (sans dépendance externe —
-  somme exacte des deux queues de la loi binomiale(n, 0,5)) sur les seules
-  parties qui divergent avec une direction nette. **Avertissement du
-  rapport, à ne jamais oublier** : une partie peut aussi diverger entre deux
-  campagnes à la même graine pour une raison SANS AUCUN LIEN avec la
-  stratégie testée — une simple variation du budget de temps réellement
-  consommé par le solveur exact (charge de la machine au moment de
-  l'exécution) peut faire basculer un coup d'un tour entre deux exécutions
-  par ailleurs identiques. Une partie divergente est un CANDIDAT à
-  inspecter (journal de la partie), pas une preuve.
-
-  **Essai attendu, deux donnes au premier plan, sans simulation longue**
-  (point 7 de l'issue) — commandes prêtes à copier (`/usr/bin/python3`
-  requis par le garde-fou de #223/#224, `nice -n 19` pour ne pas geler la
-  machine, sortie hors dépôt, notification en fin de commande) :
-
-  ```
-  nice -n 19 /usr/bin/python3 scripts/comparer_niveaux_ia.py \
-      --niveau-a Expert --niveau-b "Champion du Monde" \
-      --donnes 300 --seed 1 --manches 1 \
-      2>&1 | tee /tmp/rummikub_225_expert_vs_champion_1manche.log \
-      && (command -v notify-send >/dev/null && notify-send "Campagne #225 (1 manche) terminée")
-
-  nice -n 19 /usr/bin/python3 scripts/comparer_niveaux_ia.py \
-      --niveau-a Expert --niveau-b "Champion du Monde" \
-      --donnes 300 --seed 1 --manches 3 \
-      2>&1 | tee /tmp/rummikub_225_expert_vs_champion_3manches.log \
-      && (command -v notify-send >/dev/null && notify-send "Campagne #225 (3 manches) terminée")
-
-  nice -n 19 /usr/bin/python3 scripts/comparer_niveaux_ia.py \
-      --niveau-a "Champion du Monde" --niveau-b "Champion du Monde" \
-      --donnes 300 --seed 2 --export-resultats /tmp/rummikub_225_avec.jsonl \
-      2>&1 | tee /tmp/rummikub_225_champion_avec.log \
-      && (command -v notify-send >/dev/null && notify-send "Campagne #225 AVEC terminée")
-
-  nice -n 19 /usr/bin/python3 scripts/comparer_niveaux_ia.py \
-      --niveau-a "Champion du Monde" --niveau-b "Champion du Monde" \
-      --donnes 300 --seed 2 --sans-garde-joker \
-      --export-resultats /tmp/rummikub_225_sans.jsonl \
-      2>&1 | tee /tmp/rummikub_225_champion_sans.log \
-      && (command -v notify-send >/dev/null && notify-send "Campagne #225 SANS terminée")
-
-  /usr/bin/python3 scripts/comparer_campagnes_appariees.py \
-      /tmp/rummikub_225_avec.jsonl /tmp/rummikub_225_sans.jsonl
-  ```
-
-  **Ce que diront les COMPTEURS, plus que le taux de victoire** : vu la
-  rareté déjà mesurée par #223 (881/901 tours de vérification sans aucun
-  changement, toutes stratégies confondues), le taux de victoire Expert
-  contre Champion du Monde ne bougera probablement PAS de façon
-  significative à l'échelle de 300 donnes (±300 à 600 matchs). Les
-  compteurs `tours_joker_en_main`/`candidat_existe`/`permet_de_finir`/
-  `choisi` du rapport, et la liste des parties où la stratégie a été
-  choisie (avec son vainqueur), sont la mesure qui dira si cette stratégie
-  change réellement quelque chose, bien avant qu'un écart de taux de
-  victoire ne devienne statistiquement visible — **ne jamais conclure
-  d'une campagne de cette taille sur le seul taux de victoire** : une
-  campagne plus grande (voir piste 4, §13) resterait nécessaire pour
-  trancher si un effet existe mais reste sous le bruit.
+> **Note #213 (historique).** La structure cible imaginée alors réservait les
+> stratégies multi-tours des pistes 1, 8 et 9 ci-dessus à **Expert** (versions
+> PARTIELLES, dosées) et à un niveau supplémentaire au-dessus, « Champion du
+> Monde » (versions COMPLÈTES). Ce niveau a depuis été ajouté (#219 à #233)
+> puis entièrement retiré, sa mesure n'ayant montré aucun effet net — voir
+> l'archive en fin de cette section (§13). Les pistes 1, 8 et 9 restent
+> valables telles quelles pour Expert seul, qui reste le niveau le plus fort
+> de l'échelle (§16).
 
 - [x] **Réalisée (#226) — mesure : où se décident les parties (trace par
   tour + analyse par phases).**
@@ -2803,708 +2367,113 @@ la fois. On juge d'abord au mécanisme (combien de fois la stratégie change
 un coup, et le résultat des seules parties qui divergent), jamais au seul
 taux de victoire global.
 
-### Infrastructure des stratégies de Champion du Monde (issue #228)
+### Archive : stratégies multi-tours de Champion du Monde (nov. 2026)
 
-Avant #228, chaque stratégie multi-tours avait son propre drapeau de script
-(`--sans-verif-finition` pour #221, `--sans-garde-joker` pour #225) et le jeu
-n'avait pas de liste unique des stratégies. #228 prépare le terrain pour les
-futures stratégies (H1/H2/H4 ci-dessus) SANS en créer aucune : registre
-unique, option de campagne unique, compteurs génériques, analyse par niveau,
-et un outil de matrice reprenable pour enchaîner des comparaisons sans
-surveillance sur plusieurs jours.
+**Contexte.** Entre #219 et #233, un sixième niveau « Champion du Monde », au-dessus
+d'Expert, a porté des versions COMPLÈTES de plusieurs stratégies multi-tours
+(Expert n'en gardant que des versions partielles, dosées). #235 a retiré ce
+niveau et tout le code propre à ces stratégies, faute d'effet mesuré (voir
+plus bas) — cette section archive ce qui a été essayé.
 
-**1. Registre unique (`moteur/niveaux.py`)**
-- `niveaux.Strategie` (dataclass figée) : `id`, `description` (une ligne),
-  `niveaux` (tuple des niveaux où elle s'applique — p. ex. `verif_finition`
-  s'applique à Expert ET Champion du Monde, `garde_joker` à Champion du
-  Monde SEUL), `active_par_defaut` (reflet de ce qui est câblé dans
-  `BRIDAGES`), `compteurs` (noms des compteurs génériques déclarés, défaut
-  `("declenchee", "a_change_le_coup")`).
-- `niveaux.STRATEGIES : dict[str, Strategie]` — le registre. Y ajouter une
-  stratégie future (p. ex. une variante de H1/H2) : UNE entrée ici, plus son
-  branchement dans `jouer_niveau_bride`/`verification_finition.py` si elle a
-  un effet réel sur le jeu (le registre décrit, il ne câble pas le
-  comportement par magie) — voir `test_registre_strategies.py`,
-  `test_ajouter_une_strategie_fictive_au_registre_sans_toucher_au_reste`.
-- `niveaux.STRATEGIES_CHAMPION_PAR_DEFAUT : tuple[str, ...]` — ce que
-  Champion du Monde joue AUJOURD'HUI dans le JEU (`("verif_finition",
-  "garde_joker")`, reproduit à l'identique l'état d'avant #228, vérifié par
-  une assertion à l'IMPORT du module comparant `bridage_champion_
-  personnalise(STRATEGIES_CHAMPION_PAR_DEFAUT)` à `BRIDAGES["Champion du
-  Monde"]`). Une stratégie du registre n'y est ajoutée qu'après validation
-  par les tests/campagnes — être dans `STRATEGIES` ne suffit pas à être
-  jouée en production.
-- `niveaux.bridage_champion_personnalise(ids)` : construit le `Bridage` de
-  Champion du Monde pour un jeu de stratégies donné (utilisé par les
-  campagnes de mesure, jamais par le jeu).
-- **Expert n'est pas modifié** par #228 (le témoin des duels appariés doit
-  rester fixe). Remarque signalée sans y toucher : la vérification de
-  finition (#221), active aussi chez Expert, pourrait en théorie influencer
-  son rôle de témoin si une future stratégie de Champion en modifiait la
-  fréquence de déclenchement de façon asymétrique — à surveiller si les
-  compteurs génériques (point 3 ci-dessous) montrent un écart entre les deux
-  niveaux sur ce point, mais aucune preuve d'un tel effet à ce jour (#226 :
-  jamais déclenché de changement de coup sur 600 matchs).
+**a. Ce qui a été essayé** (une phrase par stratégie — l'idée, pas le détail
+d'implémentation) :
+- `verif_finition` (#221) — en fin de partie (chevalet ≤ 5 tuiles), vérifier
+  si un autre coup équivalent permettrait de finir au tour suivant plutôt que
+  le meilleur coup brut du solveur. **Seule brique qui reste active
+  aujourd'hui, pour Expert** (`moteur/verification_finition.py`, toujours
+  dans le dépôt) : #235 n'a retiré que la variante « garder un joker »
+  ci-dessous, pas la vérification de finition elle-même.
+- `garde_joker` (#225, Champion du Monde seul) — garder un joker en main en
+  fin de partie plutôt que le jouer tout de suite, pour le garder jusqu'au
+  coup qui vide le chevalet d'un coup.
+- `reserve_tuile` (#229, hypothèse H2) — après le coup du solveur, garder une
+  tuile qu'il aurait posée (p. ex. la 4e tuile d'un groupe) pour avoir un coup
+  garanti au tour suivant plutôt que de risquer une pioche.
+- `retenue_debut` (#229, hypothèse H1) — dans les tours qui suivent sa propre
+  ouverture, plafonner le nombre de tuiles posées par tour plutôt que de tout
+  poser d'un coup, pour ne pas dégarnir sa main trop vite.
+- `petits_chiffres` (#230, hypothèse H4) — garder en main les tuiles de
+  petite valeur (≤ 3) pour priver l'adversaire de combinaisons basses
+  (1-2-3…), peu coûteux en points en cas de défaite.
+- `chances_prochain_tour` (#231, anciennement « tuiles vivantes ») — à
+  nombre de tuiles posées égal, préférer le chevalet restant qui a
+  statistiquement le plus de chances de permettre de jouer au tour suivant
+  (probabilités de pioche, brique « Inconnues », #219).
+- `placement_joker` (#232, corrigée par #233) — à nombre de tuiles posées
+  égal, placer un joker à l'endroit où l'adversaire a le moins de chances de
+  le reprendre (le moins de types de tuile de remplacement encore inconnus).
 
-**2. Option de campagne unique (`scripts/comparer_niveaux_ia.py`)**
-- `--strategies-champion LISTE` : une liste séparée par des virgules, ou
-  `aucune`/`defaut` (= ce que joue le jeu, défaut de l'option elle-même)/
-  `toutes`. `--sans-strategie NOM` (répétable) : retire NOM de la liste
-  obtenue, APRÈS `--strategies-champion`. Un nom inconnu arrête le script
-  avec un message listant les noms valides du registre. Les deux options
-  ne changent la liste de Champion du Monde que DURANT la campagne (`
-  comparer_niveaux_ia._strategies_champion_forcees`, restaure `BRIDAGES`
-  à la sortie même en cas d'exception) — jamais dans le jeu.
-- `--sans-garde-joker`/`--sans-verif-finition` restent utilisables tels
-  quels (compatibilité) — `--sans-garde-joker` est strictement équivalent à
-  `--sans-strategie garde_joker` (même portée, Champion du Monde seul) ;
-  `--sans-verif-finition` garde sa portée D'ORIGINE plus large (désactive la
-  vérification pour EXPERT ET Champion du Monde à la fois, pour la mesure
-  « avant/après » de #221) et n'est PAS rebranché sur le nouveau mécanisme,
-  pour ne rien changer à son comportement déjà éprouvé.
-- `--budget-solveur-expert SECONDES` (nouveau par #228, demandé par le
-  point 5 de l'issue) : budget de temps du solveur par coup, appliqué à TOUS
-  les niveaux joués par la campagne (pas seulement Expert) — défaut `None` =
-  celui du jeu (1,5 s, `ia.BUDGET_TEMPS_EXPERT`), inchangé sans l'option. À
-  relever sur une machine lente.
+Toutes dépendaient de la brique de lecture `moteur/inconnues.py` (#219 :
+probabilités de pioche calculées à partir des 106 tuiles, de sa propre main
+et des TAILLES — jamais le contenu — des mains adverses) et étaient pilotées
+par un registre générique (`niveaux.STRATEGIES`, #228), une option de
+campagne unique (`--strategies-champion` de `comparer_niveaux_ia.py`) et un
+outil de matrice (`scripts/matrice_strategies.py`) pour enchaîner des séries
+de mesure sans surveillance sur plusieurs jours.
 
-**3. Compteurs génériques (`comparer_niveaux_ia.compteurs_strategies`)**
-- Une table `EXTRACTEURS_COMPTEURS_STRATEGIES` (une entrée par id du
-  registre) traduit les compteurs internes propres à chaque stratégie
-  (`stats_verif_finition`/`stats_garde_joker`, inchangés depuis #221/#225)
-  vers les deux compteurs génériques déclarés par `Strategie.compteurs` :
-  « déclenchée » et « a changé le coup ». Le rapport de campagne (nouvelle
-  section « Compteurs génériques par stratégie ») et l'export par partie
-  (champ `strategies_changees` de `--export-resultats`, calculé par match
-  via la même table) les affichent sans code spécifique par stratégie dans
-  la boucle d'affichage/d'export — ajouter une stratégie future n'exige
-  qu'une entrée dans cette table (et son extracteur).
+**b. Méthode de test.** Duels appariés (même graine, mêmes donnes, Expert
+contre Champion du Monde) ; mesure par ablation : chaque stratégie SEULE
+contre le témoin, puis Champion du Monde complet privé d'une stratégie à la
+fois (`scripts/matrice_strategies.py`, plan `ablation`) ; comparaison des
+seules parties dont le vainqueur diverge entre deux campagnes à la même
+graine (jamais le seul taux de victoire global, noyé dans les parties non
+concernées).
 
-**4. Analyse par niveau (`scripts/analyser_phases.py`)**
-- `--par-niveau` : regroupe l'analyse PAR NIVEAU d'IA (durée de chaque
-  phase, tuiles posées par tour, fréquence de pioche) plutôt que par
-  gagnant/perdant de la manche — `analyser_par_niveau`/
-  `afficher_rapport_par_niveau`.
-- `--comparer AUTRE_TRACE` : compare la trace donnée à `AUTRE_TRACE` (p. ex.
-  une campagne témoin et une campagne avec stratégies, même graine) et
-  affiche les écarts phase par phase (durée, tuiles/tour, fréquence de
-  pioche) — `comparer_traces`/`afficher_comparaison`. Pure comparaison de
-  deux analyses déjà calculées, ne rejoue jamais rien.
+**c. Résultats chiffrés.** 12 configurations de 1 000 parties, Expert contre
+Champion du Monde : taux de victoire de Champion du Monde entre 49,8 % et
+52,1 % pour TOUTES les configurations (marge ±3,1 pt) — aucun écart
+significatif, quelle que soit la combinaison de stratégies. Par stratégie
+seule contre le témoin, sur les seules parties dont le vainqueur diffère
+(effet net en points de score, test des signes) :
 
-**5. Outil de matrice (`scripts/matrice_strategies.py`), pour tourner
-plusieurs jours sans surveillance**
-- **Plans** : `ablation` (défaut — témoin sans aucune stratégie, puis
-  Champion avec CHAQUE stratégie SEULE, puis Champion complet PRIVÉ de
-  CHAQUE stratégie, puis Champion complet — référence du résumé final) ;
-  `complet` (toutes les combinaisons de stratégies, avec avertissement si
-  elles sont nombreuses) ; ou le chemin d'un fichier JSON de configurations
-  personnalisées (`{"nom":..., "strategies_champion":[...], "reference":
-  true}`).
-- **Reprenable** : chaque configuration écrit son export par partie
-  (`resultats.jsonl`, une donne = deux lignes en miroir) et sa trace
-  éventuelle LIGNE PAR LIGNE avec `flush()` immédiat ; un `checkpoint.json`
-  réécrit de façon ATOMIQUE (fichier temporaire puis `os.replace`) après
-  CHAQUE donne. Relancer la MÊME commande sur le MÊME `--dossier` reprend
-  exactement à la dernière donne complète déjà écrite (le fichier de
-  résultats fait foi : une ligne isolée, laissée par une coupure brutale en
-  plein milieu d'une écriture, est abandonnée avant de reprendre — jamais
-  rejouée). Refuse de reprendre si le commit du code a changé depuis le
-  début de la série (`--forcer-reprise-commit-different` pour passer
-  outre, déconseillé).
-- **Statut** : `--statut DOSSIER` affiche, SANS perturber la série,
-  configurations terminées/total, la configuration en cours et son
-  avancement, une estimation de fin (rythme observé), et si un processus
-  tourne encore sur la machine (PID, vérifié sans dépendance externe).
-- **Résumé final** (`DOSSIER/resume.txt`, mis à jour après CHAQUE
-  configuration terminée) : pour chaque configuration, ses compteurs
-  génériques et sa comparaison à la configuration de RÉFÉRENCE du plan
-  (même graine — réutilise `comparer_campagnes_appariees.comparer_fichiers`,
-  donc le même test des signes).
-- **Contrôle rapide** : `--controle-rapide [N]` (défaut 50 donnes) joue
-  chaque configuration sur un petit nombre de donnes, résultats JETABLES
-  (hors `--dossier`), pour voir quelles stratégies se déclenchent du tout
-  avant de lancer la série complète.
-- **Limite de temps FERME** (`--limite-temps`, optionnelle, défaut aucune)
-  : réutilise le mécanisme de #220 (sous-processus surveillé, `scripts/
-  _limite_temps_ferme.py`, même pattern que `scripts/echelle_niveaux.py`)
-  pour TOUTE la série — un filet de sécurité, pas une contrainte par défaut
-  (une série est pensée pour tourner plusieurs jours).
-- **Processus** : `--processus 1` (défaut, séquentiel) ou `2` (deux
-  configurations en parallèle via `ProcessPoolExecutor` — la machine cible
-  n'a que deux cœurs) ; ce dernier mode n'a été vérifié qu'à la main
-  (pas de simulation longue par l'agent, voir CONTEXTE.md §7), à surveiller
-  à son premier usage réel.
+| Stratégie | Parties divergentes | Effet net (points) | p |
+|---|---:|---:|---:|
+| reserve_tuile | 242 | +0,6 | 0,75 |
+| retenue_debut | 114 | −0,2 | 0,93 |
+| petits_chiffres | 20 | +0,2 | 0,82 |
+| chances_prochain_tour | 137 | +1,3 | 0,31 |
+| placement_joker | 30 | −0,2 | 0,86 |
+| Champion du Monde complet | 321 | +1,9 | 0,32 |
 
-**Règle impérative pour toute comparaison de niveaux** (déjà vraie avant
-#228, rappelée ici) : TOUS les bras d'une même comparaison doivent tourner
-sur la MÊME machine — la force effective d'un niveau dépend du budget de
-temps réellement consommé par le solveur exact, donc de la vitesse de la
-machine (voir l'incident #223 : interpréteur sans `highspy`/`numpy`). Une
-série qui compare un bras lancé sur le ThinkPad à un bras lancé sur le PC
-fixe Windows ne mesure rien d'interprétable.
+**d. Conclusion.** Aucun effet mesurable : les stratégies changent bel et
+bien des parties (jusqu'à 321 sur la configuration la plus concernée), mais
+les gains et les pertes qu'elles provoquent se compensent — aucune ne penche
+significativement d'un côté ni de l'autre, à aucune échelle testée. Le
+niveau « Champion du Monde » et tout le code propre à ces stratégies ont
+donc été retirés (#235) ; l'échelle compte de nouveau cinq niveaux, Expert
+restant le niveau le plus fort.
 
-**Sur un PC qui fait tourner une série de plusieurs jours (le PC fixe
-Windows lent)** : désactiver la mise en veille ET les redémarrages
-automatiques (mises à jour Windows) — sans quoi la série s'arrête sans
-qu'un `--statut` ultérieur distingue une vraie panne d'une simple veille.
-Réglages Windows : Panneau de configuration → Options d'alimentation →
-jamais de mise en veille sur secteur ; `gpedit.msc` ou Windows Update →
-Options avancées pour repousser les redémarrages automatiques, ou planifier
-les heures actives pour couvrir la durée de la série.
+**e. Intuition d'Alain, non vérifiée.** Ces stratégies pourraient être utiles
+si l'on savait les appliquer au bon moment selon la main et le jeu en cours
+(par exemple seulement quand le tapis est pauvre, ou seulement en fin de
+manche serrée) — mais aucune règle de ce genre n'existe aujourd'hui, et rien
+dans les mesures ci-dessus ne permet de la deviner.
 
-**Reprise automatique après une coupure de courant (Windows)** :
-`scripts/lancer_matrice_windows.ps1` (lanceur minimal, à personnaliser avec
-le dépôt, le dossier de la série et la commande exacte de lancement — il ne
-rejoue rien de déjà écrit, `matrice_strategies.py` s'en charge). Pour
-l'exécuter automatiquement au démarrage de Windows (NON fait par cet
-agent — à mettre en place par Alain avec Claude) :
+**f. Retrouver le code archivé.** Tout le code retiré par #235 reste
+accessible au tag git `archive-strategies-champion` :
 
 ```
-schtasks /Create /SC ONSTART /RL HIGHEST /TN "RummikubMatriceStrategies" ^
-    /TR "powershell -ExecutionPolicy Bypass -File C:\rummikub\lancer_matrice.ps1" ^
-    /RU SYSTEM
+git show archive-strategies-champion:<chemin>
+git checkout archive-strategies-champion -- <chemin>
 ```
 
-### Stratégies « réserve d'une tuile » et « retenue au début » (issue #229)
-
-Deux premières stratégies livrées via le registre de #228 (jusque-là vide de
-toute entrée désactivée par défaut) : `reserve_tuile` (hypothèse H2 ci-dessus)
-et `retenue_debut` (hypothèse H1). Chacune est une entrée **indépendante**,
-activable seule via `--strategies-champion`, réservée à Champion du Monde,
-**désactivée par défaut dans le jeu** (ABSENTE de `STRATEGIES_CHAMPION_PAR_
-DEFAUT` — Expert et tous les niveaux inférieurs restent strictement
-inchangés, confirmé par les tests `test_expert_inchange_meme_position` des
-deux nouveaux fichiers de tests).
-
-**1. `reserve_tuile` (H2, `moteur/ia.py`)** — après le coup du solveur,
-cherche le meilleur coup qui GARDE une tuile que ce même coup aurait posée
-(typiquement la 4e tuile d'un groupe ou le prolongement d'une suite) :
-`_coup_qui_garde_une_tuile` retire, l'une après l'autre dans l'ordre où le
-solveur les a posées, chaque tuile jouée par le coup normal du chevalet, et
-résout à nouveau le modèle exact sur cette main réduite — **une contrainte du
-modèle exact (main réduite), jamais une logique de jeu réécrite à côté**,
-dans le même esprit que `_coup_sans_joker_chevalet` (#225), dont ce
-mécanisme est la généralisation à une tuile quelconque. Premier candidat
-valide retenu (pas de recherche exhaustive parmi toutes les tuiles
-possibles : même simplification assumée que pour le joker, par souci de
-budget de temps). Joué à la place du coup normal seulement si TOUTES les
-conditions sont réunies :
-  - (a) le candidat pose au moins une tuile ;
-  - (b) il pose au plus `niveaux.ECART_MAX_RESERVE` (défaut **1**) tuiles de
-    moins que le coup normal ;
-  - (c) sur la position résultante (tapis supposé inchangé par l'adversaire,
-    même hypothèse optimiste que #221), le même solveur peut poser au moins
-    une tuile au tour suivant — `verification_finition.
-    peut_poser_au_tour_suivant`, nouvelle fonction sœur de `_peut_finir_au_
-    tour_suivant` (#221), MOINS stricte (pas besoin de vider tout le
-    chevalet) ;
-  - (d) le chevalet après le coup reste STRICTEMENT supérieur à `niveaux.
-    SEUIL_FIN_PARTIE_VERIF_FINITION` (#221) — la stratégie ne gêne jamais la
-    fin de partie, zone déjà couverte par `verif_finition`/`garde_joker`.
-    Propriété vérifiée par construction (voir `moteur/ia.py`, commentaire de
-    `jouer_niveau_bride`) : si cette condition est remplie, la main AVANT ce
-    tour est elle-même strictement supérieure à ce seuil, donc la
-    vérification de finition sera de toute façon `NON_APPLICABLE` — les deux
-    stratégies ne se recoupent jamais, l'ordre d'application entre elles est
-    donc sans importance pour `reserve_tuile` seule ;
-  - (e) le coup normal ne vide pas la main — déjà garanti par l'appelant
-    (`jouer_niveau_bride` ne soumet jamais un coup gagnant à une stratégie).
-
-**2. `retenue_debut` (H1, `moteur/ia.py` + `moteur/solveur_exact.py`)** —
-pendant les `niveaux.TOURS_RETENUE_DEBUT` (défaut **4**) premiers tours qui
-suivent la PROPRE ouverture du joueur (pas l'ouverture globale de la
-partie), tant que le tapis compte moins de `niveaux.TUILES_TAPIS_MAX_
-RETENUE` (défaut **20**) tuiles et que le chevalet compte plus de 8 tuiles,
-plafonne le coup à `niveaux.POSE_MAX_DEBUT` (défaut **2**) tuiles posées au
-plus — jamais une pioche si un coup existe : si aucune combinaison ne tient
-sous le plafond, le coup normal (même au-delà du plafond) reste joué tel
-quel. La pose d'ouverture elle-même n'est jamais concernée (seul un joueur
-dont `mise_initiale_faite` est déjà vraie peut entrer dans la fenêtre).
-  - **Plafond exprimé proprement par le modèle exact** (pas d'improvisation
-    : la question posée par le point 3 de l'issue) : `solveur_exact.
-    resoudre_exact`/`_resoudre_modele` acceptent un nouveau paramètre
-    optionnel `max_tuiles_posees` (``None`` par défaut, comportement
-    inchangé pour tout appelant existant) qui ajoute UNE contrainte au
-    programme linéaire — `Σ taille_s·x_s ≤ (tuiles du plateau, toutes
-    reconduites par la conservation) + max_tuiles_posees` — bornant donc
-    bien les tuiles posées DE LA MAIN, jamais celles déjà sur le tapis.
-    Exactement le même principe que la condition (b) de `reserve_tuile`
-    ci-dessus : une contrainte du modèle exact existant, pas une logique de
-    jeu réécrite à côté.
-  - **Nombre de tours depuis SA PROPRE ouverture** (`ia.
-    _nb_tours_joueur_depuis_ouverture`) : dérivé de `etat["historique"]`
-    (déjà tenu par `moteur/partie.py` pour CHAQUE tour, tous niveaux et
-    joueur humain confondus) à partir d'un seul signal NUMÉRIQUE — une pose
-    (« jouer ») y est journalisée avec `points` > 0 (la règle du jeu exige
-    au moins `mise_initiale_min` points pour la toute première, puis toute
-    pose retient au moins la valeur d'une tuile réelle), alors qu'une
-    pioche/passe l'est TOUJOURS à 0 point (`partie.piocher`/`passer_tour`) —
-    **jamais une lecture du texte des descriptions** (qui ne distinguent pas
-    pose/pioche/passe ailleurs dans le code, voir la revue effectuée avant
-    d'écrire cette fonction). La première entrée de ce joueur à `points` > 0
-    est donc forcément SON ouverture (elle ne peut pas avoir été précédée
-    d'une autre pose, la mise initiale n'étant pas encore faite). Retourne
-    `None` si l'ouverture n'est pas retrouvée dans l'historique (partie
-    reprise sans historique complet) : la stratégie se replie alors sans
-    s'activer, jamais une erreur.
-  - **Aucune modification de `moteur/partie.py`** : le compteur de tours
-    depuis l'ouverture est entièrement dérivé de l'historique déjà tenu,
-    sans ajouter de champ ni de logique de bookkeeping au moteur de jeu
-    partagé par tous les niveaux et l'interface.
-
-**3. Interaction entre les deux nouvelles stratégies, si les DEUX sont
-actives en même temps** (jamais le cas par défaut, seulement via
-`--strategies-champion reserve_tuile,retenue_debut`) : appliquées dans
-l'ordre `reserve_tuile` PUIS `retenue_debut` dans `jouer_niveau_bride` — la
-seconde recalcule un coup plafonné FRAIS (son propre appel au solveur avec
-`max_tuiles_posees`), sans dépendre du résultat de la première au-delà de la
-longueur du coup qu'elle reçoit ; le plafond de `retenue_debut` a donc
-toujours le dernier mot. Logiquement cohérent (documenté dans
-`moteur/ia.jouer_niveau_bride`) mais **non couvert par un test dédié** — les
-tests de l'issue couvrent chaque stratégie SEULE, conformément au point 5 de
-l'issue.
-
-**4. Compteurs (`scripts/comparer_niveaux_ia.py`)** — mêmes compteurs bruts
-que `stats_garde_joker` (#225), recensés par tour via les clés `reserve_
-tuile_info`/`retenue_debut_info` du coup renvoyé par `jouer_niveau_bride` :
-  - **Génériques** (registre, section « Compteurs génériques par stratégie
-    ») : tours où la stratégie a été EXAMINÉE (« déclenchée ») et où elle a
-    CHANGÉ le coup (« a changé le coup ») — `_compteurs_reserve_tuile`/
-    `_compteurs_retenue_debut`, mêmes extracteurs que #228.
-  - **Section dédiée `reserve_tuile`** : nombre moyen de tuiles gardées par
-    coup changé (`stats_reserve_tuile["nb_tuiles_gardees_liste"]`) ; le
-    mécanisme VISÉ (point 4 de l'issue), détecté au tour SUIVANT du MÊME
-    joueur via un dict `suivi_reserve_tuile` (`{idx: id_tuile_gardee}`, créé
-    FRAIS à chaque manche dans `_jouer_une_manche` — les mains sont
-    redistribuées à chaque manche) : une pioche évitée (le joueur a joué
-    plutôt que pioché au tour suivant) et la tuile gardée effectivement
-    posée à ce tour-là.
-  - **Section dédiée `retenue_debut`** : tours examinés (fenêtre
-    d'ouverture) et coups effectivement plafonnés.
-
-**5. Tests fixes** (`tests/test_ia_reserve_tuile.py`,
-`tests/test_ia_retenue_debut.py`) — constructions à la main, point 5 de
-l'issue : groupe de 3 + 4e tuile en main avec une autre combinaison posable
-(garde la 4e) ; même cas chevalet < 6 tuiles (décision inchangée, condition
-(d)) ; coup qui vide la main (joué tel quel) ; plafond respecté pendant la
-fenêtre de retenue, aucun effet après la fenêtre, ni avant l'ouverture, ni si
-aucune combinaison ne tient dans le plafond (coup normal joué) ; chaque
-stratégie désactivée (décision identique au solveur seul) ; Expert
-inchangé (les deux fichiers).
-
-**6. Expérience prévue** (reprend le protocole du point 5 de la section
-« Hypothèses de stratégie » ci-dessus) : Champion du Monde avec `reserve_
-tuile` SEULE contre Expert, puis avec `retenue_debut` SEULE contre Expert
-(même graine, duels appariés, `--strategies-champion reserve_tuile` /
-`--strategies-champion retenue_debut`), chacune jugée d'abord par ses
-compteurs de mécanisme (point 4 ci-dessus : pioches réellement évitées,
-tuile gardée réellement posée, coups réellement plafonnés) avant le taux de
-victoire global — puis, si les deux se révèlent utiles séparément, Champion
-avec les DEUX ensemble comparé au retrait d'une à la fois
-(`scripts/matrice_strategies.py`, plan `ablation`), comme prévu par
-l'infrastructure de #228. Les valeurs de départ (`ECART_MAX_RESERVE=1`,
-`TOURS_RETENUE_DEBUT=4`, `TUILES_TAPIS_MAX_RETENUE=20`, `POSE_MAX_DEBUT=2`)
-sont INDICATIVES, à resserrer par ces séries de mesure — réglables au seul
-endroit `moteur/niveaux.py`, comme tous les autres paramètres de force de ce
-fichier.
-
-**7. `petits_chiffres` (H4, issue #230) — garder les petites tuiles pour
-bloquer l'adversaire.** Troisième entrée du registre de #228 (toujours
-réservée à Champion du Monde, désactivée par défaut, activable en campagne
-par `--strategies-champion petits_chiffres`) : reprend l'hypothèse H4
-ci-dessus (Delvers, une source, très bonne — garder les petites tuiles,
-p. ex. les 3, empêche l'adversaire de former 1-2-3). Remarque d'Alain et
-Claude, PAS issue de cette source (hypothèse, non vérifiée) : une petite
-tuile coûte peu de points en cas de défaite (un 3 vaut 3 points), donc la
-garder est peu risqué en points, alors qu'elle bloque des combinaisons de
-l'adversaire.
-
-- **Critère de départage (point 2 de l'issue), intégré DIRECTEMENT au
-  modèle exact** (`moteur/solveur_exact.py`, paramètre
-  `valeur_max_petits`) plutôt que recalculé à côté après coup : à nombre de
-  tuiles posées égal (critère 1, TOUJOURS premier), un objectif secondaire
-  minimise le nombre de tuiles RÉELLES de valeur 1 à
-  `niveaux.VALEUR_MAX_PETITS` (défaut 3) posées — placé JUSTE APRÈS le
-  critère 1 et AVANT la perturbation minimale (#199), donc avant les points
-  posés et l'économie de jokers également. Réutilise le mécanisme exact des
-  autres passes de départage (`_passe`, fixation par égalité) SANS toucher
-  à l'objectif principal ; sans effet (`None`, défaut) pour tout appelant
-  existant, y compris Expert.
-- **Variante tolérante (point 3), désactivée par défaut**
-  (`niveaux.ECART_TUILES_PETITS`, défaut 0) : à 1 (ou plus), un coup qui
-  pose AU PLUS ce nombre de tuiles de moins peut être préféré au meilleur
-  coup du solveur s'il évite de poser au moins une petite tuile que ce
-  dernier aurait posée — même mécanisme que `reserve_tuile`
-  (`_coup_qui_garde_une_petite_tuile`/`_appliquer_petits_chiffres`,
-  `moteur/ia.py`) : retire la petite tuile du chevalet et résout à nouveau,
-  premier candidat valide retenu. Joué à la place du coup normal seulement
-  si (a) il pose au moins une tuile, (b) l'écart de tuiles posées ne dépasse
-  pas `ECART_TUILES_PETITS`, (c) il pose STRICTEMENT moins de petites
-  tuiles, (d) le chevalet après coup reste strictement supérieur au seuil
-  de fin de partie ci-dessous.
-- **Limite (point 4)** : les deux parties (critère de départage ET variante
-  tolérante) ne s'appliquent que tant que le chevalet, AVANT de jouer,
-  compte STRICTEMENT plus que `niveaux.SEUIL_FIN_PARTIE_VERIF_FINITION`
-  (garder une petite tuile gênerait la fin de partie, zone déjà couverte
-  par `verif_finition`/`garde_joker`) ; un coup qui vide la main gagne la
-  partie et n'est jamais soumis à la stratégie (garde-fou commun à toutes
-  les stratégies multi-tours, §13).
-- **Compteurs** (point 5) : génériques (déclenchée/a changé le coup, via
-  `stats_petits_chiffres` et `_compteurs_petits_chiffres`,
-  `scripts/comparer_niveaux_ia.py`) + un compteur dédié à l'EFFET visé par
-  la stratégie, pas seulement à son déclenchement : nombre moyen de petites
-  tuiles (valeur ≤ `VALEUR_MAX_PETITS`) dans le chevalet, à CHAQUE tour de
-  CHAQUE joueur (`tuiles_petites_main`, mesure pure, toujours collectée,
-  par niveau) — pour vérifier que la stratégie les conserve réellement en
-  main, pas seulement qu'elle se déclenche.
-- **Tests fixes** (`tests/test_ia_petits_chiffres.py`) : deux groupes de
-  même taille (3 tuiles) se disputant le seul joker du chevalet, l'un de
-  petite valeur (3), l'autre de grande valeur (9), plateau vide (donc
-  perturbation à égalité pour les deux) — la stratégie choisit le groupe de
-  9 et garde les deux 3 en main ; désactivée (décision identique au solveur
-  seul) ; chevalet ≤ seuil de fin de partie (décision inchangée) ; Expert
-  inchangé ; coup qui vide la main joué tel quel ; variante tolérante
-  (reprend la construction de `reserve_tuile` — groupe de 3 + 4e tuile
-  PETITE en main + suite séparée — garde la petite tuile au prix d'une
-  tuile de moins) et son inapplication hors de la fenêtre de chevalet.
-- **Expérience prévue** : Champion du Monde avec `petits_chiffres` SEULE
-  contre Expert (même protocole que `reserve_tuile`/`retenue_debut`
-  ci-dessus, `--strategies-champion petits_chiffres`), jugée d'abord par le
-  compteur dédié (le nombre moyen de petites tuiles en main augmente-t-il
-  réellement, comparé à Expert ?) avant le taux de victoire global — la
-  remarque sur le faible coût en points reste une HYPOTHÈSE d'Alain et
-  Claude à vérifier par cette mesure, pas un fait établi. Les valeurs de
-  départ (`VALEUR_MAX_PETITS=3`, `ECART_TUILES_PETITS=0`) sont INDICATIVES,
-  réglables au seul endroit `moteur/niveaux.py`.
-
-**8. `chances_prochain_tour` (issue #231) — garder le chevalet le plus
-susceptible de pouvoir encore jouer au tour suivant.** Quatrième entrée du
-registre de #228 (toujours réservée à Champion du Monde, désactivée par
-défaut, ABSENTE de `STRATEGIES_CHAMPION_PAR_DEFAUT`, activable en campagne
-par `--strategies-champion chances_prochain_tour`).
-
-Reprend et CORRIGE la piste 9 ci-dessus (« rétention défensive de tuiles »,
-anciennement envisagée sous le nom « tuiles vivantes ») : l'idée initiale
-d'une tuile « morte » (dont les voisines seraient « sorties » du jeu) ne
-tient pas au Rummikub, où les combinaisons du tapis sont réarrangeables — une
-tuile posée n'est donc jamais indisponible pour la suite de la partie, ni
-pour moi ni pour l'adversaire. Ce nom est abandonné POUR CETTE RAISON. La
-notion utile, retenue ici, est inversée : les « sorties » sont les tuiles
-qu'il me reste à PIOCHER (jamais celles du tapis) pour pouvoir jouer au tour
-suivant — une heuristique classique du rami, alimentée par la brique
-« Inconnues » (#219, probabilités de pioche, jamais de lecture de la main
-adverse).
-
-- **Sorties d'un chevalet** (`moteur/sorties.py::sorties_chevalet`) : pour un
-  chevalet et un tapis donnés, l'ensemble des types de tuile (couleur +
-  valeur, jokers compris) qui, ajoutés au chevalet, permettraient de jouer —
-  calcul DIRECT (énumération des paires du chevalet + brute force validé sur
-  les combinaisons du tapis), jamais un appel au solveur exact, pour rester
-  rapide. Deux règles : (1) une paire de tuiles RÉELLES du chevalet, même
-  couleur à valeurs voisines ou espacées d'une, ou même valeur à couleurs
-  différentes (un joker du chevalet n'entre jamais dans une paire — il n'a ni
-  couleur ni valeur propres) ; (2) le rattachement à une combinaison du tapis
-  (prolonger une suite par un bout, compléter un groupe de 3 à 4).
-- **Score d'un chevalet** (`sorties.score_chevalet`) : somme, sur toutes les
-  sorties, de `exemplaires_restants / nb_total_inconnues` (brique
-  « Inconnues », #219) — jamais la main adverse, seulement ses tailles. Une
-  sortie dont tous les exemplaires sont déjà connus (donc indisponibles)
-  contribue 0, elle ne « compte » donc pas dans la somme.
-- **Mécanisme de départage, EN DEHORS du modèle exact** (contrairement à
-  `petits_chiffres`) : le score dépend de PAIRES de tuiles restant en main et
-  des combinaisons effectivement formées, une propriété combinatoire du
-  résultat, pas une somme linéaire des ensembles posés (`x_s`) — non
-  formulable comme objectif du MIP sans variables auxiliaires par paire de
-  types, ce que l'issue écarte explicitement (« calcul direct, sans appel au
-  solveur »). Implémenté comme les variantes tolérantes de `reserve_tuile`/
-  `petits_chiffres` (`moteur/ia.py::_appliquer_chances_prochain_tour`) :
-  retire, tour à tour, CHACUNE des tuiles que le coup du solveur pose, puis
-  résout à nouveau (`_candidats_sorties`) — si le résultat pose le MÊME
-  nombre de tuiles (un véritable « coup équivalent », découvert sans
-  reformuler le modèle exact), compare son score à celui du coup normal et
-  garde le meilleur. Appliqué JUSTE APRÈS le coup normal (qui intègre déjà
-  `petits_chiffres` s'il est actif) et AVANT `reserve_tuile`/`retenue_debut`/
-  la variante tolérante de `petits_chiffres` — ceux-ci peuvent réduire le
-  nombre de tuiles posées, les comparer à ce stade reviendrait à comparer des
-  coups qui ne posent déjà plus le même nombre de tuiles.
-- **Variante tolérante, désactivée par défaut**
-  (`niveaux.ECART_TUILES_SORTIES`, défaut 0) : à 1 (ou plus), un candidat qui
-  pose AU PLUS ce nombre de tuiles de moins peut être préféré si son score
-  dépasse le meilleur score déjà trouvé de plus de
-  `niveaux.SEUIL_GAIN_SORTIES` (valeur de départ INDICATIVE 0,15).
-- **Limite** : ne s'applique que si le chevalet qui resterait après le coup
-  compte STRICTEMENT plus d'une tuile (une sortie exige une PAIRE, rien à
-  comparer sinon) ; un coup qui vide la main gagne la partie et n'est jamais
-  soumis à la stratégie (garde-fou commun à toutes les stratégies
-  multi-tours, §13).
-- **Limites de l'heuristique** (documentation demandée par l'issue) : le
-  score ne regarde qu'UN tour à l'avance (pas une vraie espérance sur toute
-  la fin de partie) ; il suppose le tapis INCHANGÉ au tour suivant, alors
-  qu'un adversaire peut le réarranger entre-temps — l'estimation est donc
-  PRUDENTE plutôt qu'exacte (le réarrangement du tapis ne peut qu'AJOUTER des
-  sorties, jamais en retirer, puisqu'une combinaison existante reste de toute
-  façon rattachable) ; la probabilité de pioche (`exemplaires_restants /
-  nb_total_inconnues`) est une approximation uniforme (pas encore affinée
-  par le comportement observé de l'adversaire, voir piste 8 « Indices »
-  ci-dessus).
-- **Compteurs** : génériques (déclenchée/a changé le coup, via
-  `stats_chances_prochain_tour` et `_compteurs_chances_prochain_tour`,
-  `scripts/comparer_niveaux_ia.py`) + deux compteurs dédiés à l'EFFET visé :
-  le score moyen du chevalet CONSERVÉ (`score_liste`, à chaque tour où la
-  stratégie s'est déclenchée) et, au tour SUIVANT du MÊME joueur après un
-  coup changé, la part des fois où il a pu jouer plutôt que piocher
-  (`pioche_evitee`/`verifications`, même mécanisme de suivi que
-  `reserve_tuile`) — à comparer avec le témoin (Expert, ou Champion du Monde
-  sans la stratégie).
-- **Tests fixes** (`tests/test_sorties.py` pour la brique, directe, sans
-  passer par l'IA ; `tests/test_ia_chances_prochain_tour.py` pour la
-  stratégie) : une paire qui se complète par une seule tuile encore
-  disponible contre une paire isolée (le premier a le score le plus élevé) ;
-  une sortie dont tous les exemplaires sont connus ne compte pas ; deux coups
-  posant le même nombre de tuiles (3) mais laissant des chevalets de scores
-  différents (le meilleur score est choisi, au prix d'une suite plus riche
-  en points mais plus pauvre en sorties) ; désactivée (décision identique) ;
-  Expert inchangé ; coup qui vide la main joué tel quel ; chevalet restant
-  ≤ 1 tuile (sans effet).
-- **Expérience prévue** : Champion du Monde avec `chances_prochain_tour`
-  SEULE contre Expert (même protocole que les stratégies précédentes,
-  `--strategies-champion chances_prochain_tour`), jugée d'abord par les
-  compteurs dédiés (le score moyen du chevalet conservé augmente-t-il
-  réellement, et la part de tours où le joueur peut jouer plutôt que
-  piocher au tour suivant s'améliore-t-elle, comparé au témoin ?) avant le
-  taux de victoire global. Essai de 2 donnes (`--donnes 2`) : stratégie
-  déclenchée 42 fois, coup changé 2 fois, score moyen du chevalet conservé
-  0,336 ; surcoût de calcul mesuré sur cet essai : Champion du Monde passe
-  d'environ 28 ms/tour (sans stratégie) à environ 63 ms/tour (avec) —
-  indicatif seulement (aucun seuil fixé par l'issue), dû aux appels
-  supplémentaires au modèle exact dans `_candidats_sorties` (au plus un par
-  tuile posée par le coup normal). Les valeurs de départ
-  (`ECART_TUILES_SORTIES=0`, `SEUIL_GAIN_SORTIES=0,15`) sont INDICATIVES,
-  réglables au seul endroit `moteur/niveaux.py`.
-
-**9. `placement_joker` (issue #232) — poser un joker là où l'adversaire a le
-moins de chances de le reprendre.** Cinquième entrée du registre de #228
-(toujours réservée à Champion du Monde, désactivée par défaut, ABSENTE de
-`STRATEGIES_CHAMPION_PAR_DEFAUT`, activable en campagne par
-`--strategies-champion placement_joker`).
-
-**Règles de libération d'un joker VÉRIFIÉES dans ce moteur** (point 1 de
-l'issue, à partir de `moteur/ia.py::_jokers_recuperables`/`_tuile_
-correspond_au_joker` et des tests existants — voir §8 ci-dessus) :
-
-- **Échange direct** : un joker posé dans une combinaison du plateau est
-  repris en jouant, DEPUIS LE CHEVALET OU DEPUIS UNE AUTRE LIBÉRATION DU
-  MÊME TOUR, la tuile réelle qu'il représente EXACTEMENT à sa position —
-  `_tuile_correspond_au_joker` calcule cette tuile UNIQUE :
-  - **suite** : `valeur_attendue = valeur_de_la_première_tuile_réelle -
-    sa_position + position_du_joker`, et la MÊME couleur que la suite — une
-    SEULE valeur convient, quelle que soit la position du joker ;
-  - **groupe** : la valeur du groupe, et N'IMPORTE LAQUELLE des couleurs
-    encore absentes du groupe (`COULEURS - couleurs_déjà_utilisées`) —
-    PLUSIEURS tuiles distinctes peuvent donc convenir (2 couleurs manquantes
-    pour un groupe de 3, ni plus ni moins puisqu'un groupe n'admet qu'UN seul
-    joker).
-- **Libération sans remplacement** (détachement en bout #150, scission,
-  réduction de groupe de 4 à 3 — voir §8) : pour une combinaison de 4 tuiles
-  ou plus, DÉJÀ sur le plateau, un joker en bout se détache sans aucune
-  tuile de remplacement.
-- **CORRECTION #233 — écart constaté dans #232, maintenant corrigé** :
-  #232 affirmait que ce moteur ne distingue PAS un joker « au milieu »
-  d'une suite d'un joker « au bout » (la formule d'échange direct ne retient
-  qu'UNE seule valeur dans les deux cas), et en déduisait que les deux
-  placements avaient la MÊME exposition. Cette conclusion est INCOMPLÈTE :
-  elle ignore une SECONDE voie, propre au joker en BOUT d'une suite de 3 —
-  **prolongement de l'extrémité OPPOSÉE, puis détachement sans
-  remplacement**. Exemple : suite 4,5,joker (joker en bout haut, représente
-  6). Une tuile de main qui prolonge l'AUTRE extrémité (rouge 3, devant le
-  4) transforme la suite de 3 en suite de 4 (3,4,5,joker) ; le joker,
-  désormais en bout d'une combinaison de 4 tuiles, se détache alors SANS
-  remplacement (mécanisme déjà implémenté pour l'IA elle-même, #150,
-  `_jokers_detachables_par_extension` — voir ci-dessus) et peut être
-  rejoué ailleurs dans le MÊME tour. Un joker au MILIEU n'a pas
-  d'« extrémité opposée » à prolonger : lui seul garde UNE SEULE voie.
-  - **Vérifié sur le MOTEUR RÉEL** (`partie.jouer_tour`, pas une fonction
-    interne de l'IA), dans les deux sens de symétrie (joker en bout haut,
-    joker en bout bas) : `tests/test_ia_placement_joker.py::
-    test_moteur_reel_detachement_par_prolongement_joker_en_haut_de_suite`
-    et `..._en_bas_de_suite` — le coup (prolongement + détachement +
-    rejeu du joker dans une nouvelle combinaison, même tour) est accepté
-    par `jouer_tour`, le plateau final reste valide.
-  - **Calcul corrigé** : `_types_remplacement_joker` (`moteur/ia.py`)
-    ajoute désormais, pour une suite de 3 avec le joker à une EXTRÉMITÉ
-    (`position_index` 0 ou 2), le type `(couleur, valeur_prolongement)` —
-    même couleur, valeur de l'extrémité opposée ± 3 selon le sens — SI
-    cette valeur reste dans 1..13 (sinon le joker est en bout CONTRE UNE
-    BORNE du jeu — ex. suite 1,2,joker — et retombe sur UNE seule voie,
-    même exposition qu'au milieu : pas de régression pour ce cas limite).
-    Pour le milieu (`position_index == 1`) et pour un groupe de 3, AUCUN
-    changement (rien de plus à compter — un groupe n'a pas d'« extrémité »,
-    les deux couleurs manquantes couvrent déjà les deux voies). Les
-    combinaisons de 4 tuiles ou plus restent hors de portée (voir
-    ci-dessous), comme avant.
-  - **Conséquence pour l'exposition (point 3 ci-dessous)** : un joker en
-    bout de suite de 3 est désormais PLUS exposé qu'un joker au milieu — au
-    plus 4 exemplaires inconnus (deux types) contre au plus 2 (un type) —
-    l'inverse de ce qu'affirmait #232. Tests dédiés :
-    `tests/test_ia_placement_joker.py::
-    test_types_remplacement_suite_bout_deux_valeurs`,
-    `test_types_remplacement_suite_bout_bas_deux_valeurs`,
-    `test_types_remplacement_suite_bout_contre_une_borne_une_seule_valeur`,
-    `test_exposition_suite_bout_quatre_exemplaires_inconnus`,
-    `test_placement_joker_prefere_le_milieu_au_bout_a_tuiles_egales`.
-  - **Libération sans remplacement, hors de portée** (réduction de groupe
-    de 4 à 3, joker retiré — voir §8) : réservée aux combinaisons de 4
-    tuiles ou plus DÉJÀ sur le plateau, déjà évitée par le solveur de base
-    (qui préfère ne pas y placer de joker quand une combinaison de 3
-    suffit) — **hors de portée de cette stratégie**, jamais mesurée par
-    `_types_remplacement_joker` (retourne `None` pour toute combinaison de
-    taille ≠ 3). La voie par prolongement ci-dessus NE lève PAS cette
-    limite : elle ne compte que le prolongement d'une suite de 3 EXISTANTE
-    (un coup mesurable par cette stratégie), jamais un réarrangement plus
-    large.
-  - **APPROXIMATION assumée, à ne pas perdre de vue** : l'exposition
-    calculée ici reste une approximation des voies de libération d'un
-    joker, PAS une mesure exhaustive. Voies COMPTÉES : échange direct
-    (milieu et bout) ; prolongement d'une extrémité suivi d'un détachement
-    sans remplacement (bout seulement, ajout #233). Voies NON comptées :
-    tout réarrangement plus large du plateau que le solveur complet
-    (Expert, §8bis) peut en théorie trouver pour libérer ce même joker —
-    démantèlement complet d'une suite (#175, identifié mais non implémenté
-    pour Avancé, voir §8), scission en milieu de suite combinée à d'autres
-    combinaisons, ou toute recombinaison globale à plusieurs coups
-    d'avance. Cette stratégie départage entre coups ÉQUIVALENTS déjà
-    proposés par le solveur (jamais n'en invente un), et ne prétend donc
-    mesurer que le risque le plus direct et le plus immédiat, pas le risque
-    total.
-- **Reprise interdite avant sa propre ouverture** : un joueur qui n'a pas
-  encore fait sa mise initiale ne peut poser AUCUNE tuile sur le plateau
-  (`moteur/partie.py`, contrôlé par `valider_coup`/`mise_initiale_min`) —
-  l'échange d'un joker étant une pose, il est donc de fait interdit avant
-  l'ouverture, sans règle séparée à vérifier.
-- **Obligation de rejouer le joker dans le même tour** : confirmée par
-  construction dans `_liberations_possibles`/`_coup_depuis_liberations`
-  (§8) — un joker libéré (par échange ou sans remplacement) est TOUJOURS
-  immédiatement replacé ailleurs sur le plateau dans le MÊME coup, jamais
-  gardé en main ; le moteur ne modélise d'ailleurs aucune autre possibilité
-  (un coup ne « retire » jamais une tuile du plateau sans la replacer).
-
-**Exposition d'un placement (point 3)** : pour un coup qui pose un joker
-DEPUIS LE CHEVALET dans une combinaison de 3 tuiles (suite ou groupe), la
-somme, sur les types de tuile qui le remplaceraient (`_types_remplacement_
-joker`), du nombre d'exemplaires encore INCONNUS (brique « Inconnues »,
-#219, `inconnues.exemplaires_restants` — jamais la main adverse, seulement
-ce qui n'est ni sur le plateau ni dans NOTRE main) — `moteur/ia.py::
-_exposition_coup_joker`. Une exposition nulle (tous les exemplaires connus,
-sur le plateau ou dans notre main) signifie que l'adversaire ne peut pas le
-reprendre. Un coup qui pose PLUSIEURS jokers mesurables cumule leurs
-expositions (somme).
-
-**Nuance d'Alain, EXCLUSION du critère (point 4)** : si, APRÈS le coup,
-notre main contient encore la tuile qui remplacerait l'un des jokers posés,
-ce placement est EXCLU (`info["exclu"] = True`) — un bon joueur jouerait
-cette tuile plutôt que le joker ; la génération du coup lui-même (jouer la
-vraie tuile au lieu du joker) reste hors de portée de cette stratégie de
-DÉPARTAGE (elle ne fait que choisir entre les coups que le solveur propose
-déjà, jamais n'en invente un nouveau).
-
-**Mécanisme de départage (point 4), même famille que `chances_prochain_
-tour`** : à nombre de tuiles posées égal, cherche des coups ÉQUIVALENTS
-(`_candidats_placement_joker`, écart STRICTEMENT nul — pas de variante
-tolérante pour cette stratégie) en retirant, tour à tour, chacune des
-tuiles que le coup normal pose, puis en résolvant à nouveau — même
-mécanisme que `_candidats_sorties` (#231). Parmi `coup` et ses candidats
-NON EXCLUS, retient celui dont l'exposition est la plus faible ; les
-candidats EXCLUS (nuance ci-dessus) ne sont jamais choisis, y compris si
-`coup` lui-même est exclu (alors AUCUNE comparaison n'est tentée, `coup`
-reste inchangé). Sans effet si `coup` ne pose aucun joker mesurable, ou si
-le chevalet qui resterait a déjà gagné la partie (coup qui vide la main,
-jamais soumis à la stratégie, garde-fou commun à toutes les stratégies
-multi-tours, §13).
-
-**Variante d'asymétrie, désactivée par défaut (point 5)** : les règles
-vérifiées au point 1 (exposition = exemplaires inconnus) permettent
-d'ajouter SIMPLEMENT un terme qui tient compte de MA PROPRE chance de
-reprendre le joker — `niveaux.ASYMETRIE_JOKER_ACTIVE` (`False` par défaut)
-remplace l'exposition brute par `exposition - niveaux.POIDS_ASYMETRIE_
-JOKER * ma_chance_de_reprise`, où `ma_chance_de_reprise` est la somme, sur
-les mêmes types de remplacement, de `inconnues.proba_tuile_dans_pioche`
-(brique #219 — jamais la main adverse). Nuance d'Alain reprise ici : un
-joker très difficile à reprendre pour l'adversaire l'est AUSSI pour moi
-(même ensemble de tuiles inconnu) ; cette variante ne change donc rien au
-cas où je n'ai AUCUNE chance de le reprendre moi-même (`ma_chance_de_
-reprise = 0`), et ne fait que départager, À EXPOSITION ÉGALE OU PROCHE,
-vers le placement que je peux moi-même espérer récupérer en piochant. Le
-cas « tuile clé en main » (deuxième nuance de l'issue) est, lui, déjà géré
-PAR EXCLUSION (point 4 ci-dessus) : il n'entre jamais dans cette variante
-puisque le placement correspondant est exclu du critère avant même d'y
-arriver.
-
-**Compteurs (point 6, `scripts/comparer_niveaux_ia.py`)** — mêmes
-compteurs génériques que les stratégies précédentes
-(`stats_placement_joker`/`_compteurs_placement_joker`) + :
-- `nb_jokers_poses`/`exposition_liste` : un ajout par joker MESURABLE posé
-  (que le départage ait ou non changé le coup), pour calculer l'exposition
-  MOYENNE — mesure de l'effet visé indépendante du taux de déclenchement ;
-- `joker_repris_par_adversaire` : le mécanisme VISÉ par la stratégie,
-  détecté à CHAQUE tour (de n'importe quel joueur, pas seulement le tour
-  suivant du même joueur — `_detecter_reprises_joker`, `scripts/comparer_
-  niveaux_ia.py`) par une signature d'échange direct (le joker suivi n'est
-  plus accompagné de TOUTES ses anciennes compagnes de combinaison) —
-  **approximation documentée** : un réarrangement du plateau totalement
-  étranger à ce joker précis pourrait, en théorie, produire le même signal
-  (coïncidence jugée négligeable en pratique) ; à comparer avec le témoin
-  (Expert, ou Champion du Monde sans la stratégie).
-
-**Tests fixes** (`tests/test_ia_placement_joker.py`) — trois niveaux depuis
-#233, le troisième pour éviter de dépendre d'un plateau construit à la main
-face au solveur complet à perturbation illimitée (qui trouve souvent un
-réarrangement global plus rentable que celui prévu par le test, voir le
-commentaire de tête du fichier) :
-0. **vérification sur le MOTEUR RÉEL** (`partie.jouer_tour`, issue #233,
-   tâche 1) : le coup « prolongement de l'extrémité opposée puis
-   détachement sans remplacement » est accepté par le moteur de validation
-   du jeu, dans les deux sens de symétrie (joker en bout haut, joker en bout
-   bas) ;
-1. brique directe (`_types_remplacement_joker`/`_exposition_coup_joker`) :
-   suite au MILIEU (une seule valeur, une voie) ; suite en BOUT, haut et
-   bas (DEUX valeurs — échange direct + prolongement — correction #233) ;
-   suite en bout CONTRE UNE BORNE du jeu (une seule valeur, pas de
-   régression) ; groupe de 3 (deux couleurs manquantes) ; combinaison de 4
-   (hors scope, `None`) ; exposition nulle (deux remplaçants déjà connus au
-   tapis) ; exposition en bout (4 exemplaires, strictement plus qu'au
-   milieu) ; exclusion (tuile de remplacement OU de prolongement encore en
-   main) ; aucun joker posé (`None`) ;
-2. stratégie bout-en-bout (`jouer_niveau_bride`), SANS tapis (aucun
-   réarrangement possible) : deux dilemmes —
-   - série très rentable en points (exposition élevée, 4 exemplaires
-     jamais vus) contre suite peu rentable (exposition faible, 2
-     exemplaires) — sans la stratégie, le départage existant (points)
-     choisit la série ; avec elle, la stratégie choisit la suite, moins
-     exposée ;
-   - **(#233)** joker en bout très rentable (exposition élevée, 4
-     exemplaires — correction #233) contre joker au milieu peu rentable
-     (exposition faible, 2 exemplaires) — sans la stratégie, le départage
-     choisit le bout (plus de points) ; avec elle, la stratégie choisit le
-     milieu, moins exposé ;
-   - désactivée (décision identique) ; Expert inchangé ; coup sans joker
-     (aucun effet) ; coup qui vide la main (joué tel quel).
-
-**Expérience prévue** : Champion du Monde avec `placement_joker` SEULE
-contre Expert (même protocole que les stratégies précédentes,
-`--strategies-champion placement_joker`), jugée d'abord par les compteurs
-dédiés (l'exposition moyenne baisse-t-elle réellement, et surtout le taux
-de reprise par l'adversaire baisse-t-il, comparé au témoin ?) avant le taux
-de victoire global. Essai de 2 donnes (`--donnes 2`, Expert vs Champion du
-Monde avec `placement_joker` SEULE) : stratégie déclenchée 3 fois (3 jokers
-mesurables posés), coup changé 0 fois (aucun placement alternatif trouvé
-sur ce petit échantillon), exposition moyenne 2,33 exemplaires inconnus,
-2 des 3 jokers posés repris par l'adversaire d'après `_detecter_reprises_
-joker` — chiffres PUREMENT indicatifs (3 événements, aucune signification
-statistique), qui montrent seulement que la mesure fonctionne de bout en
-bout ; surcoût de calcul négligeable sur cet essai (Champion du Monde ~153
-ms/tour contre ~181 ms/tour pour Expert, dans le bruit de mesure habituel).
-Les valeurs de départ (`ASYMETRIE_JOKER_ACTIVE=False`, `POIDS_ASYMETRIE_
-JOKER=1.0`) sont INDICATIVES, réglables au seul endroit `moteur/niveaux.py`.
+Fichiers SUPPRIMÉS (récupérables uniquement via ce tag) :
+`src/rummikub/moteur/sorties.py`, `src/rummikub/moteur/inconnues.py`,
+`scripts/matrice_strategies.py`, `scripts/lancer_matrice_windows.ps1`, et les
+tests dédiés (`tests/test_sorties.py`, `tests/test_inconnues.py`,
+`tests/test_ia_reserve_tuile.py`, `tests/test_ia_retenue_debut.py`,
+`tests/test_ia_petits_chiffres.py`, `tests/test_ia_chances_prochain_tour.py`,
+`tests/test_ia_placement_joker.py`, `tests/test_registre_strategies.py`,
+`tests/test_matrice_strategies.py`, `tests/test_option_strategies_champion.py`).
+Fichiers encore présents mais NETTOYÉS (seuls les champs et fonctions propres
+à Champion du Monde en ont disparu — le tag donne la version complète
+d'AVANT nettoyage) : `src/rummikub/moteur/niveaux.py`,
+`src/rummikub/moteur/ia.py`, `src/rummikub/moteur/solveur_exact.py`.
+**Exception à ne pas confondre avec les fichiers supprimés** :
+`src/rummikub/moteur/verification_finition.py` existe toujours tel quel dans
+le dépôt actuel — seule la partie « garder un joker » (#225) en a été
+retirée ; la vérification de finition elle-même (#221) reste active pour
+Expert aujourd'hui.
 
 ## 14. Solveur exact de vérification — bibliothèque `rummikub-solver` (licence MIT, issue #204, suite de #201)
 
@@ -3681,13 +2650,12 @@ monothread déterministe** → artefact temporel du solveur maison borné en tem
 sous charge concurrente, pas un défaut structurel (égalité exacte vérifiée #204).
 *Résultats complets : `resultats_match_212.txt` / `.json`.*
 
-## 16. Échelle des SIX niveaux d'IA sur un même modèle exact (issue #213, suite de #206)
+## 16. Échelle des CINQ niveaux d'IA sur un même modèle exact (issue #213, suite de #206)
 
-Depuis #213, les **six** niveaux d'IA (le 6e, **« Champion du Monde »**, complète
-l'échelle à l'image des six niveaux de Scrabble) sont bâtis sur **un seul
-moteur** — le modèle exact d'un tour (`moteur/solveur_exact.py`, le joueur
-d'Expert depuis #206) — dont la **force est réglée par des paramètres** réunis en
-UN SEUL endroit (`moteur/niveaux.py`), et non plus par six algorithmes de force
+Depuis #213, les **cinq** niveaux d'IA sont bâtis sur **un seul moteur** — le
+modèle exact d'un tour (`moteur/solveur_exact.py`, le joueur d'Expert depuis
+#206) — dont la **force est réglée par des paramètres** réunis en UN SEUL
+endroit (`moteur/niveaux.py`), et non plus par des algorithmes de force
 inégale. Le point d'entrée reste `moteur/ia.jouer_ia(etat, idx)`.
 
 ### Structure cible de l'échelle (répartition voulue par Alain)
@@ -3702,7 +2670,6 @@ niveau le plus fort : c'est le niveau **Avancé**.
 | Intermédiaire | exact BRIDÉ | 3 | 12 % |
 | Avancé | exact COMPLET | ∞ (aucune limite) | 0 |
 | Expert | exact complet **+ multi-tours PARTIELLES** (à venir) | ∞ | 0 |
-| Champion du Monde | exact complet **+ multi-tours COMPLÈTES** (à venir) | ∞ | 0 |
 
 - **Débutant, Facile, Intermédiaire** : le solveur un-tour AFFAIBLI (voit moins
   loin, oublie des coups), de plus en plus bridé vers le bas.
@@ -3710,25 +2677,34 @@ niveau le plus fort : c'est le niveau **Avancé**.
 - **Expert** : solveur un-tour + stratégies multi-tours **partielles** (dosées :
   anticipation sur deux tours plutôt que trois, rétention défensive modérée,
   non-don de joker — §13, pistes 1/8/9).
-- **Champion du Monde** : solveur + stratégies multi-tours **complètes** (réserve
-  d'un coup, non-don de joker, rétention défensive probabiliste — §13).
 
 > **⚠️ État provisoire livré par #213.** Les stratégies multi-tours (§13) **ne
-> sont PAS** implémentées par #213. Expert et Champion du Monde sont donc
-> **provisoirement IDENTIQUES à Avancé** (solveur un-tour complet), jusqu'à ce
-> que des issues ultérieures développent le multi-tours. Un tournoi d'échelle
-> montrera donc une progression nette Débutant < Facile < Intermédiaire < Avancé
-> puis un **plateau** Avancé ≈ Expert ≈ Champion (égalités statistiques) — c'est
-> ATTENDU, pas un défaut. Repère voulu par Alain : son propre niveau doit
-> correspondre à **Intermédiaire**, ou entre Intermédiaire et Avancé (à ajuster
-> par les mesures — voir « calibrage » ci-dessous).
+> sont PAS** implémentées par #213. Expert est donc **provisoirement IDENTIQUE
+> à Avancé** (solveur un-tour complet), jusqu'à ce que des issues ultérieures
+> développent le multi-tours. Un tournoi d'échelle montrera donc une
+> progression nette Débutant < Facile < Intermédiaire < Avancé puis un
+> **plateau** Avancé ≈ Expert (égalité statistique) — c'est ATTENDU, pas un
+> défaut. Repère voulu par Alain : son propre niveau doit correspondre à
+> **Intermédiaire**, ou entre Intermédiaire et Avancé (à ajuster par les
+> mesures — voir « calibrage » ci-dessous).
 >
-> **Mise à jour #221** : Expert et Champion du Monde gagnent la première
-> brique multi-tours réelle (vérification de finition en fin de partie,
-> §13) — ils ne sont donc plus strictement identiques à Avancé en toute fin
-> de partie, même si l'écart mesuré reste faible (voir §13 et le rapport de
-> clôture de #221) : le reste de l'échelle et le plateau statistique
-> Avancé ≈ Expert ≈ Champion décrits ci-dessus restent valables ailleurs.
+> **Mise à jour #221** : Expert gagne la première brique multi-tours réelle
+> (vérification de finition en fin de partie, §13) — il n'est donc plus
+> strictement identique à Avancé en toute fin de partie, même si l'écart
+> mesuré reste faible (voir §13 et le rapport de clôture de #221) : le reste
+> de l'échelle et le plateau statistique Avancé ≈ Expert décrits ci-dessus
+> restent valables ailleurs.
+>
+> **Mise à jour #235** : un sixième niveau, « Champion du Monde », avait été
+> ajouté au-dessus d'Expert pour porter des stratégies multi-tours
+> COMPLÈTES (réserve d'une tuile, retenue au début, petits chiffres, chances
+> de poser au prochain tour, placement du joker, en plus de « garder un
+> joker en main », #225). Une mesure chiffrée (12 configurations de 1 000
+> parties, Expert contre Champion du Monde) n'a montré AUCUN effet mesurable
+> sur le taux de victoire : le niveau et tout le code propre à ces
+> stratégies ont été retirés (voir l'archive en §13, et le tag git
+> `archive-strategies-champion` pour retrouver le code). L'échelle compte
+> donc cinq niveaux ; Expert reste le niveau le plus fort, inchangé.
 
 ### Recalibrage #216 — échelle à écarts réguliers (suite de #213)
 
@@ -3738,14 +2714,14 @@ tuiles restantes en défaite, plus bas = plus fort) : Facile ≈ 7,7, Intermédi
 minuscule, et le profil provisoire d'Alain (≈ 3,5) tombait dans le **trou**
 entre Intermédiaire et Avancé. #216 déplace Débutant, Facile et Intermédiaire
 « vers la droite » (plus forts) pour des écarts réguliers, Alain visé **entre**
-Intermédiaire et Avancé. **Avancé, Expert, Champion du Monde inchangés.**
+Intermédiaire et Avancé. **Avancé, Expert inchangés.**
 
 | Niveau | `perturbation_max` | `taux_oubli` | Tuiles restantes en défaite (miroir, graine 0) |
 |--------|:--:|:--:|:--:|
 | Débutant | 0 | **42 %** | ≈ 9,3 |
 | Facile | **1** *(#217)* | **30 %** *(#217)* | cible ≈ 6,0–6,3 *(voir #217 ci-dessous)* |
 | Intermédiaire | **4** | **8 %** | ≈ 5,0 |
-| Avancé (= Expert = Champion) | ∞ | 0 | ≈ 2,7 *(inchangé)* |
+| Avancé (= Expert) | ∞ | 0 | ≈ 2,7 *(inchangé)* |
 
 Écarts obtenus ≈ 2,0–2,3 tuiles entre voisins ; Alain (≈ 3,5) se place entre
 Intermédiaire (≈ 5,0) et Avancé (≈ 2,7).
@@ -3769,7 +2745,7 @@ pas les tuiles restantes) ; le pousser à 0,42 pour Débutant ne l'a pas affaibl
 
 **Décision d'Alain : REMONTER Facile** (le rendre plus fort) — cela écarte Facile
 de Débutant par le haut ET réduit l'écart Facile↔Intermédiaire. **Débutant,
-Intermédiaire, Avancé, Expert, Champion du Monde INCHANGÉS.**
+Intermédiaire, Avancé, Expert INCHANGÉS.**
 
 **Réglage retenu : Facile = perturbation 1, oubli 0.30** (était 0 / 0.15). La
 perturbation est le **seul levier qui sépare réellement les niveaux du bas**
@@ -3909,19 +2885,13 @@ le support des tests de tactiques de joker (§8). Les parties sauvegardées avec
 les 5 anciens niveaux **restent valides** (un libellé inconnu retombe sur
 « Débutant », `niveaux.bridage_pour`).
 
-### Personnage / avatar du nouveau niveau
+### Personnage / avatar par niveau
 
 Ce projet n'a **pas** de persona fixe par niveau : les adversaires IA tirent un
 prénom aléatoire d'un pool partagé (`ui/noms_ordinateur.py`, prénoms genrés) et
 un avatar parmi les 15 SVG existants (`ui/web/avatars/`), quel que soit le
 niveau. **Aucune liste de personnages de Scrabble n'est disponible dans le
-dépôt.** Champion du Monde reçoit donc, comme les cinq autres niveaux, un
-nom + avatar tirés de ces mêmes pools (signalé ici conformément à l'issue). Côté
-écran d'accueil, son bouton et son badge reçoivent le **même traitement visuel**
-que les autres, en prolongeant le dégradé clair→foncé des niveaux : nouvelle
-variable CSS `--niveau-champion: #241603` (la plus foncée), classe de badge
-`niveau-champion-du-monde` (le *slug* de `accueil.js` convertit désormais les
-espaces en tirets).
+dépôt.**
 
 ### Outils de calibrage (`scripts/`)
 
@@ -4019,21 +2989,22 @@ parties jusqu'au terme, puis lancer les commandes ci-dessus.
 
 ### Tests
 
-`tests/test_niveaux.py` : l'échelle a six niveaux (Champion inclus) ; un niveau
-inconnu retombe sur Débutant ; `perturbation_max=0` ne déplace **aucune** tuile
-et `None` récupère le joker ; la borne de perturbation est respectée ; l'oubli à
-100 % fait piocher, un coup gagnant n'est jamais oublié, l'oubli décroît sur une
-petite main ; reproductibilité sous `graine_ia` ; Champion atteint l'optimum
-exact sur les cas de référence ; repli propre sans `highspy`/`numpy`.
+`tests/test_niveaux.py` : l'échelle a cinq niveaux ; un niveau inconnu retombe
+sur Débutant (le niveau retiré « Champion du Monde » retombe spécifiquement
+sur Expert, issue #235, voir l'archive en §13) ; `perturbation_max=0` ne
+déplace **aucune** tuile et `None` récupère le joker ; la borne de
+perturbation est respectée ; l'oubli à 100 % fait piocher, un coup gagnant
+n'est jamais oublié, l'oubli décroît sur une petite main ; reproductibilité
+sous `graine_ia` ; Expert atteint l'optimum exact sur les cas de référence ;
+repli propre sans `highspy`/`numpy`.
 (#217 : `test_oubli_declenche_pioche_coup_non_gagnant` épingle désormais la
 perturbation de Facile à 0 via `monkeypatch` — Facile valant maintenant
 perturbation 1, le coup riche de la donne de test VIDE la main, donc n'est
 jamais oublié ; le test continue d'exercer le mécanisme d'oubli sur un coup
 NON gagnant.)
-`tests/test_playwright_accueil_reglages.py` : le bouton « Champion du Monde »
-ajoute bien un adversaire de ce niveau. Les tests existants (IA, moteur,
-solveurs) restent **inchangés** : les fonctions heuristiques de niveau,
-toujours présentes, continuent d'être testées directement.
+Les tests existants (IA, moteur, solveurs) restent **inchangés** : les
+fonctions heuristiques de niveau, toujours présentes, continuent d'être
+testées directement.
 
 ## 17. Vérifier qu'Expert ne décompose jamais le plateau inutilement (issue #215, suite de #199)
 
@@ -4121,7 +3092,7 @@ ultérieure, après lecture du rapport ci-dessous avec Alain.
 
 ### Moteur réellement utilisé en production
 
-Les SIX niveaux d'IA passent tous par `ia.jouer_niveau_bride` →
+Les CINQ niveaux d'IA passent tous par `ia.jouer_niveau_bride` →
 `jouer_niveau_expert` (§8ter, issue #213), qui résout le coup avec le modèle
 **exact HiGHS** (`highspy`, `moteur/solveur_exact.py`, fonction
 `resoudre_exact`) **en premier et dans l'immense majorité des cas** : c'est
