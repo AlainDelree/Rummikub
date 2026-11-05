@@ -17,14 +17,14 @@ Paires jouées :
     Facile–Avancé, Intermédiaire–Expert), qui doivent montrer un écart encore
     plus net.
 
-AVERTISSEMENT IMPORTANT (issue #213 §2) : Avancé et Expert sont, à ce jour,
-PROVISOIREMENT IDENTIQUES en force — Expert ajoute seulement la vérification
-de finition en fin de partie (#221), dont l'effet mesuré est rare (voir
-CONTEXTE.md). La paire Avancé–Expert est donc ATTENDUE à ~50 % / égalité
-statistique : ce n'est PAS un échec de l'échelle. Le script le signale
-explicitement pour cette paire. Un sixième niveau, « Champion du Monde », a
-porté d'autres stratégies multi-tours ; retiré par l'issue #235 (aucun effet
-mesurable sur le taux de victoire face à Expert).
+AVERTISSEMENT IMPORTANT (issue #213 §2) : Avancé et Expert sont STRICTEMENT
+IDENTIQUES en force (même solveur exact complet, sans aucune étape
+supplémentaire). Expert avait porté une vérification de finition en fin de
+partie (#221, retirée par #236, jamais un coup changé), puis un sixième
+niveau, « Champion du Monde », d'autres stratégies multi-tours (retiré par
+#235, aucun effet mesurable sur le taux de victoire face à Expert). La paire
+Avancé–Expert est donc ATTENDUE à ~50 % / égalité statistique : ce n'est PAS
+un échec de l'échelle. Le script le signale explicitement pour cette paire.
 
 **#220 retire le relevé des tuiles restantes en défaite** (miroir d'un niveau
 contre lui-même, option ``--donnes-profil``) : voir CONTEXTE.md §16 pour les
@@ -323,7 +323,7 @@ def _ligne_paire(res: dict) -> str:
 def afficher_rapport(rapport: dict) -> None:
     res = rapport["resultats"]
     print("=" * 78)
-    print("TOURNOI EN ÉCHELLE DES SIX NIVEAUX D'IA, PAR DUELS (issue #213, "
+    print("TOURNOI EN ÉCHELLE DES CINQ NIVEAUX D'IA, PAR DUELS (issue #213, "
           "critère #220)")
     print(f"{rapport['nb_donnes']} donne(s) x 2 (miroir) par paire — "
          f"graine {rapport['seed']}, max_tours {rapport['max_tours']}")
@@ -404,7 +404,7 @@ def _afficher_verdicts(res: dict) -> None:
 
 def _construire_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Tournoi en échelle des six niveaux d'IA Rummikub, par "
+        description="Tournoi en échelle des cinq niveaux d'IA Rummikub, par "
                     "duels entre niveaux voisins (issue #213, critère #220).")
     parser.add_argument("--donnes", type=int, default=40,
                         help="Donnes distinctes par paire (défaut 40 ; "

@@ -20,8 +20,7 @@ variation du budget de temps réellement consommé par le solveur exact
 d'un tour entre deux exécutions, même identiques par ailleurs (voir
 ``moteur/solveur_exact.BudgetExactDepasse``). Une partie divergente n'est
 donc pas la PREUVE que le réglage a changé quelque chose : c'est un candidat
-à inspecter (regarder son statut ``verif_finition`` dans le journal de la
-partie, si disponible) avant toute conclusion.
+à inspecter avant toute conclusion.
 
 Usage :
 

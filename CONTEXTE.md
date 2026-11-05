@@ -45,14 +45,12 @@ src/rummikub/
     validation.py           valider_suite/groupe/combinaison/plateau.
     partie.py               État de partie, tours, pioche, backup, manches.
     score.py                calculer_scores_manche, trouver_gagnant_manche.
-    ia.py                   6 niveaux d'IA sur un même moteur exact bridé
+    ia.py                   5 niveaux d'IA sur un même moteur exact bridé
                             (voir §16, issue #213) + tactiques de
                             récupération de joker (voir §8, repli).
     niveaux.py              Paramètres d'affaiblissement des niveaux (§16).
     solveur.py              Solveur de réarrangement global du plateau,
                             utilisé par Expert (voir §8bis, #186).
-    verification_finition.py  Vérification de finition en fin de partie,
-                            Expert (§13, issue #221).
     description_coup.py     Résumé écrit + étapes du rejeu pas-à-pas d'un
                             coup de l'IA, à partir du plateau avant/après
                             (voir §12, #189).
@@ -2379,10 +2377,10 @@ plus bas) — cette section archive ce qui a été essayé.
 d'implémentation) :
 - `verif_finition` (#221) — en fin de partie (chevalet ≤ 5 tuiles), vérifier
   si un autre coup équivalent permettrait de finir au tour suivant plutôt que
-  le meilleur coup brut du solveur. **Seule brique qui reste active
-  aujourd'hui, pour Expert** (`moteur/verification_finition.py`, toujours
-  dans le dépôt) : #235 n'a retiré que la variante « garder un joker »
-  ci-dessous, pas la vérification de finition elle-même.
+  le meilleur coup brut du solveur. Restée active pour Expert après #235
+  (qui n'avait retiré que la variante « garder un joker » ci-dessous) ;
+  **retirée à son tour par #236**, jamais un coup changé — voir le point g
+  ci-dessous pour le détail chiffré.
 - `garde_joker` (#225, Champion du Monde seul) — garder un joker en main en
   fin de partie plutôt que le jouer tout de suite, pour le garder jusqu'au
   coup qui vide le chevalet d'un coup.
@@ -2469,11 +2467,31 @@ Fichiers encore présents mais NETTOYÉS (seuls les champs et fonctions propres
 à Champion du Monde en ont disparu — le tag donne la version complète
 d'AVANT nettoyage) : `src/rummikub/moteur/niveaux.py`,
 `src/rummikub/moteur/ia.py`, `src/rummikub/moteur/solveur_exact.py`.
-**Exception à ne pas confondre avec les fichiers supprimés** :
-`src/rummikub/moteur/verification_finition.py` existe toujours tel quel dans
-le dépôt actuel — seule la partie « garder un joker » (#225) en a été
-retirée ; la vérification de finition elle-même (#221) reste active pour
-Expert aujourd'hui.
+`src/rummikub/moteur/verification_finition.py` existait encore tel quel au
+commit visé par ce tag (seule la partie « garder un joker », #225, en avait
+été retirée) ; **il a depuis été supprimé à son tour par #236** — récupérable
+au MÊME tag, qui le contient dans son état antérieur à ce retrait.
+
+**g. Vérification de finition (#221), retirée par #236.** Contrairement aux
+stratégies ci-dessus (toutes évaluées et retirées ensemble par #235), la
+vérification de finition n'évaluait qu'UN coup alternatif en fin de partie
+(chevalet ≤ 5 tuiles) et était restée active pour Expert après #235. Mesures
+qui ont motivé son retrait : sur la série de tests des stratégies (#235, 12
+configurations de 1 000 parties), elle a été déclenchée 4 534 fois dans la
+configuration témoin **sans changer le coup une seule fois** ; dans les
+campagnes précédentes (#221, #226), 5 180 tours de fin de partie examinés,
+**aucun coup changé**, dont 881 tours sur 901 où aucun candidat ne permettait
+de finir au tour suivant. Coût : un ou deux appels supplémentaires au solveur
+exact sur environ un tour sur sept, pour aucun effet. Code retiré plutôt que
+désactivé (même décision que pour #235) : `moteur/verification_finition.py`
+supprimé, son appel dans `moteur/ia.py` et les champs dédiés de
+`moteur/niveaux.py` (`Bridage.verif_finition`,
+`SEUIL_FIN_PARTIE_VERIF_FINITION`) retirés, annotation `verif_finition` du
+journal de partie (`persistance/journal.py`, `ui/api.py`) retirée. Expert et
+Avancé sont de nouveau STRICTEMENT IDENTIQUES (même solveur exact complet,
+aucune étape additionnelle) — voir §16. Récupérable au tag
+`archive-strategies-champion` (le commit visé contient encore le module,
+avant ce retrait).
 
 ## 14. Solveur exact de vérification — bibliothèque `rummikub-solver` (licence MIT, issue #204, suite de #201)
 
@@ -2705,6 +2723,14 @@ niveau le plus fort : c'est le niveau **Avancé**.
 > stratégies ont été retirés (voir l'archive en §13, et le tag git
 > `archive-strategies-champion` pour retrouver le code). L'échelle compte
 > donc cinq niveaux ; Expert reste le niveau le plus fort, inchangé.
+>
+> **Mise à jour #236** : la vérification de finition elle-même (#221),
+> restée active pour Expert après #235, est à son tour retirée — jamais un
+> coup changé (4 534 déclenchements sans effet, voir l'archive §13, point g).
+> **Expert et Avancé sont de nouveau STRICTEMENT IDENTIQUES** (même solveur
+> exact complet, aucune étape additionnelle) : le plateau statistique
+> Avancé ≈ Expert décrit plus haut n'est donc plus une approximation
+> provisoire mais l'état réel et définitif de l'échelle.
 
 ### Recalibrage #216 — échelle à écarts réguliers (suite de #213)
 

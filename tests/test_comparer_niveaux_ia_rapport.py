@@ -1,8 +1,7 @@
 """Tests du rapport de ``scripts/comparer_niveaux_ia.py`` affiné par l'issue
 #223 : causes de repli d'Expert SÉPARÉES (point 2). Construit des résumés
 synthétiques (plutôt que de rejouer une campagne complète) pour isoler
-l'affichage de la simulation — la campagne elle-même (chemin de production,
-#223 point 3) est couverte par ``tests/test_verification_finition.py``."""
+l'affichage de la simulation."""
 
 import sys
 from pathlib import Path

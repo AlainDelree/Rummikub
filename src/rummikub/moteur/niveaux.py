@@ -30,12 +30,12 @@ même moteur (voir ``moteur/ia.jouer_niveau_bride``) :
 
 * **Débutant, Facile, Intermédiaire** : le solveur un-tour AFFAIBLI (de plus en
   plus bridé vers le bas) ;
-* **Avancé** : le solveur un-tour COMPLET, tel quel ;
-* **Expert** : le solveur un-tour complet PLUS la vérification de finition en
-  fin de partie (#221). Un sixième niveau, « Champion du Monde », a porté
-  d'autres stratégies multi-tours ; retiré par l'issue #235, voir CONTEXTE.md
-  (archive : aucun effet mesurable sur le taux de victoire, code récupérable
-  au tag git ``archive-strategies-champion``).
+* **Avancé, Expert** : le solveur un-tour COMPLET, tel quel — STRICTEMENT
+  IDENTIQUES. Expert avait porté une vérification de finition en fin de
+  partie (#221) puis un sixième niveau, « Champion du Monde », d'autres
+  stratégies multi-tours ; tout ce code a été retiré (#235, #236, voir
+  CONTEXTE.md — archive : aucun effet mesurable sur le taux de victoire,
+  code récupérable au tag git ``archive-strategies-champion``).
 
 Les valeurs ci-dessous sont les valeurs de départ INDICATIVES de l'issue, à
 resserrer par les mesures (``scripts/echelle_niveaux.py``,
@@ -57,13 +57,9 @@ ECHELLE = list(NIVEAUX)
 @dataclass(frozen=True)
 class Bridage:
     """Réglage de force d'un niveau. ``perturbation_max=None`` → illimité
-    (solveur complet) ; ``taux_oubli`` ∈ [0, 1] ; ``verif_finition`` (issue
-    #221, étape 1 de la brique « Deux tours ») active la vérification de
-    finition en fin de partie pour ce niveau — ``False`` par défaut, pour que
-    Débutant à Avancé restent strictement inchangés."""
+    (solveur complet) ; ``taux_oubli`` ∈ [0, 1]."""
     perturbation_max: int | None
     taux_oubli: float
-    verif_finition: bool = False
 
     @property
     def complet(self) -> bool:
@@ -135,25 +131,14 @@ BRIDAGES: dict[str, Bridage] = {
     "Facile":            Bridage(perturbation_max=1,    taux_oubli=0.30),
     "Intermédiaire":     Bridage(perturbation_max=4,    taux_oubli=0.08),
     "Avancé":            Bridage(perturbation_max=None, taux_oubli=0.0),
-    # Expert : solveur un-tour complet PLUS, depuis #221 (étape 1 de la
-    # brique « Deux tours »), la vérification de finition en fin de partie
-    # (voir moteur/verification_finition.py et SEUIL_FIN_PARTIE_VERIF_
-    # FINITION ci-dessous). Un sixième niveau, « Champion du Monde », a
-    # porté d'autres stratégies multi-tours (#225/#229/#230/#231/#232) ;
-    # retiré par #235 (aucun effet mesurable sur le taux de victoire face à
-    # Expert — voir CONTEXTE.md). Expert n'est pas modifié par ce retrait.
-    "Expert":            Bridage(perturbation_max=None, taux_oubli=0.0,
-                                  verif_finition=True),
+    # Expert : solveur un-tour complet, STRICTEMENT IDENTIQUE à Avancé.
+    # Avait porté une vérification de finition en fin de partie (#221), puis
+    # un sixième niveau, « Champion du Monde », d'autres stratégies
+    # multi-tours (#225/#229/#230/#231/#232) ; tout ce code a été retiré
+    # (#235, #236 — aucun des deux n'a jamais changé un coup mesurablement,
+    # voir CONTEXTE.md). Expert n'est pas modifié par ces retraits.
+    "Expert":            Bridage(perturbation_max=None, taux_oubli=0.0),
 }
-
-
-# Taille maximale du chevalet (nombre de tuiles, AVANT de jouer) au-delà de
-# laquelle la vérification de finition (#221) ne s'applique pas — hors de
-# cette borne, on est trop loin de la fin de partie pour que le coût d'un
-# appel supplémentaire au solveur soit justifié par la rareté du bénéfice.
-# Valeur de départ INDICATIVE de l'issue (5), réglable ICI uniquement (même
-# emplacement que les autres paramètres de force de ce fichier).
-SEUIL_FIN_PARTIE_VERIF_FINITION = 5
 
 
 # Compatibilité (issue #235) : « Champion du Monde », niveau retiré (aucun
