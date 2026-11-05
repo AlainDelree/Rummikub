@@ -5,5 +5,11 @@
     "métier": ["src/rummikub/moteur"],
     "persistance": ["src/rummikub/persistance"]
   },
-  "donnees_personnelles": ["config.json", "data/parties.db", "data/logs_parties"]
+  "donnees_personnelles": ["config.json", "data/parties.db", "data/logs_parties"],
+  "exceptions": [
+    {
+      "regle": "ARC-002",
+      "raison": "2026-11-05 — api.py est le pont js_api de pywebview : il joue le rôle de contrôleur et accède volontairement à la persistance. Accepté tant que ce fichier reste le seul de src/rummikub/ui à le faire ; à revoir si une couche applicative dédiée est créée."
+    }
+  ]
 }
