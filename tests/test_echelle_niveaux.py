@@ -76,7 +76,7 @@ def test_jouer_paire_callback_on_donne_appele_a_chaque_donne():
 
 def test_limite_temps_arrete_avec_resultats_partiels(tmp_path, monkeypatch):
     # Restreint l'échelle à une seule paire (via NIVEAUX) pour un test rapide
-    # et déterministe, sans dépendre des six niveaux réels.
+    # et déterministe, sans dépendre des cinq niveaux réels.
     sortie = tmp_path / "partiel.txt"
     debut = time.monotonic()
     rapport = M.jouer_tournoi(nb_donnes=500, seed=0,
