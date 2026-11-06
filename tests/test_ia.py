@@ -885,10 +885,16 @@ def test_expert_aucun_coup_possible():
     assert coup["action"] in ("piocher", "passer")
 
 
-def test_expert_se_replie_sur_avance_si_budget_depasse():
+def test_expert_se_replie_sur_avance_si_budget_depasse(
+        horloge_solveur_deterministe):
     """Issue #186 (tâche 3/6) : avec un budget de temps nul, le solveur
     doit lever BudgetDepasse dès la recherche ; Expert se replie alors sur
-    exactement le coup que jouerait Avancé, sans jamais planter."""
+    exactement le coup que jouerait Avancé, sans jamais planter.
+
+    Horloge déterministe (issue #244, voir ``conftest.py``) plutôt que
+    l'horloge réelle de l'OS : sous Windows, ``time.monotonic()`` n'avance
+    que par paliers d'environ 15 ms, ce qui peut manquer la comparaison
+    stricte qui déclenche ``BudgetDepasse`` pour une recherche très courte."""
     etat = _etat_avec_reduction_groupe4("Expert")
     with pytest.raises(BudgetDepasse):
         resoudre_coup(etat, 1, budget_temps=0.0)

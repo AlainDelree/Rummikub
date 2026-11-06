@@ -88,12 +88,17 @@ def test_expert_se_replie_si_modele_exact_indisponible(monkeypatch,
     assert len(coup["ids_tuiles"]) >= 1
 
 
-def test_expert_se_replie_si_budget_nul():
+def test_expert_se_replie_si_budget_nul(horloge_solveur_deterministe):
     """Budget de temps nul : Expert se replie sur la recherche (qui, budget
     nul, lève aussi) puis sur Avancé — exactement le coup d'Avancé, sans
     jamais planter. Quand le modèle exact est disponible, on vérifie en plus
     qu'un budget nul lève bien ``BudgetExactDepasse`` (et non une solution
-    non fiable) — point 6d de l'issue."""
+    non fiable) — point 6d de l'issue.
+
+    Horloge déterministe (issue #244, voir ``conftest.py``) sur le repli
+    ``moteur.solveur`` : la recherche conservée (contrairement au modèle
+    exact, qui vérifie ``budget_temps <= 0`` sans horloge) dépend de
+    ``time.monotonic()``, peu fiable à budget nul sous Windows."""
     data = _charger("cas_expert_ia_261026172338_tour37.json")
     etat, idx = data["etat"], data["idx"]
     if se.DISPONIBLE:

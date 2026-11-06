@@ -310,6 +310,17 @@ icône `assets/rummikub.ico` (facultative, absente → aucune icône).
   Ils restent exécutés par défaut avec toute la suite ; le marqueur sert
   uniquement à pouvoir les lancer ou les isoler à part (`pytest -m lent`,
   `pytest -m "not lent"`) sans jamais les exclure par défaut.
+- **Deux pièges propres à Windows corrigés dans les tests (issue #244,
+  jamais dans le code de production)** : les tests de dépassement de budget
+  (`budget_temps=0.0` sur `resoudre_coup`/`solveur.py`) n'utilisent jamais
+  l'horloge réelle de l'OS — sous Windows, `time.monotonic()` n'avance que
+  par paliers d'environ 15 ms, ce qui peut manquer la comparaison stricte
+  `> self.limite` d'une recherche très courte ; voir la fixture
+  `horloge_solveur_deterministe` dans `tests/conftest.py` (horloge
+  déterministe, pas fixe à chaque appel). Les tests de chemins de lancement
+  (`tests/test_actualise_flag_lancement.py`) comparent des `Path` résolus
+  entre eux, jamais un `Path.as_posix()` contre un `str(...)` écrit avec des
+  barres inverses natives Windows.
 - État actuel : **282 tests passent** (`pytest -q` → `282 passed, 3 skipped`,
   les 3 sautés étant les tests Playwright quand chromium/playwright sont
   absents). Suite stable sur deux exécutions consécutives (issue #210).

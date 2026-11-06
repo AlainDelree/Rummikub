@@ -28,6 +28,8 @@ import time
 
 import pytest
 
+from rummikub.moteur import solveur as _solveur
+
 # Durée du micro-benchmark ci-dessous sur la machine de développement (#206).
 # Mesurée best-of-3 : ~0,107 s pour 1 000 000 d'itérations.
 _REFERENCE_DEV_S = 0.107
@@ -63,3 +65,38 @@ def facteur_machine() -> float:
     """Facteur multiplicatif (≥ 1) à appliquer aux budgets des tests de la
     recherche de repli dont le résultat dépend de la vitesse machine."""
     return FACTEUR_MACHINE
+
+
+# --------------------------------------------------------------------------- #
+# Horloge déterministe pour les tests de dépassement de budget (issue #244)
+# --------------------------------------------------------------------------- #
+
+class _HorlogeDeterministe:
+    """Remplace ``time.monotonic`` dans ``moteur.solveur`` : garantit une
+    valeur strictement croissante à CHAQUE appel.
+
+    ``_Contexte.verifier_budget`` compare ``time.monotonic() > self.limite``
+    (comparaison STRICTE). Avec un budget de temps nul ou très petit, cette
+    comparaison n'est fiable que si l'horloge a réellement avancé entre la
+    pose de ``limite`` et sa vérification. Sous Windows, ``time.monotonic()``
+    réel n'avance que par paliers d'environ 15 ms : deux appels très
+    rapprochés peuvent renvoyer la même valeur, et une recherche très courte
+    peut alors se terminer sans jamais déclencher ``BudgetDepasse`` — défaut
+    du TEST (horloge réelle instable), pas du moteur."""
+
+    def __init__(self, pas: float = 0.001):
+        self._valeur = 0.0
+        self._pas = pas
+
+    def monotonic(self) -> float:
+        self._valeur += self._pas
+        return self._valeur
+
+
+@pytest.fixture
+def horloge_solveur_deterministe(monkeypatch):
+    """Substitue l'horloge de ``moteur.solveur`` par ``_HorlogeDeterministe``
+    pour la durée du test : un budget de temps nul (ou très petit) dépasse
+    alors de façon fiable, quelle que soit la résolution de l'horloge réelle
+    de l'OS (voir issue #244)."""
+    monkeypatch.setattr(_solveur, "time", _HorlogeDeterministe())

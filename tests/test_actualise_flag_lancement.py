@@ -96,9 +96,16 @@ def test_main_chemins_valides_lancent_sans_shell(
     _main_module._lancer_actualise_ui_si_flag()
     assert len(popen.appels) == 1
     args, kwargs = popen.appels[0]
-    assert args[0] == str(actualise_ui.resolve())
-    assert bat.resolve().as_posix() in [str(a) for a in args]
+    # Assertions de sécurité AVANT la comparaison de chemins : un défaut de
+    # comparaison de chemins (voir plus bas) ne doit jamais les masquer.
+    assert isinstance(args, list)
     assert kwargs.get("shell", False) is False
+    # Comparaison par ``Path`` résolu, jamais par texte : sous Windows,
+    # ``Path.as_posix()`` écrit des barres obliques (``C:/...``) alors que
+    # les arguments passés à ``Popen`` gardent les barres inverses natives
+    # (``C:\...``) — mêmes fichiers, textes différents.
+    assert Path(args[0]).resolve() == actualise_ui.resolve()
+    assert bat.resolve() in [Path(a).resolve() for a in args]
 
 
 def test_main_chemin_hors_racine_ne_lance_rien(
