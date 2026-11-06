@@ -11,9 +11,10 @@ Fonctionne sous Windows et sous Linux.
   **Facile**, **Intermédiaire**, **Avancé**, **Expert**.
 - Le nombre de manches du match est réglable avant de lancer la partie (de 1
   à 9).
-- Au niveau Expert, l'adversaire calcule son coup par programmation linéaire
-  en nombres entiers résolue par HiGHS (repli automatique sur une recherche
-  arborescente si ce solveur est indisponible).
+- Tous les niveaux calculent leur coup par programmation linéaire en nombres
+  entiers résolue par HiGHS ; la difficulté est réglée par des limites
+  (réarrangements permis, coups oubliés). Repli automatique sur une recherche
+  arborescente si ce solveur est indisponible.
 - Les parties en cours sont sauvegardées et peuvent être reprises depuis
   l'écran d'accueil.
 
@@ -67,7 +68,8 @@ détail des étapes.
 ## Données personnelles
 
 Les réglages et les parties du joueur restent sur sa machine : `config.json`
-à la racine, `data/parties.db` et `data/logs_parties/`. Ces fichiers ne sont
+(à la racine du dépôt en développement, dans `%APPDATA%\Rummikub` pour le jeu
+installé sous Windows), `data/parties.db` et `data/logs_parties/`. Ces fichiers ne sont
 pas versionnés dans le dépôt.
 
 ## Documentation technique
