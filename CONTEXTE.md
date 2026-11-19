@@ -320,7 +320,12 @@ icône `assets/rummikub.ico` (facultative, absente → aucune icône).
   déterministe, pas fixe à chaque appel). Les tests de chemins de lancement
   (`tests/test_actualise_flag_lancement.py`) comparent des `Path` résolus
   entre eux, jamais un `Path.as_posix()` contre un `str(...)` écrit avec des
-  barres inverses natives Windows.
+  barres inverses natives Windows. Troisième cas du même défaut trouvé après
+  coup (issue #247) : `test_coups_rates_extensions.py::
+  test_cas_reference_bruno_budget_trop_court_signale_inconclusif`
+  (`budget_genereux=0.0` sur `analyser_decision_complete`, qui descend aussi
+  jusqu'à `resoudre_coup`/`solveur.py`) — même fixture appliquée, aucun
+  nouveau mécanisme nécessaire.
 - État actuel : **282 tests passent** (`pytest -q` → `282 passed, 3 skipped`,
   les 3 sautés étant les tests Playwright quand chromium/playwright sont
   absents). Suite stable sur deux exécutions consécutives (issue #210).

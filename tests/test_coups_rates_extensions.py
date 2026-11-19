@@ -347,7 +347,8 @@ def test_cas_reference_bruno_detecte_avec_budget_suffisant():
     assert r["nb_tuiles_manquantes"] == attendu - 1
 
 
-def test_cas_reference_bruno_budget_trop_court_signale_inconclusif():
+def test_cas_reference_bruno_budget_trop_court_signale_inconclusif(
+        horloge_solveur_deterministe):
     """Avec un budget délibérément trop court pour ce cas, l'outil ne doit
     JAMAIS conclure « pas de coup raté » — seulement « inconclusif », pour
     ne pas sous-compter les coups ratés à tort (point 3 de l'issue #193).
@@ -357,8 +358,16 @@ def test_cas_reference_bruno_budget_trop_court_signale_inconclusif():
     bien plus rapide qu'avant #194 (6 à 10 s) —, donc tout budget non nul,
     même minuscule, suffirait maintenant à le résoudre. Un budget nul
     déclenche la vérification dès le premier appel (voir
-    ``solveur._Contexte.verifier_budget``), ce qui reste robuste à la
-    vitesse de la machine."""
+    ``solveur._Contexte.verifier_budget``) — à CONDITION que l'horloge ait
+    réellement avancé entre la pose de la limite et sa vérification. Sous
+    Windows, ``time.monotonic()`` réel n'avance que par paliers d'environ
+    15 ms : deux appels très rapprochés peuvent renvoyer la même valeur, et
+    la comparaison stricte ne déclenche alors jamais ``BudgetDepasse`` pour
+    une recherche aussi courte (~0,1 s) — défaut du TEST, pas du moteur
+    (issue #247, même famille que #244). L'horloge déterministe de
+    ``conftest.py`` (avance d'un pas fixe à CHAQUE appel) rend ce
+    déclenchement fiable quelle que soit la résolution de l'horloge réelle
+    de l'OS."""
     decision, _ = _decision_bruno_pose_une_tuile()
     r = CR.analyser_decision_complete(decision, budget_genereux=0.0)
     assert r["inconclusif"] is True
