@@ -966,6 +966,15 @@ function rendreAuChevaletServeur(d) {
   if (!chev.some((t) => t.id === d.id)) chev.push(d);
 }
 
+// Remet une tuile reprise dans chevaletLocal : à sa place triée si « Tri
+// automatique » est actif (issue #251, comme une tuile piochée via
+// insererTrie), sinon en fin de chevalet comme avant. Partagé par tous les
+// chemins de retour au chevalet (zone de pose, tapis, vidage de rangée).
+function rendreAuChevaletLocal(d) {
+  if (triAutoActif) insererTrie(d);
+  else chevaletLocal.push(d);
+}
+
 // Retire et retourne une tuile « plaçable » par id, qu'elle soit sur le
 // chevalet ou déjà dans une rangée de travail (cas du mode tapis, où une tuile
 // prise sur le tapis transite par la zone de travail avant d'être déplacée).
@@ -1048,7 +1057,7 @@ function reprendreTuileRangee(id, indexRangee) {
     return;
   }
   const d = travail[indexRangee].splice(i, 1)[0];
-  chevaletLocal.push(d);
+  rendreAuChevaletLocal(d); // tri auto si actif (issue #251)
   rendreAuChevaletServeur(d); // symétrie avec etendreTapis/insererTuileTapis (#138)
   tuilesCeTour = tuilesCeTour.filter((x) => x !== id);
   rafraichirZoneTravail();
@@ -1089,7 +1098,7 @@ function viderRangee(index) {
     if (tuilesOrigineTapis.includes(d.id)) {
       restants.push(d);
     } else {
-      chevaletLocal.push(d);
+      rendreAuChevaletLocal(d); // tri auto si actif (issue #251)
       tuilesCeTour = tuilesCeTour.filter((id) => id !== d.id);
     }
   });
@@ -1171,7 +1180,7 @@ function reprendreTuile(id) {
       travail[rangeeActive].push(d);
       tuileSelectionnee = d.id;
     } else {
-      chevaletLocal.push(d);
+      rendreAuChevaletLocal(d); // tri auto si actif (issue #251)
       rendreAuChevaletServeur(d); // symétrie avec etendreTapis
       tuilesCeTour = tuilesCeTour.filter((x) => x !== id);
     }
@@ -1360,6 +1369,11 @@ async function onAnnuler() {
     if (res && res.etat) etat = res.etat;
   } catch (e) { /* annulation purement locale en repli */ }
   reinitChevaletLocal(); // seul cas où on repart de l'ordre serveur
+  // reinitChevaletLocal() repart de l'ordre serveur, qui n'est pas trié : le
+  // tri du chevalet n'existe que côté client et est donc perdu à ce moment-là.
+  // On le réapplique si le tri automatique est actif, pour rester cohérent
+  // avec son réglage (issue #158, étendu à #251).
+  if (triAutoActif) trierChevalet();
   reinitTour();
   rafraichirTout();
 }
@@ -1534,11 +1548,20 @@ async function onPasser() {
 
 // ------------------------------------------------------------ IA (déclenchée par l'humain)
 // Vitesse d'animation selon le réglage « Vitesse de l'ordinateur ».
+// `reflexion` : attente avant que l'IA joue. `tuile` : délai entre deux
+// tuiles posées pendant l'animation. `premiereTuile`/`finPose` : pauses
+// fixes de animerPoseTuiles() (avant la 1re tuile, après la dernière) —
+// jusqu'à l'issue #251 ces deux pauses étaient des constantes codées en dur
+// (200 ms / 800 ms) PARTAGÉES par les 4 vitesses : pour un coup d'un ou deux
+// tuiles (le cas le plus fréquent), elles dominaient largement `tuile`, si
+// bien que "Rapide" ne paraissait quasiment pas plus rapide que "Normale".
+// Seule la ligne "Rapide" est raccourcie ici ; les 3 autres gardent leurs
+// valeurs d'avant #251 (y compris les 200/800 ci-dessus, repris tels quels).
 const VITESSES_IA = {
-  "Instantanée": { reflexion: 0,    tuile: 100 },
-  "Rapide":      { reflexion: 400,  tuile: 400 },
-  "Normale":     { reflexion: 800,  tuile: 700 },
-  "Lente":       { reflexion: 1500, tuile: 1200 },
+  "Instantanée": { reflexion: 0,    tuile: 100, premiereTuile: 200, finPose: 800 },
+  "Rapide":      { reflexion: 200,  tuile: 250, premiereTuile: 80,  finPose: 250 },
+  "Normale":     { reflexion: 800,  tuile: 700, premiereTuile: 200, finPose: 800 },
+  "Lente":       { reflexion: 1500, tuile: 1200, premiereTuile: 200, finPose: 800 },
 };
 function vitesseIA() {
   return VITESSES_IA[(etat.config && etat.config.vitesse_ia) || "Normale"]
@@ -1554,10 +1577,29 @@ function vitesseIA() {
 // ajouté. Une préférence enregistrée sous l'ancien "Rapide" reste un
 // libellé valide (la clé existe toujours dans cette table), elle bascule
 // donc automatiquement vers le nouveau "Rapide" (ex-"Moyenne", 1.5×).
-const MULTIPLICATEURS_REJEU_IA = { "Lente": 3.2, "Moyenne": 2.2, "Rapide": 1.5 };
+// #251 : "Rapide" repasse de 1.5× à 1.0× — même défaut que ci-dessus (les
+// pauses fixes de animerPoseTuiles dominaient le ressenti) : voir
+// PAUSES_REJEU_IA, qui fournit maintenant à "Rapide" ses propres pauses
+// courtes au lieu des 200/800 ms partagées par "Lente" et "Moyenne".
+const MULTIPLICATEURS_REJEU_IA = { "Lente": 3.2, "Moyenne": 2.2, "Rapide": 1.0 };
 function multiplicateurRejeuIA() {
   return MULTIPLICATEURS_REJEU_IA[(etat.config && etat.config.vitesse_rejeu_ia) || "Moyenne"]
     || 2.2;
+}
+
+// Pauses fixes (avant la 1re tuile / après la dernière) du rejeu animé,
+// indexées sur son propre sélecteur de vitesse plutôt que sur « Vitesse de
+// l'ordinateur » (issue #251). "Lente"/"Moyenne" reprennent les anciennes
+// constantes partagées (200/800 ms, inchangées) ; "Rapide" obtient les
+// mêmes pauses courtes que le coup de l'IA en direct.
+const PAUSES_REJEU_IA = {
+  "Lente":   { premiere: 200, fin: 800 },
+  "Moyenne": { premiere: 200, fin: 800 },
+  "Rapide":  { premiere: 80,  fin: 250 },
+};
+function pausesRejeuIA() {
+  return PAUSES_REJEU_IA[(etat.config && etat.config.vitesse_rejeu_ia) || "Moyenne"]
+    || PAUSES_REJEU_IA["Moyenne"];
 }
 
 // Compare l'ancien et le nouveau plateau et retourne les tuiles nouvellement
@@ -1629,7 +1671,16 @@ function trouverTuilesDeplacees(ancienPlateau, nouveauPlateau) {
 // déplacées encore dans leur ancienne combinaison) et converge vers
 // `plateauApres`. Utilisé pour le coup IA en direct (jouerIA) et pour son
 // rejeu à la demande (issue #144 ; réarrangement + rythme : issue #149).
-async function animerPoseTuiles(tuiAjoutees, tuilesDeplacees, plateauAvant, plateauApres, delaiEntreTuiles) {
+// `premierePause`/`finPause` (issue #251) : pauses fixes avant la première
+// tuile et après la dernière, choisies par l'appelant selon sa propre
+// vitesse (vitesseIA().premiereTuile/finPose en direct, pausesRejeuIA() au
+// rejeu) — plutôt que les constantes 200/800 ms d'avant #251, partagées par
+// toutes les vitesses et qui empêchaient "Rapide" de paraître plus rapide
+// sur un coup d'une ou deux tuiles.
+async function animerPoseTuiles(
+  tuiAjoutees, tuilesDeplacees, plateauAvant, plateauApres, delaiEntreTuiles,
+  premierePause = 200, finPause = 800,
+) {
   const etapes = [
     ...tuilesDeplacees.map(t => ({ ...t, deplacee: true })),
     ...tuiAjoutees.map(t => ({ ...t, deplacee: false })),
@@ -1649,7 +1700,7 @@ async function animerPoseTuiles(tuiAjoutees, tuilesDeplacees, plateauAvant, plat
 
   for (let i = 0; i < etapes.length; i++) {
     await new Promise(r =>
-      setTimeout(r, i === 0 ? 200 : delaiEffectif));
+      setTimeout(r, i === 0 ? premierePause : delaiEffectif));
     idsRevelees.add(etapes[i].dict.id);
 
     // Reconstruire progressivement le plateau visible à partir du plateau
@@ -1779,7 +1830,8 @@ async function jouerIA() {
 
     await animerPoseTuiles(
       tuiAjoutees, tuilesDeplacees,
-      ancienPlateau, clone(etat.plateau || []), DELAI_ENTRE_TUILES);
+      ancienPlateau, clone(etat.plateau || []), DELAI_ENTRE_TUILES,
+      vitesse.premiereTuile, vitesse.finPose);
 
     // Finaliser : plateau complet + rafraîchissement normal
     plateauLocal = clone(etat.plateau || []);
@@ -1835,12 +1887,8 @@ async function rejouerDernierCoupIA() {
   if (tuilesCeTour.length > 0) {
     const ok = await confirmerRejeuIA(coup.nom);
     if (!ok) return;
-    await onAnnuler(); // remet les tuiles du tour en cours dans la main
-    // onAnnuler() repart de l'ordre serveur (reinitChevaletLocal), qui n'est
-    // pas trié : le tri du chevalet n'existe que côté client et est donc
-    // perdu à ce moment-là. On le réapplique ici si le tri automatique est
-    // actif, pour rester cohérent avec son réglage (issue #158).
-    if (triAutoActif) trierChevalet();
+    await onAnnuler(); // remet les tuiles du tour en cours dans la main,
+    // déjà retriée par onAnnuler() si le tri automatique est actif (#158, #251)
   }
 
   const tuiAjoutees = trouverTuilesAjoutees(
@@ -1853,9 +1901,11 @@ async function rejouerDernierCoupIA() {
   if (btn) btn.disabled = true;
 
   const delaiRejeu = Math.round(vitesseIA().tuile * multiplicateurRejeuIA());
+  const pauses = pausesRejeuIA();
   await animerPoseTuiles(
     tuiAjoutees, tuilesDeplacees,
-    coup.plateau_avant, coup.plateau_apres, delaiRejeu);
+    coup.plateau_avant, coup.plateau_apres, delaiRejeu,
+    pauses.premiere, pauses.fin);
 
   plateauLocal = clone(etat.plateau || []);
   rafraichirPlateau();
