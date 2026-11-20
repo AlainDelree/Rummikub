@@ -67,7 +67,8 @@ def melanger(sac: list[Tuile]) -> list[Tuile]:
     """Fisher-Yates ; retourne une nouvelle liste (n'altère pas l'entrée)."""
     resultat = list(sac)
     for i in range(len(resultat) - 1, 0, -1):
-        j = random.randint(0, i)
+        # aléa de jeu (mélange du sac de tuiles), sans enjeu de sécurité
+        j = random.randint(0, i)  # noqa: S311  # nosec B311
         resultat[i], resultat[j] = resultat[j], resultat[i]
     return resultat
 

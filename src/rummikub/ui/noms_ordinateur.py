@@ -40,4 +40,5 @@ def choisir(exclure=None, genre=None):
     pool = [n for n in base if n not in exclus]
     if not pool:
         pool = list(base)
-    return random.choice(pool)
+    # aléa de jeu (nom aléatoire d'un joueur IA), sans enjeu de sécurité
+    return random.choice(pool)  # noqa: S311  # nosec B311

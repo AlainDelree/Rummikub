@@ -57,7 +57,10 @@ def lancer_avec_limite_ferme(
         kwargs["start_new_session"] = True
 
     debut = time.monotonic()
-    proc = subprocess.Popen(cmd, **kwargs)
+    # sous-processus de mesure interne, arguments contrôlés par le script
+    # appelant (même interpréteur + chemin de script + ses propres argv),
+    # aucune saisie utilisateur
+    proc = subprocess.Popen(cmd, **kwargs)  # noqa: S603  # nosec B603
 
     if limite_temps is None:
         return _code_depuis_retour(proc.wait())
@@ -88,7 +91,9 @@ def _terminer_arbre(proc: subprocess.Popen) -> None:
     Windows (point 2 de l'issue #220). Toujours désigné par son PID précis
     (jamais par un motif de nom)."""
     if sys.platform == "win32":
-        subprocess.run(["taskkill", "/F", "/T", "/PID", str(proc.pid)],
+        # arguments fixes + PID entier, aucune saisie utilisateur ;
+        # "taskkill" sans chemin complet est la pratique Windows standard
+        subprocess.run(["taskkill", "/F", "/T", "/PID", str(proc.pid)],  # noqa: S603,S607  # nosec B603,B607
                        capture_output=True)
         return
 

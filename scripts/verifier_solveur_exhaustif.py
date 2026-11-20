@@ -60,7 +60,8 @@ def main(argv=None) -> int:
                              "recherche exhaustive praticable).")
     args = parser.parse_args(argv)
 
-    rng = random.Random(args.seed)
+    # aléa de jeu (graines de simulation), sans enjeu de sécurité
+    rng = random.Random(args.seed)  # noqa: S311  # nosec B311
     ecarts, inconclusifs = [], 0
     t0 = time.monotonic()
 

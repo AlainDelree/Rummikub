@@ -227,7 +227,8 @@ def profiler_niveau(niveau: str, nb_donnes: int, seed: int, max_tours: int,
     l'indicateur de fin qui situe le niveau est (a) les tuiles du perdant."""
     profil = _profil_vierge(f"{niveau} (IA)", est_ia=True)
     profil["taux_defini"] = False  # miroir contre soi : victoire sans objet
-    rng_graines = random.Random(seed)
+    # aléa de jeu (graines de simulation), sans enjeu de sécurité
+    rng_graines = random.Random(seed)  # noqa: S311  # nosec B311
 
     for _ in range(nb_donnes):
         graine = rng_graines.randrange(2**32)

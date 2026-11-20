@@ -25,6 +25,7 @@ sinon — avec, à l'écran, la cause de l'échec.
 
 from __future__ import annotations
 
+import contextlib
 import sys
 from pathlib import Path
 
@@ -156,15 +157,13 @@ def executer_autotest(argv=None) -> int:
     def emettre(msg: str) -> None:
         lignes.append(msg)
         # sys.stdout peut être None dans un exécutable fenêtré sans console
-        # (Windows) : on n'échoue jamais pour autant.
-        try:
+        # (Windows) : on n'échoue jamais pour autant. Message déjà conservé
+        # dans ``lignes`` ; une erreur d'écriture/d'encodage sur stdout ne
+        # doit pas interrompre l'autotest.
+        with contextlib.suppress(Exception):
             if sys.stdout is not None:
                 print(msg)
                 sys.stdout.flush()
-        except Exception:
-            # Message déjà conservé dans ``lignes`` ; une erreur d'écriture/
-            # d'encodage sur stdout ne doit pas interrompre l'autotest.
-            pass
 
     code = _executer(emettre)
 
@@ -172,12 +171,10 @@ def executer_autotest(argv=None) -> int:
         try:
             Path(rapport_path).write_text("\n".join(lignes) + "\n", encoding="utf-8")
         except Exception as exc:  # pragma: no cover - dépend du système de fichiers
-            try:
+            # Dernier repli : même l'affichage de cet avertissement peut
+            # échouer (pas de console) ; il n'y a alors plus rien à faire.
+            with contextlib.suppress(Exception):
                 if sys.stdout is not None:
                     print(f"[ATTENTION] Ecriture du rapport impossible ({exc!r}).")
-            except Exception:
-                # Dernier repli : même l'affichage de cet avertissement a
-                # échoué (pas de console) ; il n'y a plus rien à faire.
-                pass
 
     return code

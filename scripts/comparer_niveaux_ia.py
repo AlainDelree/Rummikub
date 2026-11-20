@@ -523,7 +523,8 @@ def comparer(niveau_a: str, niveau_b: str, nb_donnes: int, seed: int,
     resultats`` ; mesure pure, ne change jamais le déroulement de la partie."""
     cfg_eval = {"A": evaluation_main.depuis_preset(eval_a, nb_manches),
                 "B": evaluation_main.depuis_preset(eval_b, nb_manches)}
-    rng_graines = random.Random(seed)
+    # aléa de jeu (graines de simulation), sans enjeu de sécurité
+    rng_graines = random.Random(seed)  # noqa: S311  # nosec B311
     graines = [rng_graines.randrange(2**32) for _ in range(nb_donnes)]
     fin = nb_donnes if donnes_fin is None else donnes_fin
     graines_jouees = list(enumerate(graines))[donnes_debut:fin]

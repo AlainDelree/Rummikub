@@ -57,7 +57,8 @@ def test_exhaustif_conserve_le_plateau_et_etend_une_suite():
 # --------------------------------------------------------------------------- #
 
 def test_solveur_jamais_pire_que_l_exhaustif_sur_positions_aleatoires():
-    rng = random.Random(193)
+    # aléa de jeu (positions de test à graine fixe), sans enjeu de sécurité
+    rng = random.Random(193)  # noqa: S311  # nosec B311
     nb_positions = 60
     ecarts = []
     for _ in range(nb_positions):

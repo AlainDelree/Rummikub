@@ -354,7 +354,8 @@ def collecter_depuis_simulation(nb_donnes: int, seed: int, max_tours: int,
     renvoie la liste des enregistrements (:func:`analyser_coup`) de toutes ses
     poses. Reproductible pour une graine donnée."""
     enregistrements = []
-    rng_graines = random.Random(seed)
+    # aléa de jeu (graines de simulation), sans enjeu de sécurité
+    rng_graines = random.Random(seed)  # noqa: S311  # nosec B311
 
     for n in range(nb_donnes):
         graine = rng_graines.randrange(2 ** 32)

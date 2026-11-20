@@ -95,6 +95,7 @@ résultats sont reproductibles.
 
 from __future__ import annotations
 
+import contextlib
 import time
 from collections import deque
 from dataclasses import dataclass, field
@@ -428,16 +429,14 @@ def _nouveau_highs(time_limit):
 
 
 def _a_solution_primale(h) -> bool:
-    try:
+    # Attribut absent selon la version de HiGHS : repli immédiat sur
+    # getModelStatus() ci-dessous, qui donne la même information.
+    with contextlib.suppress(Exception):
         info = h.getInfo()
         statut = getattr(info, "primal_solution_status", None)
         if statut is not None:
             # kSolutionStatusFeasible == 2 dans HiGHS.
             return int(statut) >= 2
-    except Exception:
-        # Attribut absent selon la version de HiGHS : repli immédiat sur
-        # getModelStatus() ci-dessous, qui donne la même information.
-        pass
     return h.getModelStatus() == highspy.HighsModelStatus.kOptimal
 
 
@@ -539,17 +538,15 @@ def _resoudre_modele(table_tiles, chevalet, mise_faite, mise_min,
         """Fournit la solution précédente comme point de départ MIP (les
         nouvelles colonnes éventuelles sont complétées par 0). Accélère parfois
         la preuve d'optimalité des passes de départage."""
-        try:
+        # Point de départ best-effort (accélère seulement la preuve
+        # d'optimalité) : en cas d'échec, HiGHS résout sans warm start,
+        # sans perte de correction du résultat.
+        with contextlib.suppress(Exception):
             sol = highspy.HighsSolution()
             n = h.getNumCol()
             v = list(valeurs) + [0.0] * (n - len(valeurs))
             sol.col_value = v[:n]
             h.setSolution(sol)
-        except Exception:
-            # Point de départ best-effort (accélère seulement la preuve
-            # d'optimalité) : en cas d'échec, HiGHS résout sans warm start,
-            # sans perte de correction du résultat.
-            pass
 
     def _fixer(couts, valeur):
         """Fige Σ couts·vars = valeur (égalité) pour la passe suivante."""

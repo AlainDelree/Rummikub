@@ -983,11 +983,13 @@ def _rng_oubli(etat, idx):
     Sans graine (jeu normal), tirage non reproductible."""
     graine = etat.get("config", {}).get("graine_ia")
     if graine is None:
-        return random.Random()
+        # aléa de jeu (tirage de l'oubli des niveaux), sans enjeu de sécurité
+        return random.Random()  # noqa: S311  # nosec B311
     seed = int(graine) & 0xFFFFFFFF
     for v in (etat.get("manche_numero", 1), etat.get("tour_numero", 0), idx):
         seed = (seed * 1_000_003 + int(v)) & 0xFFFFFFFFFFFF
-    return random.Random(seed)
+    # aléa de jeu (tirage de l'oubli des niveaux), sans enjeu de sécurité
+    return random.Random(seed)  # noqa: S311  # nosec B311
 
 
 def _coup_sans_rearrangement(etat, idx):

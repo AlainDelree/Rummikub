@@ -9,6 +9,7 @@ if sys.platform == "win32":
     import ctypes
     ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("Rummikub")
 
+import contextlib
 import json
 import subprocess
 from pathlib import Path
@@ -40,15 +41,13 @@ def _lancer_actualise_ui_si_flag():
               "invalide ou hors de la racine Actualise autorisee.",
               file=sys.stderr)
         return
-    try:
+    with contextlib.suppress(Exception):  # ne jamais bloquer le démarrage de Rummikub
         subprocess.Popen([
             str(_actualise_ui),
             "--bat", str(_bat),
             "--flag", str(_flag),
             "--relancer", sys.executable,
         ])
-    except Exception:
-        pass  # ne jamais bloquer le démarrage de Rummikub
 
 
 def _lancer_actualise_au_demarrage():
@@ -60,7 +59,8 @@ def _lancer_actualise_au_demarrage():
     if not _actualise.exists():
         return
     try:
-        subprocess.Popen([str(_actualise), "--config", "rummikub"])
+        # chemin et arguments fixes, aucune saisie utilisateur
+        subprocess.Popen([str(_actualise), "--config", "rummikub"])  # noqa: S603  # nosec B603
     except Exception as exc:
         # Log discret : ne jamais bloquer le démarrage de Rummikub.
         print(f"[Rummikub] Lancement d'Actualise ignoré : {exc}", file=sys.stderr)

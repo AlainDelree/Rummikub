@@ -244,6 +244,10 @@ de manche intermédiaire, classement final, affichage de l'égalité).
 - **Chemins toujours via `pathlib.Path`** (jamais `os.sep` codé en dur côté app).
 - **Jamais de `git push`** : CCL committe en local, Alain vérifie et pousse.
 - Toujours un **commit de sauvegarde `--allow-empty` AVANT** toute modification.
+- **Suppressions de sécurité du linter (`ruff --select S`)** : corriger plutôt
+  que supprimer quand possible, sinon suppression en ligne sur DEUX lignes
+  avec raison en clair + `noqa`/`nosec` précis (jamais seuls) — voir
+  `docs/contexte/linter_securite.md` (issue #248).
 
 ## 5. État des issues (au 2026-07-28)
 

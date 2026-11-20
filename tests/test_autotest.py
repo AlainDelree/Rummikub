@@ -145,7 +145,8 @@ def test_autotest_nimporte_pas_pywebview(tmp_path):
         "print('UI', 'rummikub.ui.application' in sys.modules)\n"
         "sys.exit(rc)\n"
     )
-    proc = subprocess.run([sys.executable, "-c", code],
+    # code Python construit par le test lui-même, aucune saisie utilisateur
+    proc = subprocess.run([sys.executable, "-c", code],  # noqa: S603  # nosec B603
                           cwd=_RACINE, capture_output=True, text=True)
     assert proc.returncode in (0, 1), proc.stderr
     assert "PYWEBVIEW False" in proc.stdout, proc.stdout + proc.stderr

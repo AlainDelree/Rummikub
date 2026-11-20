@@ -66,6 +66,7 @@ les parties non exploitables pour le bilan plutôt que de faire planter sa
 lecture.
 """
 
+import contextlib
 import copy
 import json
 from datetime import datetime
@@ -186,7 +187,9 @@ def logger_action(etat: dict, action: str, *,
         return
     if not etat:
         return
-    try:
+    # Le journal est un outil de débogage : une écriture qui échoue ne doit
+    # jamais faire échouer l'action de jeu qui vient d'être traitée.
+    with contextlib.suppress(Exception):
         pid = etat.get("id")
         journal = _journaux.get(pid)
         if journal is None:
@@ -229,7 +232,3 @@ def logger_action(etat: dict, action: str, *,
         journal["data"]["actions"].append(entree)
         with open(journal["chemin"], "w", encoding="utf-8") as f:
             json.dump(journal["data"], f, ensure_ascii=False, indent=2)
-    except Exception:
-        # Le journal est un outil de débogage : une écriture qui échoue ne doit
-        # jamais faire échouer l'action de jeu qui vient d'être traitée.
-        pass

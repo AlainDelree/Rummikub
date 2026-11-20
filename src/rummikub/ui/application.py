@@ -1,3 +1,4 @@
+import contextlib
 import json
 import subprocess
 import sys
@@ -29,10 +30,8 @@ def _handler_fermeture_actualise():
         print("[Rummikub] Bat de mise a jour ignore : chemin invalide ou "
               "hors de la racine Actualise autorisee.", file=sys.stderr)
         return
-    try:
+    with contextlib.suppress(Exception):  # ne jamais empêcher la fermeture de Rummikub
         subprocess.Popen([str(_bat)])
-    except Exception:
-        pass  # ne jamais empêcher la fermeture de Rummikub
 
 
 class ApplicationRummikub:

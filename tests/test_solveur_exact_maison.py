@@ -202,7 +202,8 @@ def test_accord_avec_recherche_exhaustive_positions_aleatoires(facteur_machine):
     import random
     from rummikub.moteur import verif_solveur
 
-    rng = random.Random(20626)
+    # aléa de jeu (positions de test à graine fixe), sans enjeu de sécurité
+    rng = random.Random(20626)  # noqa: S311  # nosec B311
     for _ in range(250):
         pos = verif_solveur.generer_position_aleatoire(rng)
         exhaustif = verif_solveur.max_tuiles_posables_exhaustif(

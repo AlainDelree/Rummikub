@@ -246,9 +246,12 @@ class Api:
                 # La description du coup est un simple confort d'affichage :
                 # une erreur ici ne doit JAMAIS bloquer le tour de l'IA.
                 # On garde les deux plateaux pour pouvoir reproduire le cas.
-                import json, time
+                import contextlib, json, time
                 from rummikub import config
-                try:
+                # Le dump de diagnostic est lui-même best-effort : s'il
+                # échoue (dossier inaccessible, disque plein...), on ne
+                # bloque pas le tour de l'IA pour autant.
+                with contextlib.suppress(Exception):
                     dossier = config.RACINE_DATA / "erreurs_description"
                     dossier.mkdir(parents=True, exist_ok=True)
                     nom_fichier = time.strftime("%Y%m%d_%H%M%S") + ".json"
@@ -257,11 +260,6 @@ class Api:
                                    "plateau_avant": plateau_avant,
                                    "plateau_apres": plateau_apres},
                                   f, ensure_ascii=False)
-                except Exception:
-                    # Le dump de diagnostic est lui-même best-effort : s'il
-                    # échoue (dossier inaccessible, disque plein...), on ne
-                    # bloque pas le tour de l'IA pour autant.
-                    pass
                 etat["dernier_coup_ia"]["resume"] = ""
                 etat["dernier_coup_ia"]["etapes"] = []
                 etat["dernier_coup_ia"]["etapes_detaillees"] = []
