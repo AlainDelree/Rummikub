@@ -1,5 +1,157 @@
 # Issue #67 — Réglages : « Vitesse de l'ordinateur » déplacée vers l'onglet Général
 
+## Issue #251 — Interface : la tuile reprise ne retrouve pas sa place avec le tri automatique, et l'animation IA trop lente en « Rapide »
+
+### Tri automatique (`chevaletLocal`)
+
+Cause : `insererTrie()` (tri à l'insertion, issue #126/#130) n'était appelée
+qu'à la pioche. Les trois autres chemins de retour d'une tuile au chevalet
+faisaient un simple `chevaletLocal.push(d)` en fin de liste, sans vérifier
+`triAutoActif` :
+- `reprendreTuileRangee()` — tuile reprise dans la zone de pose (le cas
+  signalé : poser puis reprendre avant « Jouer »).
+- `viderRangee()` — bouton « ✕ » qui vide toute une rangée de pose.
+- `reprendreTuile()` — tuile reprise depuis le tapis (posée ce tour puis
+  reprise).
+- `onAnnuler()` (bouton « Annuler ») — repart de `reinitChevaletLocal()`
+  (ordre serveur, jamais trié) sans réappliquer le tri ensuite ; seul
+  l'appel interne depuis `rejouerDernierCoupIA()` le faisait déjà (issue
+  #158), le bouton direct non.
+
+Correction : nouvelle fonction partagée `rendreAuChevaletLocal(d)` (trie via
+`insererTrie()` si `triAutoActif`, sinon pousse en fin comme avant), utilisée
+par les trois premiers chemins ; `onAnnuler()` appelle désormais
+`trierChevalet()` lui-même si `triAutoActif` (la duplication dans
+`rejouerDernierCoupIA()` devient inutile et est supprimée). Case décochée :
+comportement inchangé dans tous les cas.
+
+### Vitesse de l'animation IA
+
+Durées relevées dans `jeu.js` (`VITESSES_IA`, `MULTIPLICATEURS_REJEU_IA`) :
+
+| Vitesse (ordinateur) | attente avant le coup | délai entre tuiles |
+|---|---|---|
+| Rapide (avant) | 400 ms | 400 ms |
+| Rapide (après) | **200 ms** | **250 ms** |
+| Normale (inchangé) | 800 ms | 700 ms |
+| Lente (inchangé) | 1500 ms | 1200 ms |
+
+Cause principale, non visible dans cette seule table : `animerPoseTuiles()`
+avait aussi DEUX pauses fixes, **identiques pour les 4 vitesses** — 200 ms
+avant la 1re tuile et 800 ms après la dernière. Pour un coup d'une ou deux
+tuiles (le cas le plus fréquent), le délai entre tuiles ne joue aucun rôle
+(boucle à une seule itération) : le temps perçu valait alors 200+800 = 1000
+ms quelle que soit la vitesse choisie — « Rapide » ne paraissait donc
+quasiment pas plus rapide que « Normale ». C'est la cause du symptôme
+signalé.
+
+Correction : ces deux pauses deviennent des champs `premiereTuile`/`finPose`
+de `VITESSES_IA` (et de la nouvelle table `PAUSES_REJEU_IA` côté rejeu, voir
+plus bas), passés en paramètres de `animerPoseTuiles()` (valeurs par défaut
+200/800 conservées si non fournies). Seule la ligne « Rapide » change :
+`premiereTuile` 200→80 ms, `finPose` 800→250 ms. « Normale » et « Lente »
+gardent 200/800, donc un comportement bit-à-bit inchangé.
+
+Effet sur un coup d'une tuile (le cas courant) : 1000 ms → 330 ms en
+« Rapide » (×3 environ), « Normale »/« Lente » inchangées. Sur un coup de 4
+tuiles : ≈ 2680 ms → ≈ 960 ms en « Rapide » (×2,8 environ). Valeurs choisies
+pour rester lisibles : le temps entre deux tuiles (250 ms) reste proche de
+la durée de l'animation CSS d'apparition d'une tuile (`tuile-pose`, 600 ms,
+inchangée), sans la dépasser excessivement — léger chevauchement visuel déjà
+présent avant ce correctif pour « Rapide » sur un coup à plus de 3 tuiles.
+
+Rejeu animé (`vitesse_rejeu_ia`, réglage séparé, issue #160/#164) : même
+cause et même défaut. `MULTIPLICATEURS_REJEU_IA.Rapide` repasse de 1.5× à
+1.0× (Lente 3.2× et Moyenne 2.2× inchangés) ; nouvelle table
+`PAUSES_REJEU_IA` donnant à « Rapide » ses propres pauses courtes (80/250 ms,
+comme ci-dessus) au lieu des 200/800 ms partagées avec « Lente » et
+« Moyenne » (qui, elles, les gardent).
+
+Aucune modification du calcul de l'IA ni du budget du solveur : seules les
+constantes d'animation front-end ont changé.
+
+### Tests
+
+- `tests/test_playwright_tri_automatique.py` (nouveau) : pose puis reprise
+  d'une tuile (zone de pose, tapis, vidage de rangée, annulation du tour),
+  tri coché et décoché.
+- `tests/test_playwright_vitesse_ia.py` (nouveau) : ordre strict
+  Rapide < Normale < Lente sur `reflexion`/`tuile` ; Rapide < Normale ≤ Lente
+  sur `premiereTuile`/`finPose` ; même ordre côté rejeu
+  (`MULTIPLICATEURS_REJEU_IA`, `PAUSES_REJEU_IA`) ; un coup à une seule
+  tuile prend au moins deux fois moins de temps en « Rapide » qu'en
+  « Normale ».
+- Suite complète : `pytest -q` → 468 passed, 13 skipped (aucune régression).
+
+### Documentation
+
+`CONTEXTE.md` non modifié : aucune règle d'interface ni valeur de vitesse n'y
+est décrite (seule une mention générale, non chiffrée, de `vitesse_ia` côté
+`etat["config"]`, inchangée par cette issue).
+
+## Issue #250 — Build Windows d'essai (n°99, non publié) avec les dépendances épinglées
+
+Build d'essai local (`build\rebuild_rummikub.bat --build 99`, sans `--publier`) sur une
+machine sans le runtime Visual C++ installé dans `System32` (`vcruntime140.dll`,
+`vcruntime140_1.dll`, `msvcp140.dll` absentes), pour vérifier les six dépendances
+épinglées depuis l'issue #241 et confirmer que le jeu embarque lui-même son runtime C.
+
+- Les six versions installées (`versions_build.txt`) correspondent exactement à
+  `requirements.txt` : pywebview 6.2.1, pyinstaller 6.22.3, pytest 9.2.0,
+  highspy 1.15.1, numpy 2.5.4, pythonnet 3.2.1.
+- L'archive `rummikub-v99.zip` embarque son propre runtime C (`_internal\VCRUNTIME140.dll`,
+  `_internal\VCRUNTIME140_1.dll`, et deux `msvcp140-*.dll` vendues par highspy/numpy) :
+  pas de dépendance sur le runtime VC++ système.
+- Autotest de l'exécutable gelé (exécuté par le script de build, étape 5bis) :
+  code de sortie 0, solveur exact backend HiGHS, optimum prouvé.
+- Build 99 jamais publié, laissé dans `C:\CCW_Share\_derniers_builds\rummikub\`
+  pour qu'Alain installe/lance/teste à la main, puis à supprimer après usage.
+
+# Issue #238 — Build Windows : écrire la liste exacte des versions installées avant la suppression de l'environnement de build
+
+## Contexte
+`build\rebuild_rummikub.bat` installe les dépendances dans un `.venv_build`
+local (`C:\Temp\RummikubBuild`), puis supprime entièrement ce dossier en fin
+de build (étape 9) : après un build, aucune version réellement installée
+n'est plus consultable. L'audit de Diagnostique_Programme (règle EXP-001)
+demande pourtant d'épingler `requirements.txt` avec `==`, à partir des
+versions réellement résolues par pip — pas des bornes `>=`/`<` actuelles.
+
+## Modifications
+- **`build\rebuild_rummikub.bat`** : nouvelle étape **2bis**, exécutée juste
+  après l'installation des dépendances (y compris `pyinstaller`, étape 2) et
+  avant la suppression de `%BUILDDIR%` (étape 9). Elle écrit
+  `versions_build.txt` (ASCII pur) avec une en-tête (date, numéro de build,
+  commit construit via `git rev-parse HEAD`, version de Python et de `pip`
+  de l'environnement de build) suivie de la sortie complète de
+  `pip list --format=freeze`. Le fichier est copié dans `build\` du worktree
+  (non versionné, comme les autres sorties de build) puis, à l'étape 8, dans
+  `C:\CCW_Share\_derniers_builds\rummikub\`, à côté de l'installeur et de
+  l'archive, dans tous les modes (`--publier` ou non). Le script affiche en
+  fin de build l'emplacement des deux copies et les versions des six
+  dépendances directes de `requirements.txt` (`highspy`, `numpy`,
+  `pywebview`, `pyinstaller`, `pytest`, `pythonnet`).
+- Aucune autre étape du script n'est modifiée.
+
+## Vérification (build d'essai non publié, build 99)
+`build\rebuild_rummikub.bat --build 99` (sans `--publier`), commit construit
+`9d85c0f` (descendant de `392469c`, ancêtre de `HEAD` au moment de la
+rédaction de l'issue) :
+- Code de sortie 0 ; `version.json` inchangé.
+- Autotest (`dist\Rummikub\Rummikub.exe --autotest <rapport>`) réussi :
+  backend HIGHS, 6 tuiles posées en 0 ms (optimum prouvé).
+- Tailles dans les fourchettes attendues (aucun `[ATTENTION]`) : dossier
+  `dist\Rummikub` ≈ 62,6 Mo, installeur ≈ 21,1 Mo, archive ≈ 26,0 Mo.
+- `versions_build.txt` écrit et identique dans `build\` (worktree) et dans
+  `C:\CCW_Share\_derniers_builds\rummikub\`.
+- Un bug de génération de `versions_build.txt` (guillemets imbriqués dans un
+  `for /f` + backticks appelant `python.exe -c "..."`, provoquant
+  `'...python.exe" -c "import' is not recognized...`, champ Python vide)
+  a été détecté lors d'un premier build d'essai puis corrigé (suppression
+  des guillemets superflus autour du chemin de l'exécutable, sans espace
+  dans `%BUILDDIR%`) ; corrigé et revérifié par un second build d'essai
+  complet, qui produit l'en-tête correctement remplie.
+
 # Issue #248 — Sécurité du linter : corriger ce qui peut l'être et justifier en ligne les faux positifs déjà jugés
 
 ## Contexte
