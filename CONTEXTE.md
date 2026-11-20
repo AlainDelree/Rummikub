@@ -3379,3 +3379,46 @@ moment de partie, et la plus petite limite candidate qui égale au moins
 cette qualité, se lisent dans le fichier `--sortie` produit par la commande
 ci-dessus, pas dans ce paragraphe.
 
+## 19. Règle anti-don de joker — Intermédiaire/Avancé/Expert (issue #252)
+
+Intermédiaire, Avancé et Expert ne jouent plus un coup qui offre un
+**nouveau** joker à l'adversaire (reprise possible avec une tuile ni vue
+sur le plateau ni en main de l'IA) tant qu'une alternative existe, quitte à
+poser moins de tuiles ou à piocher (2 tours consécutifs au plus, réglable —
+`niveaux.LIMITE_ATTENTE_DON_JOKER`) ; un coup qui vide le chevalet reste
+TOUJOURS joué (exception absolue). Débutant et Facile inchangés. Paramètre
+par niveau `niveaux.Bridage.eviter_don_joker` ; forçable indépendamment du
+niveau via `jouer_niveau_bride(..., eviter_don_joker=...)` et
+`scripts/comparer_niveaux_ia.py --sans-don-joker-a`/`-b`. Détail complet
+(définition, mesure, limite de temps de calcul) : voir
+`docs/contexte/ia_anti_don_joker.md`.
+
+**Campagnes appariées à lancer par Alain** (premier plan, limite de temps
+ferme ; comparer avec/sans la règle à seed et donnes identiques) :
+
+```
+# Expert avec la règle vs Expert sans la règle (≥ 300 donnes, miroir) :
+timeout 3600 python scripts/comparer_niveaux_ia.py --niveau-a Expert --niveau-b Expert \
+    --sans-don-joker-b --donnes 300 --seed 42 2>&1 | tee /tmp/duel_252_expert_$(hostname).txt
+
+# Intermédiaire avec la règle vs Intermédiaire sans la règle (≥ 300 donnes) :
+timeout 3600 python scripts/comparer_niveaux_ia.py --niveau-a Intermédiaire --niveau-b Intermédiaire \
+    --sans-don-joker-b --donnes 300 --seed 42 2>&1 | tee /tmp/duel_252_intermediaire_$(hostname).txt
+
+# Intermédiaire vs Avancé, règle activée des DEUX côtés (≥ 300 donnes) :
+timeout 3600 python scripts/comparer_niveaux_ia.py --niveau-a Intermédiaire --niveau-b Avancé \
+    --donnes 300 --seed 42 2>&1 | tee /tmp/duel_252_intermediaire_vs_avance_avec_$(hostname).txt
+
+# Même duel, règle DÉSACTIVÉE des deux côtés — pour comparaison :
+timeout 3600 python scripts/comparer_niveaux_ia.py --niveau-a Intermédiaire --niveau-b Avancé \
+    --sans-don-joker-a --sans-don-joker-b --donnes 300 --seed 42 \
+    2>&1 | tee /tmp/duel_252_intermediaire_vs_avance_sans_$(hostname).txt
+```
+
+Chaque rapport affiche, par camp : le taux de victoire (avec marge d'erreur
+IC 95 %), le compteur de jokers offerts/tours d'attente de la règle (§ voir
+le fichier de domaine), et la répartition du nombre de tuiles en main du
+perdant en fin de manche — à comparer entre la version AVEC et SANS la
+règle pour juger l'effet réel sur le taux de victoire (pas mesurable sur
+l'essai court de 2 donnes fait par l'agent, voir le fichier de domaine).
+

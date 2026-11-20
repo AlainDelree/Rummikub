@@ -12,6 +12,7 @@ from rummikub.moteur.score import (
     calculer_scores_manche, trouver_gagnant_manche, trouver_gagnant_match,
     egalite_sommet_match,
 )
+from rummikub.moteur import niveaux
 
 
 # --------------------------------------------------------------------------- #
@@ -322,6 +323,11 @@ def nouvelle_manche(etat: dict) -> dict:
         joueur["mise_initiale_faite"] = False
         joueur["score_manche"] = 0
         # score_cumul est volontairement conservé.
+        # Règle anti-don de joker (issue #252) : le compteur d'attente est
+        # propre au plateau de la manche écoulée, remis à 0 sur le nouveau
+        # plateau vide (voir moteur/niveaux.CLE_ATTENTE_DON_JOKER, moteur/ia.
+        # jouer_niveau_bride).
+        joueur.pop(niveaux.CLE_ATTENTE_DON_JOKER, None)
 
     etat["pioche"] = [t.as_dict() for t in distribution["pioche"]]
     etat["plateau"] = []

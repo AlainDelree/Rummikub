@@ -120,7 +120,10 @@ def mesurer_reglage(niveau: str, perturbation: int | None, oubli: float,
     tous les réglages jouent la MÊME suite de donnes (comparables entre eux)."""
     ancien = _niveaux.BRIDAGES.get(niveau)
     _niveaux.BRIDAGES[niveau] = _niveaux.Bridage(
-        perturbation_max=perturbation, taux_oubli=oubli)
+        perturbation_max=perturbation, taux_oubli=oubli,
+        # eviter_don_joker (#252) préservé du réglage ACTUEL : cet outil ne
+        # calibre que perturbation/oubli, jamais la règle anti-don.
+        eviter_don_joker=ancien.eviter_don_joker if ancien else False)
     tuiles_perdant: list[int] = []
     manches_decidees = 0
     garde_fou = 0

@@ -51,10 +51,12 @@ def test_parser_reglage_synonymes_illimite(texte):
 def test_parser_candidats_valide():
     niveau, candidats = M.parser_candidats("Avancé=inf/0.03,inf/0.06,inf/0.10")
     assert niveau == "Avancé"
+    # eviter_don_joker (#252) préservé du réglage actuel d'Avancé (True) :
+    # cet outil ne calibre que perturbation/oubli.
     assert candidats == [
-        _niveaux.Bridage(perturbation_max=None, taux_oubli=0.03),
-        _niveaux.Bridage(perturbation_max=None, taux_oubli=0.06),
-        _niveaux.Bridage(perturbation_max=None, taux_oubli=0.10),
+        _niveaux.Bridage(perturbation_max=None, taux_oubli=0.03, eviter_don_joker=True),
+        _niveaux.Bridage(perturbation_max=None, taux_oubli=0.06, eviter_don_joker=True),
+        _niveaux.Bridage(perturbation_max=None, taux_oubli=0.10, eviter_don_joker=True),
     ]
 
 

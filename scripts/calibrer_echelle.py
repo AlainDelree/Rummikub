@@ -151,8 +151,12 @@ def parser_reglage(texte: str) -> tuple[str, "_niveaux.Bridage"]:
             f"réglage invalide pour {niveau} "
             f"(attendu « perturbation/oubli ») : {reste!r}")
     pert_txt, oubli_txt = reste.split("/", 1)
-    return niveau, _niveaux.Bridage(perturbation_max=_parser_perturbation(pert_txt),
-                                    taux_oubli=_parser_oubli(oubli_txt))
+    return niveau, _niveaux.Bridage(
+        perturbation_max=_parser_perturbation(pert_txt),
+        taux_oubli=_parser_oubli(oubli_txt),
+        # eviter_don_joker (#252) préservé du réglage ACTUEL du niveau : cet
+        # outil ne calibre que perturbation/oubli, jamais la règle anti-don.
+        eviter_don_joker=_niveaux.BRIDAGES[niveau].eviter_don_joker)
 
 
 def parser_candidats(texte: str) -> tuple[str, list["_niveaux.Bridage"]]:
@@ -172,8 +176,11 @@ def parser_candidats(texte: str) -> tuple[str, list["_niveaux.Bridage"]]:
                 f"candidat invalide pour {niveau} "
                 f"(attendu « perturbation/oubli ») : {brut!r}")
         pert_txt, oubli_txt = brut.split("/", 1)
-        candidats.append(_niveaux.Bridage(perturbation_max=_parser_perturbation(pert_txt),
-                                          taux_oubli=_parser_oubli(oubli_txt)))
+        candidats.append(_niveaux.Bridage(
+            perturbation_max=_parser_perturbation(pert_txt),
+            taux_oubli=_parser_oubli(oubli_txt),
+            # eviter_don_joker (#252) préservé, voir parser_reglage ci-dessus.
+            eviter_don_joker=_niveaux.BRIDAGES[niveau].eviter_don_joker))
     if not candidats:
         raise ValueError(f"aucun candidat fourni pour {niveau}")
     return niveau, candidats

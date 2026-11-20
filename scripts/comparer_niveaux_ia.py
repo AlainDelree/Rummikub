@@ -48,6 +48,12 @@ Options :
                         scripts/analyser_phases.py. Indépendante de
                         --export-resultats. Désactivée par défaut (aucun
                         changement de comportement sans elle).
+    --sans-don-joker-a  Désactive la règle anti-don de joker (#252) pour le
+                        camp A, quel que soit son niveau (défaut : réglage
+                        naturel — activé pour Intermédiaire/Avancé/Expert).
+                        Compare, pour un MÊME niveau, une campagne avec et
+                        sans la règle (y compris A et B au même niveau).
+    --sans-don-joker-b  Comme --sans-don-joker-a, pour le camp B.
     -v, --verbose       Journalise chaque partie jouée.
 """
 
@@ -67,7 +73,7 @@ for _p in (SRC, SCRIPTS):
         sys.path.insert(0, str(_p))
 
 from rummikub.config import NIVEAUX  # noqa: E402
-from rummikub.moteur.ia import jouer_niveau_bride  # noqa: E402
+from rummikub.moteur.ia import jouer_niveau_bride, jokers_offerts_par_coup  # noqa: E402
 from rummikub.moteur import evaluation_main  # noqa: E402
 from rummikub.moteur import solveur_exact  # noqa: E402
 from _verif_solveur_exact import (  # noqa: E402
@@ -195,7 +201,9 @@ def jouer_un_tour(etat: dict, idx: int, temps_par_niveau: dict,
                   aucun_coup_expert: list = None,
                   trace_ctx: dict = None,
                   manche_numero: int = 1,
-                  budget_temps: float = None) -> tuple[dict, bool, bool]:
+                  budget_temps: float = None,
+                  dons_joker_configs: list = None,
+                  stats_don_joker: dict = None) -> tuple[dict, bool, bool]:
     """Joue le tour de l'IA à l'index ``idx``.
 
     ``budget_temps`` (issue #228, point 5) : budget de temps du solveur par
@@ -249,7 +257,22 @@ def jouer_un_tour(etat: dict, idx: int, temps_par_niveau: dict,
     ``trace_ctx``/``manche_numero`` (issue #226, mesure PURE — lit l'état
     complet pour ÉCRIRE une trace, ne décide jamais rien) : si ``trace_ctx``
     n'est pas ``None`` (``--export-trace``), écrit une ligne JSON par tour
-    via ``_ecrire_trace_tour`` (voir ce bloc plus haut)."""
+    via ``_ecrire_trace_tour`` (voir ce bloc plus haut).
+
+    ``dons_joker_configs``/``stats_don_joker`` (issue #252) : ``dons_joker_
+    configs[idx]`` (``None``/``True``/``False``) force ou non la règle
+    anti-don de joker pour CE joueur (relayé à ``jouer_niveau_bride`` via
+    ``eviter_don_joker`` — ``None`` laisse le réglage naturel du niveau),
+    permettant de comparer, au sein d'une même campagne, un camp AVEC et un
+    camp SANS la règle pour un MÊME niveau (``--sans-don-joker-a``/``-b``).
+    ``stats_don_joker`` (``{"offerts", "tours_jouer", "attentes"}``, chacun
+    ``{"A": int, "B": int}``, MUTÉS en place) compte, par CAMP (pas par nom
+    de niveau : les deux camps peuvent partager le même niveau avec des
+    réglages différents), les coups effectivement joués qui offrent un
+    NOUVEAU joker, le nombre total de coups joués (dénominateur du taux), et
+    les tours où la règle a préféré piocher plutôt que jouer. Mesure PURE,
+    jamais utilisée pour décider : lue sur l'état AVANT le coup, donc
+    calculée ICI, avant que ``jouer_tour`` ne mute le plateau et la main."""
     niveau = etat["joueurs"][idx]["niveau"]
     backup_debut_tour(etat)
     plateau_avant = etat["plateau"]
@@ -286,6 +309,8 @@ def jouer_un_tour(etat: dict, idx: int, temps_par_niveau: dict,
         if aucun_coup_expert is not None:
             aucun_coup_expert[0] += 1
 
+    eviter_don_joker = (dons_joker_configs[idx] if dons_joker_configs
+                       else None)
     debut = time.monotonic()
     try:
         if niveau == "Expert":
@@ -293,7 +318,8 @@ def jouer_un_tour(etat: dict, idx: int, temps_par_niveau: dict,
             res_ia = jouer_niveau_bride(
                 etat, idx, "Expert", budget_temps=budget_temps,
                 on_repli=_compter_repli, preferer_simple=preferer_simple,
-                eval_config=eval_config, on_aucun=_compter_aucun)
+                eval_config=eval_config, on_aucun=_compter_aucun,
+                eviter_don_joker=eviter_don_joker)
         else:
             # Appel direct (plutôt que ``jouer_ia``, qui ne transmet aucun
             # paramètre) : équivalent à ``jouer_ia`` quand ``budget_temps``
@@ -301,7 +327,8 @@ def jouer_un_tour(etat: dict, idx: int, temps_par_niveau: dict,
             # solveur explicite (#228, point 5) pour une machine lente —
             # ``niveau`` vient de ``config_joueurs`` et est toujours valide.
             res_ia = jouer_niveau_bride(etat, idx, niveau,
-                                        budget_temps=budget_temps)
+                                        budget_temps=budget_temps,
+                                        eviter_don_joker=eviter_don_joker)
     except Exception:
         temps_par_niveau.setdefault(niveau, []).append(time.monotonic() - debut)
         logger.exception("Exception de l'IA %s au tour %d", niveau, etat["tour_numero"])
@@ -312,6 +339,23 @@ def jouer_un_tour(etat: dict, idx: int, temps_par_niveau: dict,
     if niveau == "Expert" and res_ia.get("action") == "jouer":
         perturbations_expert.append(
             mesurer_perturbation(plateau_avant, res_ia["nouveau_plateau"]))
+
+    # Mesure du don de joker (#252) — AVANT jouer_tour, qui mute le plateau
+    # et la main (voir docstring). Par CAMP (nom préfixé "A:"/"B:", voir
+    # comparer()), pas par niveau : deux camps du même niveau peuvent avoir
+    # des réglages différents de la règle dans une même campagne.
+    if stats_don_joker is not None:
+        camp = joueur_avant["nom"].split(":", 1)[0]
+        if res_ia.get("action") == "jouer":
+            stats_don_joker["tours_jouer"][camp] = \
+                stats_don_joker["tours_jouer"].get(camp, 0) + 1
+            if jokers_offerts_par_coup(etat, idx, res_ia):
+                stats_don_joker["offerts"][camp] = \
+                    stats_don_joker["offerts"].get(camp, 0) + 1
+        info_don_joker = res_ia.get("don_joker")
+        if info_don_joker and info_don_joker.get("attente"):
+            stats_don_joker["attentes"][camp] = \
+                stats_don_joker["attentes"].get(camp, 0) + 1
 
     action = res_ia.get("action")
     if action == "jouer":
@@ -352,7 +396,9 @@ def _jouer_une_manche(etat: dict, max_tours: int, temps_par_niveau: dict,
                       aucun_coup_expert: list = None,
                       trace_ctx: dict = None,
                       manche_numero: int = 1,
-                      budget_temps: float = None) -> dict:
+                      budget_temps: float = None,
+                      dons_joker_configs: list = None,
+                      stats_don_joker: dict = None) -> dict:
     """Joue la manche courante de ``etat`` jusqu'à sa fin naturelle (chevalet
     vidé ou pioche épuisée) ou jusqu'au garde-fou ``max_tours``. Retourne les
     statistiques de CETTE manche ; ``etat`` est muté en place."""
@@ -371,7 +417,8 @@ def _jouer_une_manche(etat: dict, max_tours: int, temps_par_niveau: dict,
         etat, invalide, tuiles_disparues = jouer_un_tour(
             etat, idx, temps_par_niveau, replis_expert, preferer_simple,
             perturbations_expert, eval_configs,
-            aucun_coup_expert, trace_ctx, manche_numero, budget_temps)
+            aucun_coup_expert, trace_ctx, manche_numero, budget_temps,
+            dons_joker_configs, stats_don_joker)
         if invalide:
             coups_invalides += 1
         if tuiles_disparues:
@@ -405,7 +452,9 @@ def jouer_match(config_joueurs: list[dict], nb_manches: int, max_tours: int,
                 eval_configs: list = None, graine_ia=None,
                 aucun_coup_expert: list = None,
                 trace_ctx: dict = None,
-                budget_temps: float = None) -> dict:
+                budget_temps: float = None,
+                dons_joker_configs: list = None,
+                stats_don_joker: dict = None) -> dict:
     """Joue un MATCH complet à 2 joueurs de ``nb_manches`` manches (issue
     #203). Les manches s'enchaînent via ``nouvelle_manche`` (score cumulé
     conservé, nouvelle donne et mise initiale remise à zéro à chaque manche).
@@ -434,7 +483,8 @@ def jouer_match(config_joueurs: list[dict], nb_manches: int, max_tours: int,
                                 replis_expert, preferer_simple,
                                 perturbations_expert, eval_configs,
                                 aucun_coup_expert,
-                                trace_ctx, numero, budget_temps)
+                                trace_ctx, numero, budget_temps,
+                                dons_joker_configs, stats_don_joker)
         coups_invalides += res["coups_invalides"]
         coups_tuiles_disparues += res["coups_tuiles_disparues"]
         anomalies_conservation += res["anomalies_conservation"]
@@ -474,7 +524,9 @@ def comparer(niveau_a: str, niveau_b: str, nb_donnes: int, seed: int,
             budget_temps: float = None,
             donnes_debut: int = 0,
             donnes_fin: int = None,
-            mode_fichier: str = "w") -> dict:
+            mode_fichier: str = "w",
+            don_joker_a: bool | None = None,
+            don_joker_b: bool | None = None) -> dict:
     """``budget_temps`` (issue #228, point 5) : budget de temps du solveur par
     coup, transmis à TOUS les niveaux joués — ``None`` (défaut) laisse le jeu
     décider (1,5 s). ``donnes_debut``/``donnes_fin`` (issue #228, point 5,
@@ -520,7 +572,21 @@ def comparer(niveau_a: str, niveau_b: str, nb_donnes: int, seed: int,
     BRUTE JSON Lines, une ligne par TOUR de chaque manche + une ligne de
     résultat par manche — pour l'analyse par phases (prologue/développement/
     fin), voir ``scripts/analyser_phases.py``. Indépendant d'``export_
-    resultats`` ; mesure pure, ne change jamais le déroulement de la partie."""
+    resultats`` ; mesure pure, ne change jamais le déroulement de la partie.
+
+    ``don_joker_a``/``don_joker_b`` (issue #252) : ``None`` (défaut) laisse
+    chaque camp le réglage NATUREL de son niveau (``niveaux.Bridage.
+    eviter_don_joker`` — activé pour Intermédiaire/Avancé/Expert, pas pour
+    Débutant/Facile) ; ``False`` force la règle anti-don de joker
+    DÉSACTIVÉE pour ce camp quel que soit son niveau (``--sans-don-joker-a``/
+    ``-b``) — pour comparer, à niveau et donnes identiques, une campagne
+    AVEC et une campagne SANS la règle (y compris quand les deux camps
+    portent le MÊME nom de niveau, p. ex. Expert contre Expert). Le résumé
+    renvoyé compte, PAR CAMP (``jokers_offerts_camp``, ``tours_jouer_camp``,
+    ``attentes_don_joker_camp``), les coups joués qui offrent un NOUVEAU
+    joker, le nombre de coups joués, et les tours où la règle a préféré
+    piocher plutôt que jouer — mesure indépendante du réglage, utile même
+    quand la règle est désactivée (campagne « avant » de référence)."""
     cfg_eval = {"A": evaluation_main.depuis_preset(eval_a, nb_manches),
                 "B": evaluation_main.depuis_preset(eval_b, nb_manches)}
     # aléa de jeu (graines de simulation), sans enjeu de sécurité
@@ -563,6 +629,11 @@ def comparer(niveau_a: str, niveau_b: str, nb_donnes: int, seed: int,
     # liste de ``(tuiles_deplacees, combos_modifiees)`` (voir
     # ``mesurer_perturbation``, ``moteur/solveur.py``).
     perturbations_expert: list[tuple[int, int]] = []
+    # Règle anti-don de joker (#252) : par CAMP, pas par niveau (voir
+    # jouer_un_tour).
+    don_joker_camp = {"A": don_joker_a, "B": don_joker_b}
+    stats_don_joker = {"offerts": {"A": 0, "B": 0}, "tours_jouer": {"A": 0, "B": 0},
+                       "attentes": {"A": 0, "B": 0}}
 
     for i, graine in graines_jouees:
         for ordre, camps in enumerate((("A", "B"), ("B", "A"))):
@@ -575,6 +646,7 @@ def comparer(niveau_a: str, niveau_b: str, nb_donnes: int, seed: int,
             ]
             # Config d'évaluation alignée sur l'index du joueur (camp camps[k]).
             eval_configs = [cfg_eval[camp] for camp in camps]
+            dons_joker_configs = [don_joker_camp[camp] for camp in camps]
             trace_ctx = ({"fichier": fichier_trace, "donne": i + 1,
                          "ordre": list(camps), "niveau_a": niveau_a,
                          "niveau_b": niveau_b}
@@ -584,7 +656,9 @@ def comparer(niveau_a: str, niveau_b: str, nb_donnes: int, seed: int,
                                    preferer_simple, perturbations_expert,
                                    eval_configs, graine_ia=graine,
                                    aucun_coup_expert=aucun_coup_expert,
-                                   trace_ctx=trace_ctx, budget_temps=budget_temps)
+                                   trace_ctx=trace_ctx, budget_temps=budget_temps,
+                                   dons_joker_configs=dons_joker_configs,
+                                   stats_don_joker=stats_don_joker)
             coups_invalides_total += resultat["coups_invalides"]
             coups_tuiles_disparues_total += resultat["coups_tuiles_disparues"]
             anomalies_conservation_total += resultat["anomalies_conservation"]
@@ -681,6 +755,12 @@ def comparer(niveau_a: str, niveau_b: str, nb_donnes: int, seed: int,
         "nb_donnes_jouees": len(graines_jouees),
         "nb_parties": 2 * len(graines_jouees),
         "sans_exact": sans_exact,
+        # Règle anti-don de joker (#252), PAR CAMP (voir docstring).
+        "don_joker_a": don_joker_a,
+        "don_joker_b": don_joker_b,
+        "jokers_offerts_camp": dict(stats_don_joker["offerts"]),
+        "tours_jouer_camp": dict(stats_don_joker["tours_jouer"]),
+        "attentes_don_joker_camp": dict(stats_don_joker["attentes"]),
     }
 
 
@@ -821,6 +901,26 @@ def afficher_rapport(resume: dict) -> None:
              f"{moyenne(deplacees):.2f} tuile(s) déplacée(s) et "
              f"{moyenne(modifiees):.2f} combinaison(s) modifiée(s), "
              f"sur {len(perturbations)} coup(s) posé(s) par Expert.")
+
+    # Règle anti-don de joker (#252), PAR CAMP (voir docstring de comparer()
+    # — un même nom de niveau peut porter un réglage différent entre A et B).
+    jokers_offerts_camp = resume.get("jokers_offerts_camp") or {}
+    tours_jouer_camp = resume.get("tours_jouer_camp") or {}
+    attentes_camp = resume.get("attentes_don_joker_camp") or {}
+    if any(tours_jouer_camp.values()):
+        print("-" * 70)
+        print("  Règle anti-don de joker (#252) :")
+        for camp, niveau in (("A", niveau_a), ("B", niveau_b)):
+            n = tours_jouer_camp.get(camp, 0)
+            offerts = jokers_offerts_camp.get(camp, 0)
+            attentes = attentes_camp.get(camp, 0)
+            reglage_camp = resume.get(f"don_joker_{camp.lower()}")
+            suffixe = (" [règle désactivée]" if reglage_camp is False else "")
+            taux = (offerts / n * 100) if n else 0.0
+            print(f"    {niveau} (camp {camp}){suffixe} : {offerts}/{n} "
+                 f"coup(s) joué(s) posent ou laissent un joker offert "
+                 f"({taux:.1f} %) ; {attentes} tour(s) d'attente (pioche "
+                 f"plutôt que d'offrir).")
     print("=" * 70)
 
 
@@ -890,6 +990,19 @@ def main(argv: list[str]) -> int:
                              "(#226). Indépendant de --export-resultats ; "
                              "désactivé par défaut (aucun changement de "
                              "comportement sans cette option).")
+    parser.add_argument("--sans-don-joker-a", action="store_true",
+                        help="Désactive la règle anti-don de joker (#252) "
+                             "pour le camp A, quel que soit son niveau "
+                             "(défaut : réglage naturel du niveau — "
+                             "activé pour Intermédiaire/Avancé/Expert). "
+                             "Permet de comparer, pour un MÊME niveau, une "
+                             "campagne avec et sans la règle (relancer la "
+                             "même commande avec et sans ce drapeau, même "
+                             "--seed), y compris quand A et B portent le "
+                             "même niveau (--niveau-a Expert --niveau-b "
+                             "Expert --sans-don-joker-b).")
+    parser.add_argument("--sans-don-joker-b", action="store_true",
+                        help="Comme --sans-don-joker-a, pour le camp B.")
     parser.add_argument("-v", "--verbose", action="store_true",
                         help="Journalise chaque partie jouée.")
     args = parser.parse_args(argv[1:])
@@ -935,7 +1048,9 @@ def main(argv: list[str]) -> int:
                       sans_exact=args.sans_exact,
                       export_resultats=args.export_resultats,
                       export_trace=args.export_trace,
-                      budget_temps=args.budget_solveur_expert)
+                      budget_temps=args.budget_solveur_expert,
+                      don_joker_a=(False if args.sans_don_joker_a else None),
+                      don_joker_b=(False if args.sans_don_joker_b else None))
     duree = time.monotonic() - debut
 
     afficher_rapport(resume)

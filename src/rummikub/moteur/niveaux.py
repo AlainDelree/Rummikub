@@ -57,9 +57,17 @@ ECHELLE = list(NIVEAUX)
 @dataclass(frozen=True)
 class Bridage:
     """Réglage de force d'un niveau. ``perturbation_max=None`` → illimité
-    (solveur complet) ; ``taux_oubli`` ∈ [0, 1]."""
+    (solveur complet) ; ``taux_oubli`` ∈ [0, 1].
+
+    ``eviter_don_joker`` (issue #252) : si vrai, le niveau refuse de JOUER un
+    coup qui offre un joker à l'adversaire (voir ``moteur/ia.py``,
+    ``jouer_niveau_bride`` — définition et mécanisme détaillés dans
+    ``docs/contexte/ia_anti_don_joker.md``) quand une alternative existe,
+    quitte à poser moins de tuiles ou à piocher plutôt que de jouer ;
+    ``False`` (Débutant, Facile) laisse le comportement d'avant #252."""
     perturbation_max: int | None
     taux_oubli: float
+    eviter_don_joker: bool = False
 
     @property
     def complet(self) -> bool:
@@ -127,19 +135,42 @@ def taux_oubli_effectif(taux: float, taille_main: int) -> float:
 # ``scripts/calibrer_echelle.py`` depuis #240, qui remplace l'ancien
 # ``scripts/valider_bas_echelle.py``). Le réglage s'appuie donc sur la
 # garantie structurelle ci-dessus plutôt que sur une mesure non significative.
+# ``eviter_don_joker`` (issue #252) : activé pour Intermédiaire, Avancé et
+# Expert — un joueur de ce niveau ne doit plus offrir gratuitement un joker
+# à l'adversaire (voir docs/contexte/ia_anti_don_joker.md). Débutant et
+# Facile restent à ``False`` (comportement d'avant #252, inchangé) : un
+# joueur de ce niveau peut encore offrir un joker, considéré comme une
+# erreur plausible pour ce niveau de jeu.
 BRIDAGES: dict[str, Bridage] = {
     "Débutant":          Bridage(perturbation_max=0,    taux_oubli=0.42),
     "Facile":            Bridage(perturbation_max=1,    taux_oubli=0.30),
-    "Intermédiaire":     Bridage(perturbation_max=4,    taux_oubli=0.08),
-    "Avancé":            Bridage(perturbation_max=None, taux_oubli=0.0),
+    "Intermédiaire":     Bridage(perturbation_max=4,    taux_oubli=0.08,
+                                 eviter_don_joker=True),
+    "Avancé":            Bridage(perturbation_max=None, taux_oubli=0.0,
+                                 eviter_don_joker=True),
     # Expert : solveur un-tour complet, STRICTEMENT IDENTIQUE à Avancé.
     # Avait porté une vérification de finition en fin de partie (#221), puis
     # un sixième niveau, « Champion du Monde », d'autres stratégies
     # multi-tours (#225/#229/#230/#231/#232) ; tout ce code a été retiré
     # (#235, #236 — aucun des deux n'a jamais changé un coup mesurablement,
     # voir CONTEXTE.md). Expert n'est pas modifié par ces retraits.
-    "Expert":            Bridage(perturbation_max=None, taux_oubli=0.0),
+    "Expert":            Bridage(perturbation_max=None, taux_oubli=0.0,
+                                 eviter_don_joker=True),
 }
+
+# Nombre maximal de tours CONSÉCUTIFS où un niveau soumis à
+# ``eviter_don_joker`` préfère piocher plutôt que de jouer un coup qui
+# offrirait un joker (issue #252) — paramètre réglable, au-delà duquel le
+# meilleur coup est joué malgré tout (voir ``moteur/ia.py``,
+# ``_appliquer_anti_don_joker``, et docs/contexte/ia_anti_don_joker.md).
+LIMITE_ATTENTE_DON_JOKER = 2
+
+# Clé du compteur d'attente persisté sur ``etat["joueurs"][idx]`` (issue
+# #252) — nombre de tours consécutifs où CE joueur a préféré piocher plutôt
+# que d'offrir un joker. Remis à 0 dès qu'un coup est effectivement joué
+# (évitement trouvé, coup forcé après la limite, ou coup qui ne posait pas
+# ce problème).
+CLE_ATTENTE_DON_JOKER = "tours_attente_don_joker"
 
 
 # Compatibilité (issue #235) : « Champion du Monde », niveau retiré (aucun
