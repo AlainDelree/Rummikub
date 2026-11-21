@@ -160,9 +160,13 @@ Essais réalisés (premier plan, limite de temps ferme, cette session) :
   désormais le cas FRÉQUENT avec une IA faible (beaucoup de jokers/coups
   retenus), pas un cas exceptionnel.
 - **20 donnes, 2 joueurs, Expert contre Expert** (même graine, même
-  commande) : lancé en tâche de fond pendant la rédaction de ce rapport —
-  voir la synthèse finale du rapport de clôture pour le résultat chiffré
-  (campagne plus lente : solveur exact à budget de production 1,5 s/tour).
+  commande) : tentée sous une limite de temps ferme de 280 s — INTERROMPUE
+  par cette limite avant d'avoir produit le moindre résultat (le solveur
+  exact à budget de production, 1,5 s/tour, rend cette campagne nettement
+  plus lente que la variante Débutant ci-dessus). Pas de campagne longue
+  relancée (hors périmètre de l'agent, comme demandé) : le résultat
+  Débutant ci-dessus suffit à couvrir le point 6 (20 donnes/2 joueurs,
+  manches qui se terminent, durée moyenne, part de blocage).
 - **3 joueurs, Débutant×3** (`simulation_ia.py --joueurs 3`, 5 graines
   1 à 5, `--max-tours 500`) : 5/5 manches terminées sans erreur, **5/5
   bloquées**, 92/95/94/97/99 tours, 0 anomalie.
