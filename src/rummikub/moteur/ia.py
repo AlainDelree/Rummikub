@@ -20,10 +20,9 @@ jamais (ce qui, côté UI, provoquerait une boucle infinie du tour IA).
 
 import random
 import time
-from collections import Counter
 from itertools import combinations
 
-from rummikub.config import VALEUR_MIN, VALEUR_MAX, COULEURS, NB_SERIES
+from rummikub.config import VALEUR_MIN, VALEUR_MAX, NB_SERIES
 from rummikub.moteur.validation import (
     valider_combinaison, valider_suite, valider_plateau,
 )
@@ -31,7 +30,6 @@ from rummikub.moteur.partie import (
     tuile_depuis_dict, plateau_depuis_dict, _plateau_vers_dict,
     _points_tuiles_posees,
 )
-from rummikub.moteur.tuiles import Tuile
 from rummikub.moteur.solveur import (
     resoudre_coup, BudgetDepasse, PREFERER_SIMPLICITE, mesurer_perturbation,
 )
@@ -1047,119 +1045,378 @@ def _coup_selon_perturbation(etat, idx, perturbation_max, budget_temps, on_repli
 
 
 # --------------------------------------------------------------------------- #
-# Règle anti-don de joker (issue #252) : Intermédiaire, Avancé et Expert ne
-# doivent plus poser, ni laisser en place après leur coup, un joker que
-# l'adversaire peut reprendre facilement — voir docs/contexte/
-# ia_anti_don_joker.md pour la définition complète et les limites.
+# Gestion du joker (issue #253) — REMPLACE la règle d'attente de #252 : voir
+# docs/contexte/ia_anti_don_joker.md pour la définition complète, l'arbre de
+# décision exact et les limites. Quatre règles, appliquées DANS CET ORDRE par
+# ``jouer_niveau_bride`` à un coup déjà choisi par le niveau (jamais un coup
+# gagnant — exception absolue, voir plus bas) :
+#
+#   1. joker en main UTILE (``_appliquer_joker_utile``) : un joker de la main
+#      n'est joué que s'il permet de poser STRICTEMENT plus de tuiles RÉELLES
+#      que le meilleur coup sans aucun joker de la main ;
+#   2. échange différé (``_appliquer_echange_differe``) : un échange
+#      facultatif « en réserve » (personne d'autre ne peut le prendre) que
+#      l'IA ne peut pas utiliser avec sa main peut être différé ;
+#   3. joker LIBRE évité (``_appliquer_joker_libre``) : parmi les coups
+#      possibles, l'IA évite ceux qui rendent un NOUVEAU joker libre (nouvelle
+#      définition d'Alain, ci-dessous — REMPLACE la notion de « joker
+#      offert » de #252), y compris en posant moins de tuiles ; si aucune
+#      alternative n'y échappe, elle pioche — SANS compteur ni limite (la
+#      pioche bornée à 2 tours de #252 est SUPPRIMÉE).
 # --------------------------------------------------------------------------- #
 
-def _exemplaires_vus(plateau, chevalet):
-    """Compte, parmi le plateau et le chevalet DONNÉS, les exemplaires vus de
-    chaque type de tuile réelle (jokers ignorés : jamais une tuile de
-    remplacement)."""
-    vues = Counter()
-    for combo in plateau:
-        for t in combo:
-            if not t.est_joker:
-                vues[(t.couleur, t.valeur)] += 1
-    for t in chevalet:
-        if not t.est_joker:
-            vues[(t.couleur, t.valeur)] += 1
-    return vues
+def _jokers_libres_par_bout_suite(plateau):
+    """Jokers en BOUT de suite directement détachables SANS AUCUNE tuile de
+    remplacement : la suite, privée de ce joker, reste une suite valide
+    SEULE (au moins 3 tuiles restantes) — l'une des trois voies de la
+    définition d'un joker « libre » (#253, nouvelle définition d'Alain, qui
+    REMPLACE la notion de « joker offert » de #252).
+
+    Distinct de :func:`_jokers_detachables_par_extension` (#150, #252) :
+    cette dernière exige TOUJOURS une tuile du chevalet jouée à l'extrémité
+    opposée (même quand la portion restante, sans extension, est déjà
+    valide seule) — elle répond à la question « l'adversaire peut-il JOUER
+    une tuile pour détacher ce joker », pas « peut-il le reprendre SANS
+    rien poser », donc ne convient plus à la nouvelle définition. Ex. :
+    suite rouge joker-7-8-9 (4 tuiles, joker en tête) → retirer le joker
+    laisse 7-8-9 (valide, 3 tuiles) : le joker est libre, sans qu'aucune
+    tuile ne soit nécessaire.
+
+    Retourne ``[{"combi_index", "joker", "reste"}, ...]``."""
+    resultats = []
+    for ci, combo in enumerate(plateau):
+        r = valider_combinaison(combo)
+        if not r["valide"] or r["type"] != "suite" or len(combo) < 4:
+            continue
+        for bout in ("debut", "fin"):
+            joker = combo[0] if bout == "debut" else combo[-1]
+            if not joker.est_joker:
+                continue
+            reste = combo[1:] if bout == "debut" else combo[:-1]
+            if len(reste) >= 3 and valider_suite(reste)["valide"]:
+                resultats.append({"combi_index": ci, "joker": joker,
+                                  "reste": reste})
+    return resultats
 
 
-def _chevalet_hypothetique_inconnu(plateau, chevalet):
-    """Chevalet SYNTHÉTIQUE : une tuile de chaque TYPE réel encore
-    partiellement inconnu (au moins un exemplaire ni sur ``plateau`` ni
-    dans ``chevalet``) — représente tout ce qu'un adversaire pourrait
-    détenir (main ou pioche), jamais sa vraie main (garde-fou anti-triche,
-    issue #252 — comme la brique « Inconnues » de l'archive #219, qui ne
-    lit jamais non plus le contenu d'une main adverse). Une seule instance
-    par type suffit : les fonctions de récupération ci-dessous ne
-    vérifient que l'EXISTENCE d'une tuile compatible, jamais son nombre."""
-    vues = _exemplaires_vus(plateau, chevalet)
-    return [Tuile(f"_hyp_{c}_{v}", v, c) for c in COULEURS
-           for v in range(VALEUR_MIN, VALEUR_MAX + 1)
-           if vues.get((c, v), 0) < NB_SERIES]
+def jokers_libres_sur_plateau(plateau):
+    """Ids des jokers du ``plateau`` « libres » (issue #253, définition
+    d'Alain qui REMPLACE la notion de « joker offert » de #252) : un joker
+    est libre si N'IMPORTE QUI peut le reprendre à son tour SANS poser
+    aucune tuile ET SANS recomposer le tapis — donc uniquement par une
+    recombinaison du plateau SEUL, immédiatement disponible. Trois voies,
+    toutes RÉUTILISÉES telles quelles (aucune ne consomme de tuile du
+    chevalet, condition commune aux trois) :
 
+    * ``_jokers_liberables_par_groupe4_sans_remplacement`` — joker d'un
+      groupe de 4 tuiles (3 réelles de couleurs distinctes + le joker) : le
+      groupe reste un groupe de 3 valide une fois le joker retiré ;
+    * ``_jokers_liberables_par_scission_milieu`` — joker STRICTEMENT
+      intérieur d'une suite d'au moins 7 tuiles : la suite se scinde en
+      deux suites valides (au moins 3 tuiles chacune) de part et d'autre ;
+    * :func:`_jokers_libres_par_bout_suite` — joker en BOUT d'une suite
+      d'au moins 4 tuiles : la suite reste valide seule (au moins 3 tuiles)
+      une fois le joker retiré.
 
-def jokers_offerts_sur_plateau(plateau, chevalet):
-    """Ids des jokers du ``plateau`` « offerts » (issue #252) : repris par
-    au moins UNE des voies de récupération de joker DÉJÀ codées pour l'IA
-    elle-même (``_jokers_recuperables`` — échange direct, suite ou groupe ;
-    ``_jokers_detachables_par_extension`` — bout de suite, prolongement de
-    l'extrémité opposée ; ``_jokers_liberables_par_groupe4_sans_
-    remplacement`` — groupe de 4 tuiles, AUCUNE tuile requise, toujours
-    offert ; ``_jokers_liberables_par_scission_milieu`` — joker intérieur
-    d'une longue suite, AUCUNE tuile requise non plus), en utilisant le
-    chevalet HYPOTHÉTIQUE (:func:`_chevalet_hypothetique_inconnu`) de tout
-    ce qui n'est pas visible — jamais la vraie main adverse.
+    N'inclut JAMAIS l'échange direct (``_jokers_recuperables``) ni le
+    détachement par extension (``_jokers_detachables_par_extension``) : ces
+    deux voies exigent de JOUER une tuile (la tuile de remplacement, ou la
+    tuile d'extension), donc ne rendent pas le joker libre au nouveau sens
+    — même si l'IA elle-même peut s'en servir pour RÉCUPÉRER un joker lors
+    de son propre coup (§8) ; elles ne comptent plus comme un « cadeau »
+    (nuance d'Alain, #253, qui corrige la définition trop large de #252 :
+    cf. docs/contexte/ia_anti_don_joker.md, exemple chiffré).
 
-    Réutilise ces mécanismes TELS QUELS (plutôt que de ré-implémenter leur
-    combinatoire) : ils couvrent par construction la même liberté de jeu
-    qu'un adversaire aurait sur SON tour, pour une combinaison de N'IMPORTE
-    QUELLE taille (contrairement à l'ancienne stratégie « placement du
-    joker », #232, qui restreignait son calcul aux combinaisons de
-    exactement 3 tuiles — restriction qui laisserait échapper, par
-    exemple, un joker en bout d'une suite de 4 ou plus).
-    ``plateau``/``chevalet`` : listes d'objets ``Tuile`` (pas de dicts)."""
-    hyp = _chevalet_hypothetique_inconnu(plateau, chevalet)
-    offerts = set()
-    for rec in _jokers_recuperables(plateau, hyp):
-        offerts.add(rec["joker"].id)
-    for rec in _jokers_detachables_par_extension(plateau, hyp):
-        offerts.add(rec["joker"].id)
+    Un joker au milieu d'une suite de 3 ou 4 tuiles, ou dans un groupe de 3,
+    n'est PAS libre : aucune des trois voies ci-dessus ne s'applique (suite
+    trop courte pour la scission milieu — qui exige 7 tuiles au moins —, et
+    un groupe de 3 tomberait sous le minimum de 3 tuiles en perdant le
+    joker). ``plateau`` : liste d'objets ``Tuile`` (pas de dicts)."""
+    libres = set()
     for rec in _jokers_liberables_par_groupe4_sans_remplacement(plateau):
-        offerts.add(rec["joker"].id)
-    for rec in _jokers_liberables_par_scission_milieu(plateau, hyp):
-        offerts.add(rec["joker"].id)
-    return offerts
+        libres.add(rec["joker"].id)
+    for rec in _jokers_liberables_par_scission_milieu(plateau, []):
+        libres.add(rec["joker"].id)
+    for rec in _jokers_libres_par_bout_suite(plateau):
+        libres.add(rec["joker"].id)
+    return libres
 
 
-def jokers_offerts_par_coup(etat, idx, coup):
-    """Ids des jokers NOUVELLEMENT offerts par ``coup`` (issue #252) :
-    offerts (:func:`jokers_offerts_sur_plateau`) sur le plateau résultant du
-    coup, mais pas déjà offerts sur le plateau AVANT ce coup — laisser en
-    place un joker que l'adversaire pouvait déjà reprendre n'est pas un
-    cadeau fait par CE coup (nuance d'Alain, #252). Compare donc deux
-    ÉTATS, pas deux coups : ``etat`` est l'état AVANT, ``coup`` le résultat
-    proposé (``{"ids_tuiles", "nouveau_plateau"}``)."""
+def jokers_rendus_libres_par_coup(etat, idx, coup):
+    """Ids des jokers NOUVELLEMENT libres (#253) après ``coup`` : libres
+    (:func:`jokers_libres_sur_plateau`) sur le plateau résultant du coup,
+    mais pas déjà libres sur le plateau AVANT ce coup — laisser en place un
+    joker déjà libre avant ce coup n'est pas un cadeau fait PAR ce coup
+    (même nuance qu'en #252). Compare donc deux PLATEAUX (celui d'``etat``
+    et celui de ``coup``), jamais la main : la nouvelle définition ne
+    dépend d'aucune tuile de main ou de pioche (contrairement à l'ancienne
+    notion de « joker offert », #252, qui utilisait un chevalet
+    hypothétique — devenue inutile, voir docs/contexte/
+    ia_anti_don_joker.md)."""
     plateau_avant = plateau_depuis_dict(etat.get("plateau", []))
-    chevalet_avant = _to_tuiles(etat["joueurs"][idx]["chevalet"])
     plateau_apres = plateau_depuis_dict(coup.get("nouveau_plateau") or [])
+    libres_avant = jokers_libres_sur_plateau(plateau_avant)
+    libres_apres = jokers_libres_sur_plateau(plateau_apres)
+    return libres_apres - libres_avant
+
+
+def _coup_avec_chevalet(etat, idx, chevalet, bridage, budget_temps,
+                        preferer_simple, eval_config):
+    """Meilleur coup VU par ``bridage`` (même ``perturbation_max``) avec un
+    CHEVALET DE REMPLACEMENT (#253) — ne mute jamais ``etat`` (construit un
+    état temporaire, comme l'ancienne recherche d'alternative de #252)."""
+    joueur = etat["joueurs"][idx]
+    joueur2 = dict(joueur)
+    joueur2["chevalet"] = chevalet
+    joueurs2 = list(etat["joueurs"])
+    joueurs2[idx] = joueur2
+    etat2 = dict(etat)
+    etat2["joueurs"] = joueurs2
+    return _coup_selon_perturbation(
+        etat2, idx, bridage.perturbation_max, budget_temps, None,
+        preferer_simple=preferer_simple, eval_config=eval_config)
+
+
+def _coup_sans_tuile_main(etat, idx, id_tuile, bridage, budget_temps,
+                          preferer_simple, eval_config, deadline):
+    """Meilleur coup du MÊME niveau en retirant ``id_tuile`` de la main
+    (#253) — utilisé par la recherche d'alternative sans joker libre (point
+    4) et par l'échange différé (point 6). Retourne ``None`` si ``deadline``
+    (instant monotone) est déjà dépassée, sinon le coup (``dict``, jamais
+    ``None`` au-delà — voir ``_coup_selon_perturbation``)."""
+    restant = deadline - time.monotonic()
+    if restant <= 0:
+        return None
+    chevalet = etat["joueurs"][idx]["chevalet"]
+    chevalet2 = [t for t in chevalet if t["id"] != id_tuile]
+    return _coup_avec_chevalet(
+        etat, idx, chevalet2, bridage,
+        min(budget_temps or BUDGET_TEMPS_EXPERT, restant),
+        preferer_simple, eval_config)
+
+
+# --------------------------------------------------------------------------- #
+# Point 3 — joker en main UTILE
+# --------------------------------------------------------------------------- #
+
+def _appliquer_joker_utile(etat, idx, coup, bridage, budget_temps,
+                           preferer_simple, eval_config):
+    """Règle du joker en main UTILE (#253, point 3). Si ``coup`` ne joue
+    aucun joker de la MAIN, rien à faire (``evalue=False`` — ne concerne
+    jamais un joker repris du plateau, cf. points 5/6 plus bas). Sinon,
+    compare le nombre de tuiles RÉELLES (jokers exclus) jouées par ``coup``
+    au nombre de tuiles RÉELLES du meilleur coup obtenu avec un chevalet
+    privé de TOUS les jokers de la main (``_coup_avec_chevalet`` — un coup
+    ``"piocher"``/``"passer"`` y compte pour 0, ce qui couvre aussi
+    l'ouverture rendue possible par le joker : sans lui, aucun coup
+    n'atteint la mise initiale).
+
+    * STRICTEMENT plus de tuiles réelles AVEC que SANS → le joker est
+      UTILE : ``coup`` est joué tel quel ;
+    * autant ou moins → NON utile : le coup SANS aucun joker de main est
+      joué à la place (le ou les jokers restent en main) — ou, si ce coup
+      sans joker n'est lui-même pas jouable (``"piocher"``/``"passer"``),
+      l'IA pioche/passe plutôt que de jouer un joker pour rien.
+
+    Retourne ``(coup_final, info)`` — ``info`` :
+    ``{"evalue": bool, "utile": bool, "jokers_main_en_jeu": int}``
+    (``jokers_main_en_jeu`` = nombre de jokers de la main dans ``coup``,
+    qu'il soit utile — alors joués — ou non — alors gardés)."""
+    chevalet = etat["joueurs"][idx]["chevalet"]
+    est_joker_par_id = {t["id"]: bool(t.get("est_joker")) for t in chevalet}
+    jokers_main_ids = {t["id"] for t in chevalet if t.get("est_joker")}
     ids_joues = set(coup.get("ids_tuiles") or [])
-    chevalet_apres = [t for t in chevalet_avant if t.id not in ids_joues]
+    jokers_en_jeu = ids_joues & jokers_main_ids
+    if not jokers_en_jeu:
+        return coup, {"evalue": False, "utile": True, "jokers_main_en_jeu": 0}
 
-    offerts_avant = jokers_offerts_sur_plateau(plateau_avant, chevalet_avant)
-    offerts_apres = jokers_offerts_sur_plateau(plateau_apres, chevalet_apres)
-    return offerts_apres - offerts_avant
+    chevalet_sans_joker = [t for t in chevalet if not t.get("est_joker")]
+    coup_sans = _coup_avec_chevalet(etat, idx, chevalet_sans_joker, bridage,
+                                    budget_temps, preferer_simple, eval_config)
+    reel_avec = sum(1 for i in ids_joues if not est_joker_par_id.get(i))
+    reel_sans = (len(coup_sans.get("ids_tuiles") or [])
+                if isinstance(coup_sans, dict) and coup_sans.get("action") == "jouer"
+                else 0)
+    info = {"evalue": True, "utile": reel_avec > reel_sans,
+           "jokers_main_en_jeu": len(jokers_en_jeu)}
+    if info["utile"]:
+        return coup, info
+    if isinstance(coup_sans, dict) and coup_sans.get("action") == "jouer":
+        return coup_sans, info
+    return _piocher_ou_passer(etat), info
 
 
-def _chercher_coup_sans_don_joker(etat, idx, coup, bridage, budget_temps,
-                                  preferer_simple, eval_config, deadline):
+# --------------------------------------------------------------------------- #
+# Point 6 — échange différé d'un échange facultatif « en réserve »
+# --------------------------------------------------------------------------- #
+
+def _joker_en_reserve(plateau, rec):
+    """Vrai si le joker de ``rec`` (échange direct, ``_jokers_recuperables``)
+    est EN RÉSERVE pour l'IA (#253, point 6) : l'AUTRE exemplaire de la
+    tuile de remplacement (``NB_SERIES - 1`` au total, soit 1 avec
+    ``NB_SERIES=2``) est visible sur ``plateau`` — donc personne d'autre
+    n'en détient — ET ce joker n'est pas déjà libre
+    (:func:`jokers_libres_sur_plateau` : aucune recombinaison du plateau
+    SEUL ne le libère). Dans ce cas, personne d'autre ne peut prendre ce
+    joker : il est en réserve pour l'IA elle-même."""
+    remplacement = rec["remplacement"]
+    vus_sur_plateau = sum(
+        1 for combo in plateau for t in combo
+        if not t.est_joker and t.couleur == remplacement.couleur
+        and t.valeur == remplacement.valeur)
+    if vus_sur_plateau != NB_SERIES - 1:
+        return False
+    return rec["joker"].id not in jokers_libres_sur_plateau(plateau)
+
+
+def _joker_repris_utilise_avec_main(plateau_apres, ids_joues, joker_id,
+                                    id_exclu):
+    """Vrai si le joker ``joker_id``, dans sa position APRÈS ``coup``
+    (``plateau_apres``), est combiné avec au moins une tuile RÉELLE jouée
+    depuis la main CE tour (``ids_joues``) autre que ``id_exclu`` (la tuile
+    de remplacement de l'échange lui-même) — càd que l'IA « peut utiliser
+    le joker avec sa main » (#253, points 5/6), par opposition à un simple
+    repositionnement structurel (extension seule, sans tuile de main)."""
+    for combo in plateau_apres:
+        if any(t.id == joker_id for t in combo):
+            return any(t.id in ids_joues and t.id != id_exclu and not t.est_joker
+                      for t in combo)
+    return False
+
+
+def _adversaire_a_moins_de(etat, idx, seuil):
+    """Vrai si au moins un AUTRE joueur a STRICTEMENT moins de ``seuil``
+    tuiles en main — nombre de tuiles, visible de tous (longueur du
+    chevalet), JAMAIS son contenu (#253, point 6)."""
+    return any(len(j["chevalet"]) < seuil
+              for j2, j in enumerate(etat["joueurs"]) if j2 != idx)
+
+
+def _appliquer_echange_differe(etat, idx, coup, bridage, budget_temps,
+                               preferer_simple, eval_config):
+    """Échange différé (#253, point 6). Pour le premier échange direct
+    facultatif (``_jokers_recuperables`` sur le plateau et la main AVANT ce
+    tour) effectivement joué par ``coup`` dont le joker récupéré N'EST PAS
+    utilisé avec le reste de la main
+    (:func:`_joker_repris_utilise_avec_main`) ET qui est EN RÉSERVE
+    (:func:`_joker_en_reserve`) :
+
+    * si le compteur d'attente de CE joker (propre à chaque joker, ``dict``
+      ``niveaux.CLE_ATTENTE_ECHANGE_DIFFERE``) n'a pas atteint la limite
+      (``niveaux.LIMITE_ECHANGE_DIFFERE``, réduite à
+      ``niveaux.LIMITE_ECHANGE_DIFFERE_ADVERSAIRE_FAIBLE`` si au moins un
+      AUTRE joueur a STRICTEMENT moins de
+      ``niveaux.SEUIL_TUILES_ADVERSAIRE_FAIBLE`` tuiles en main) : cherche
+      le meilleur coup SANS la tuile de remplacement
+      (:func:`_coup_sans_tuile_main`) — s'il existe (action ``"jouer"``), le
+      joue à la place (l'échange est différé, le compteur incrémenté) ;
+      s'il n'existe pas (l'échange était le SEUL coup possible), pioche
+      plutôt que d'échanger (compteur inchangé — ce tour de pioche ne
+      compte pas comme un tour d'attente « joué ») ;
+    * au-delà de la limite, ``coup`` est joué TEL QUEL (l'échange est fait,
+      compteur de CE joker remis à 0) — ``info["force"]=True`` : ce cas
+      N'EST PLUS resoumis à la règle du joker libre du point 4
+      (``_appliquer_joker_libre``, voir ``jouer_niveau_bride``), qui
+      chercherait sinon systématiquement l'alternative SANS l'échange —
+      exactement celle que le délai de différé vient d'épuiser — et
+      annulerait ainsi la décision de ce point 6 (choix d'interprétation,
+      voir docs/contexte/ia_anti_don_joker.md, §« points de doute »).
+
+    Un joker qui n'est plus en réserve (ses conditions ne tiennent plus,
+    p. ex. le plateau a été recomposé par un adversaire) voit son compteur
+    retiré du ``dict``, qu'il ait été concerné par ``coup`` ou non.
+
+    MUTE ``etat["joueurs"][idx][niveaux.CLE_ATTENTE_ECHANGE_DIFFERE]`` en
+    place (même exception que l'ancien compteur de #252 : métadonnée de
+    décision multi-tours, jamais le plateau ni la main).
+
+    Retourne ``(coup_final, info)`` — ``info`` :
+    ``{"differe": bool, "pioche": bool, "force": bool}``."""
+    joueur = etat["joueurs"][idx]
+    plateau_avant = plateau_depuis_dict(etat.get("plateau", []))
+    chevalet_avant = _to_tuiles(joueur["chevalet"])
+    ids_joues = set(coup.get("ids_tuiles") or [])
+    plateau_apres = plateau_depuis_dict(coup.get("nouveau_plateau") or [])
+    ids_sur_plateau_apres = {t.id for c in plateau_apres for t in c}
+
+    compteurs = dict(joueur.get(_niveaux.CLE_ATTENTE_ECHANGE_DIFFERE) or {})
+    limite = (_niveaux.LIMITE_ECHANGE_DIFFERE_ADVERSAIRE_FAIBLE
+             if _adversaire_a_moins_de(
+                 etat, idx, _niveaux.SEUIL_TUILES_ADVERSAIRE_FAIBLE)
+             else _niveaux.LIMITE_ECHANGE_DIFFERE)
+
+    recuperables = _jokers_recuperables(plateau_avant, chevalet_avant)
+    resultat = None
+    for rec in recuperables:
+        if rec["remplacement"].id not in ids_joues:
+            continue
+        if rec["joker"].id not in ids_sur_plateau_apres:
+            continue  # pas repositionné par CE coup
+        if _joker_repris_utilise_avec_main(
+                plateau_apres, ids_joues, rec["joker"].id,
+                rec["remplacement"].id):
+            continue  # utile avec la main : échange normal, rien à différer
+        if not _joker_en_reserve(plateau_avant, rec):
+            continue  # pas en réserve : la règle #253 ne s'y applique pas
+        n = compteurs.get(rec["joker"].id, 0)
+        if n >= limite:
+            compteurs.pop(rec["joker"].id, None)
+            resultat = (coup, {"differe": False, "pioche": False, "force": True})
+            break
+        deadline = time.monotonic() + (budget_temps or BUDGET_TEMPS_EXPERT)
+        alternative = _coup_sans_tuile_main(
+            etat, idx, rec["remplacement"].id, bridage, budget_temps,
+            preferer_simple, eval_config, deadline)
+        if not (isinstance(alternative, dict)
+                and alternative.get("action") == "jouer"):
+            # Seul coup possible : pioche, sans compter un tour d'attente.
+            resultat = (_piocher_ou_passer(etat),
+                       {"differe": True, "pioche": True, "force": False})
+            break
+        compteurs[rec["joker"].id] = n + 1
+        resultat = (alternative, {"differe": True, "pioche": False,
+                                  "force": False})
+        break
+
+    # Réserve cessée (recomposition adverse) : compteur retiré, que CE coup
+    # ait concerné ce joker ou non.
+    for rec in recuperables:
+        if rec["joker"].id in compteurs and not _joker_en_reserve(
+                plateau_avant, rec):
+            compteurs.pop(rec["joker"].id, None)
+
+    if compteurs != (joueur.get(_niveaux.CLE_ATTENTE_ECHANGE_DIFFERE) or {}):
+        joueur[_niveaux.CLE_ATTENTE_ECHANGE_DIFFERE] = compteurs
+    return resultat if resultat is not None else (
+        coup, {"differe": False, "pioche": False, "force": False})
+
+
+# --------------------------------------------------------------------------- #
+# Point 4 — joker LIBRE évité (remplace la pioche bornée de #252)
+# --------------------------------------------------------------------------- #
+
+def _chercher_coup_sans_joker_libre(etat, idx, coup, bridage, budget_temps,
+                                    preferer_simple, eval_config, deadline):
     """Cherche un coup ÉQUIVALENT (même mécanisme que ``coup``, quitte à
-    poser moins de tuiles) qui n'offre aucun NOUVEAU joker (#252). Essaie,
-    dans l'ordre :
+    poser moins de tuiles) qui ne rend NOUVEAU libre aucun joker (#253,
+    point 4). Essaie, dans l'ordre :
 
     1. le coup SANS réarrangement du plateau (``_coup_sans_rearrangement``) —
-       ne peut jamais exposer un joker déjà en place sur le plateau ;
+       ne peut jamais rendre libre un joker déjà en place sur le plateau ;
     2. pour chaque tuile jouée par ``coup`` (les jokers joués d'abord — la
-       cause la plus probable d'un don), le meilleur coup du MÊME niveau
-       (``_coup_selon_perturbation``) obtenu en retirant CETTE tuile de la
-       main, pour voir si jouer sans elle évite le don.
+       cause la plus probable), le meilleur coup du MÊME niveau obtenu en
+       retirant CETTE tuile de la main (:func:`_coup_sans_tuile_main`).
 
-    S'arrête au premier coup trouvé qui n'offre aucun joker (pas
-    nécessairement le plus riche) — borné par ``deadline`` (instant
-    monotone), pour rester dans la même échéance de temps que le coup
-    normal (quelques résolutions supplémentaires au plus, jamais une
-    recherche exhaustive). Retourne ``None`` si rien n'y échappe."""
+    S'arrête au premier coup trouvé qui n'en laisse aucun libre (pas
+    nécessairement le plus riche) — borné par ``deadline``, pour rester
+    dans la même échéance de temps que le coup normal. Retourne ``None`` si
+    rien n'y échappe."""
     sans_rearr = _coup_sans_rearrangement(etat, idx)
     if (isinstance(sans_rearr, dict) and sans_rearr.get("action") == "jouer"
-            and not jokers_offerts_par_coup(etat, idx, sans_rearr)):
+            and not jokers_rendus_libres_par_coup(etat, idx, sans_rearr)):
         return sans_rearr
 
-    joueur = etat["joueurs"][idx]
-    chevalet = joueur["chevalet"]
+    chevalet = etat["joueurs"][idx]["chevalet"]
     par_id = {t["id"]: t for t in chevalet}
     ids_joues = list(coup.get("ids_tuiles") or [])
     ids_jokers_joues = [i for i in ids_joues
@@ -1167,85 +1424,42 @@ def _chercher_coup_sans_don_joker(etat, idx, coup, bridage, budget_temps,
     ordre = ids_jokers_joues + [i for i in ids_joues if i not in ids_jokers_joues]
 
     for id_tuile in ordre:
-        restant = deadline - time.monotonic()
-        if restant <= 0:
+        candidat = _coup_sans_tuile_main(etat, idx, id_tuile, bridage,
+                                         budget_temps, preferer_simple,
+                                         eval_config, deadline)
+        if candidat is None:
             break
-        idx_t = next((i for i, t in enumerate(chevalet) if t["id"] == id_tuile),
-                     None)
-        if idx_t is None:
-            continue
-        chevalet2 = chevalet[:idx_t] + chevalet[idx_t + 1:]
-        joueur2 = dict(joueur)
-        joueur2["chevalet"] = chevalet2
-        joueurs2 = list(etat["joueurs"])
-        joueurs2[idx] = joueur2
-        etat2 = dict(etat)
-        etat2["joueurs"] = joueurs2
-        candidat = _coup_selon_perturbation(
-            etat2, idx, bridage.perturbation_max,
-            min(budget_temps or BUDGET_TEMPS_EXPERT, restant), None,
-            preferer_simple=preferer_simple, eval_config=eval_config)
         if (isinstance(candidat, dict) and candidat.get("action") == "jouer"
-                and not jokers_offerts_par_coup(etat, idx, candidat)):
+                and not jokers_rendus_libres_par_coup(etat, idx, candidat)):
             return candidat
     return None
 
 
-def _reinitialiser_attente_don_joker(etat, idx):
-    joueur = etat["joueurs"][idx]
-    if joueur.get(_niveaux.CLE_ATTENTE_DON_JOKER):
-        joueur[_niveaux.CLE_ATTENTE_DON_JOKER] = 0
+def _appliquer_joker_libre(etat, idx, coup, bridage, budget_temps,
+                          preferer_simple, eval_config):
+    """Règle du joker LIBRE évité (#253, point 4 — remplace la pioche
+    bornée de #252). Si ``coup`` ne rend libre aucun NOUVEAU joker
+    (:func:`jokers_rendus_libres_par_coup`), rien à faire. Sinon, cherche
+    une alternative (:func:`_chercher_coup_sans_joker_libre`) ; si elle en
+    trouve une, la joue à la place (quitte à poser moins de tuiles). Si
+    AUCUNE alternative n'en évite — le seul coup possible laisse un joker
+    libre —, l'IA pioche plutôt que de jouer, SANS compteur ni limite
+    (contrairement à l'attente bornée à 2 tours de #252, supprimée).
 
-
-def _appliquer_anti_don_joker(etat, idx, coup, bridage, budget_temps,
-                              preferer_simple, eval_config):
-    """Applique la règle anti-don de joker (#252) à ``coup`` (coup DÉJÀ
-    choisi par le niveau, un coup ``"jouer"``, jamais un coup gagnant — voir
-    l'exception absolue dans :func:`jouer_niveau_bride`).
-
-    Si ``coup`` n'offre aucun NOUVEAU joker (:func:`jokers_offerts_par_coup`),
-    rien à faire. Sinon, cherche une alternative
-    (:func:`_chercher_coup_sans_don_joker`) ; si elle en trouve une, la joue
-    à la place. Si aucune alternative n'évite le don, pioche plutôt que
-    jouer, jusqu'à ``niveaux.LIMITE_ATTENTE_DON_JOKER`` tours CONSÉCUTIFS de
-    cette attente (compteur ``niveaux.CLE_ATTENTE_DON_JOKER``, persisté sur
-    le joueur, remis à 0 dès qu'un coup est effectivement joué) — au-delà,
-    le coup qui offre le joker est joué malgré tout.
-
-    MUTE ``etat["joueurs"][idx][niveaux.CLE_ATTENTE_DON_JOKER]`` en place
-    (seule exception à la règle « les fonctions d'IA ne modifient jamais
-    l'état » : ce compteur n'est qu'une métadonnée de décision multi-tours,
-    jamais le plateau ni la main).
-
-    Retourne ``(coup_final, info)`` — ``info`` pour le journal/la mesure :
-    ``{"declenchee": bool, "evite": bool, "attente": bool,
-    "force_apres_attente": bool, "tours_attente": int}``."""
-    nouveaux = jokers_offerts_par_coup(etat, idx, coup)
+    Retourne ``(coup_final, info)`` — ``info`` :
+    ``{"declenchee": bool, "evite": bool, "pioche": bool}``."""
+    nouveaux = jokers_rendus_libres_par_coup(etat, idx, coup)
     if not nouveaux:
-        _reinitialiser_attente_don_joker(etat, idx)
-        return coup, {"declenchee": False, "evite": False, "attente": False,
-                      "force_apres_attente": False, "tours_attente": 0}
+        return coup, {"declenchee": False, "evite": False, "pioche": False}
 
     deadline = time.monotonic() + (budget_temps or BUDGET_TEMPS_EXPERT)
-    alternative = _chercher_coup_sans_don_joker(
+    alternative = _chercher_coup_sans_joker_libre(
         etat, idx, coup, bridage, budget_temps, preferer_simple,
         eval_config, deadline)
     if alternative is not None:
-        _reinitialiser_attente_don_joker(etat, idx)
-        return alternative, {"declenchee": True, "evite": True,
-                             "attente": False, "force_apres_attente": False,
-                             "tours_attente": 0}
-
-    n = etat["joueurs"][idx].get(_niveaux.CLE_ATTENTE_DON_JOKER, 0)
-    if n < _niveaux.LIMITE_ATTENTE_DON_JOKER:
-        etat["joueurs"][idx][_niveaux.CLE_ATTENTE_DON_JOKER] = n + 1
-        return _piocher_ou_passer(etat), {
-            "declenchee": True, "evite": False, "attente": True,
-            "force_apres_attente": False, "tours_attente": n + 1}
-
-    _reinitialiser_attente_don_joker(etat, idx)
-    return coup, {"declenchee": True, "evite": False, "attente": False,
-                 "force_apres_attente": True, "tours_attente": 0}
+        return alternative, {"declenchee": True, "evite": True, "pioche": False}
+    return _piocher_ou_passer(etat), {"declenchee": True, "evite": False,
+                                      "pioche": True}
 
 
 def jouer_niveau_bride(etat, idx, nom_niveau, budget_temps=None, rng=None,
@@ -1257,14 +1471,20 @@ def jouer_niveau_bride(etat, idx, nom_niveau, budget_temps=None, rng=None,
     1. calcule le meilleur coup que le niveau « voit » (borné par
        ``perturbation_max``) ;
     2. un coup qui VIDE la main gagne la partie : renvoyé tel quel, jamais
-       oublié, ni dégradé, ni soumis à la règle anti-don de joker ci-dessous
-       (§13) ;
-    2bis. règle anti-don de joker (issue #252, Intermédiaire/Avancé/Expert,
-       voir ``niveaux.Bridage.eviter_don_joker`` et docs/contexte/
-       ia_anti_don_joker.md) : si ce coup offre un NOUVEAU joker à
-       l'adversaire, cherche une alternative qui n'en offre pas
-       (``_appliquer_anti_don_joker``), ou pioche plutôt que d'offrir
-       (jusqu'à ``niveaux.LIMITE_ATTENTE_DON_JOKER`` tours consécutifs) ;
+       oublié, ni dégradé, ni soumis à la gestion du joker ci-dessous (§13) ;
+    2bis. gestion du joker (issue #253, Intermédiaire/Avancé/Expert, voir
+       ``niveaux.Bridage.eviter_don_joker`` et docs/contexte/
+       ia_anti_don_joker.md — REMPLACE la règle d'attente de #252), DANS CET
+       ORDRE :
+       a. joker en main UTILE (``_appliquer_joker_utile``) — un joker de la
+          main n'est joué que s'il pose strictement plus de tuiles réelles
+          que sans lui, sinon le coup sans joker est joué et le joker gardé ;
+       b. échange différé (``_appliquer_echange_differe``) — un échange
+          facultatif en réserve, inemployable avec la main, peut être
+          différé quelques tours plutôt que fait tout de suite ;
+       c. joker LIBRE évité (``_appliquer_joker_libre``) — si le coup
+          résultant rend un nouveau joker libre, cherche une alternative qui
+          l'évite, ou pioche sans compteur ni limite si aucune n'existe ;
     3. sinon, avec la probabilité ``taux_oubli`` (réduite si la main est petite,
        voir ``niveaux.taux_oubli_effectif``), le joueur « oublie » le coup et
        pioche à la place (tour raté). Tirage reproductible sous ``graine_ia``.
@@ -1281,11 +1501,13 @@ def jouer_niveau_bride(etat, idx, nom_niveau, budget_temps=None, rng=None,
     cas légitime (aucun coup posable, prouvé par le modèle exact), distinct
     d'un repli. ``eviter_don_joker`` (``None`` → suit ``bridage.
     eviter_don_joker`` ; ``True``/``False`` → force l'activation/
-    désactivation, issue #252) : permet à ``scripts/comparer_niveaux_ia.py``
-    de comparer, pour un MÊME niveau, une campagne avec et sans la règle."""
+    désactivation ; nom du paramètre conservé de #252, gouverne maintenant
+    l'ensemble de la gestion du joker de #253) : permet à ``scripts/
+    comparer_niveaux_ia.py`` de comparer, pour un MÊME niveau, une campagne
+    avec et sans la règle."""
     bridage = _niveaux.bridage_pour(nom_niveau)
-    applique_anti_don_joker = (bridage.eviter_don_joker
-                              if eviter_don_joker is None else eviter_don_joker)
+    applique_regle_joker = (bridage.eviter_don_joker
+                            if eviter_don_joker is None else eviter_don_joker)
     if rng is None:
         rng = _rng_oubli(etat, idx)
     taille_main = len(etat["joueurs"][idx]["chevalet"])
@@ -1299,22 +1521,55 @@ def jouer_niveau_bride(etat, idx, nom_niveau, budget_temps=None, rng=None,
         # Aucun coup posable : pioche/passe (déjà décidé par le moteur).
         return coup if isinstance(coup, dict) else _piocher_ou_passer(etat)
 
-    # Un coup qui vide la main gagne : jamais oublié, ni soumis à la règle
-    # anti-don de joker (§13, exception absolue de #252).
+    # Un coup qui vide la main gagne : jamais oublié, ni soumis à la gestion
+    # du joker (§13, exception absolue de #252/#253).
     vide_la_main = (taille_main - len(coup.get("ids_tuiles") or [])) <= 0
     if vide_la_main:
-        _reinitialiser_attente_don_joker(etat, idx)
         return coup
 
-    if applique_anti_don_joker:
-        coup, info_don_joker = _appliquer_anti_don_joker(
+    if applique_regle_joker:
+        coup, info_utile = _appliquer_joker_utile(
             etat, idx, coup, bridage, budget_temps, preferer_simple,
             eval_config)
-        if isinstance(coup, dict):
-            coup["don_joker"] = info_don_joker
+        joker_info = {
+            "jokers_main_gardes": (info_utile["jokers_main_en_jeu"]
+                                   if info_utile["evalue"]
+                                   and not info_utile["utile"] else 0),
+            "echange_differe": False, "echange_differe_pioche": False,
+            "joker_libre_declenche": False, "joker_libre_evite": False,
+            "joker_libre_pioche": False,
+        }
         if not (isinstance(coup, dict) and coup.get("action") == "jouer"):
-            # Attente forcée (pioche/passe) : décidé par la règle, jamais
-            # soumis à l'oubli (qui ne s'applique qu'à un coup JOUÉ).
+            # Pioche/passe décidé par la règle : jamais soumis à l'oubli
+            # (qui ne s'applique qu'à un coup JOUÉ).
+            coup["joker"] = joker_info
+            return coup
+
+        coup, info_differe = _appliquer_echange_differe(
+            etat, idx, coup, bridage, budget_temps, preferer_simple,
+            eval_config)
+        joker_info["echange_differe"] = bool(info_differe.get("differe"))
+        joker_info["echange_differe_pioche"] = bool(info_differe.get("pioche"))
+        if not (isinstance(coup, dict) and coup.get("action") == "jouer"):
+            coup["joker"] = joker_info
+            return coup
+
+        # Échange différé FORCÉ (délai épuisé, #253 point 6) : décision
+        # finale, jamais resoumise au point 4 (``_appliquer_joker_libre``)
+        # qui chercherait sinon systématiquement l'alternative SANS
+        # l'échange — exactement celle que le délai vient d'épuiser — et
+        # annulerait cette décision (voir docstring de
+        # ``_appliquer_echange_differe``).
+        if not info_differe.get("force"):
+            coup, info_libre = _appliquer_joker_libre(
+                etat, idx, coup, bridage, budget_temps, preferer_simple,
+                eval_config)
+            joker_info["joker_libre_declenche"] = bool(info_libre.get("declenchee"))
+            joker_info["joker_libre_evite"] = bool(info_libre.get("evite"))
+            joker_info["joker_libre_pioche"] = bool(info_libre.get("pioche"))
+        if isinstance(coup, dict):
+            coup["joker"] = joker_info
+        if not (isinstance(coup, dict) and coup.get("action") == "jouer"):
             return coup
 
     p = _niveaux.taux_oubli_effectif(bridage.taux_oubli, taille_main)

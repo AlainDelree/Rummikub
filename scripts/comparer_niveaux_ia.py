@@ -73,7 +73,7 @@ for _p in (SRC, SCRIPTS):
         sys.path.insert(0, str(_p))
 
 from rummikub.config import NIVEAUX  # noqa: E402
-from rummikub.moteur.ia import jouer_niveau_bride, jokers_offerts_par_coup  # noqa: E402
+from rummikub.moteur.ia import jouer_niveau_bride, jokers_rendus_libres_par_coup  # noqa: E402
 from rummikub.moteur import evaluation_main  # noqa: E402
 from rummikub.moteur import solveur_exact  # noqa: E402
 from _verif_solveur_exact import (  # noqa: E402
@@ -259,20 +259,34 @@ def jouer_un_tour(etat: dict, idx: int, temps_par_niveau: dict,
     n'est pas ``None`` (``--export-trace``), écrit une ligne JSON par tour
     via ``_ecrire_trace_tour`` (voir ce bloc plus haut).
 
-    ``dons_joker_configs``/``stats_don_joker`` (issue #252) : ``dons_joker_
-    configs[idx]`` (``None``/``True``/``False``) force ou non la règle
-    anti-don de joker pour CE joueur (relayé à ``jouer_niveau_bride`` via
-    ``eviter_don_joker`` — ``None`` laisse le réglage naturel du niveau),
-    permettant de comparer, au sein d'une même campagne, un camp AVEC et un
-    camp SANS la règle pour un MÊME niveau (``--sans-don-joker-a``/``-b``).
-    ``stats_don_joker`` (``{"offerts", "tours_jouer", "attentes"}``, chacun
-    ``{"A": int, "B": int}``, MUTÉS en place) compte, par CAMP (pas par nom
-    de niveau : les deux camps peuvent partager le même niveau avec des
-    réglages différents), les coups effectivement joués qui offrent un
-    NOUVEAU joker, le nombre total de coups joués (dénominateur du taux), et
-    les tours où la règle a préféré piocher plutôt que jouer. Mesure PURE,
-    jamais utilisée pour décider : lue sur l'état AVANT le coup, donc
-    calculée ICI, avant que ``jouer_tour`` ne mute le plateau et la main."""
+    ``dons_joker_configs``/``stats_don_joker`` (issue #252, RÉÉCRIT par
+    #253 — noms conservés) : ``dons_joker_configs[idx]`` (``None``/``True``/
+    ``False``) force ou non la gestion du joker de #253 pour CE joueur
+    (relayé à ``jouer_niveau_bride`` via ``eviter_don_joker`` — ``None``
+    laisse le réglage naturel du niveau), permettant de comparer, au sein
+    d'une même campagne, un camp AVEC et un camp SANS la règle pour un MÊME
+    niveau (``--sans-don-joker-a``/``-b``). ``stats_don_joker`` — ``dict``
+    de compteurs ``{"A": int, "B": int}`` MUTÉS en place, PAR CAMP (pas par
+    nom de niveau : les deux camps peuvent partager le même niveau avec des
+    réglages différents) :
+
+    * ``tours_jouer`` — coups effectivement joués, HORS le coup qui vide le
+      chevalet (#253, point 7 : offrir un joker libre n'y coûte rien) —
+      dénominateur du taux de jokers libres ;
+    * ``libres`` — parmi eux, ceux qui rendent NOUVEAU libre au moins un
+      joker (:func:`jokers_rendus_libres_par_coup`, #253, point 1) ;
+    * ``libre_pioche`` — tours où l'IA a préféré piocher plutôt que de
+      laisser un joker libre, faute d'alternative (#253, point 4 — doivent
+      rester quasi nuls) ;
+    * ``jokers_gardes`` — nombre de jokers de main gardés plutôt que joués,
+      cumulé (#253, point 3) ;
+    * ``echanges_differes``/``echanges_differes_pioche`` — échanges
+      facultatifs différés, et parmi eux ceux qui ont forcé une pioche faute
+      d'alternative (#253, point 6).
+
+    Mesure PURE, jamais utilisée pour décider : lue sur l'état AVANT le
+    coup, donc calculée ICI, avant que ``jouer_tour`` ne mute le plateau et
+    la main."""
     niveau = etat["joueurs"][idx]["niveau"]
     backup_debut_tour(etat)
     plateau_avant = etat["plateau"]
@@ -340,22 +354,37 @@ def jouer_un_tour(etat: dict, idx: int, temps_par_niveau: dict,
         perturbations_expert.append(
             mesurer_perturbation(plateau_avant, res_ia["nouveau_plateau"]))
 
-    # Mesure du don de joker (#252) — AVANT jouer_tour, qui mute le plateau
-    # et la main (voir docstring). Par CAMP (nom préfixé "A:"/"B:", voir
-    # comparer()), pas par niveau : deux camps du même niveau peuvent avoir
-    # des réglages différents de la règle dans une même campagne.
+    # Mesure de la gestion du joker (#253, point 7) — AVANT jouer_tour, qui
+    # mute le plateau et la main (voir docstring). Par CAMP (nom préfixé
+    # "A:"/"B:", voir comparer()), pas par niveau : deux camps du même
+    # niveau peuvent avoir des réglages différents de la règle dans une
+    # même campagne.
     if stats_don_joker is not None:
         camp = joueur_avant["nom"].split(":", 1)[0]
         if res_ia.get("action") == "jouer":
-            stats_don_joker["tours_jouer"][camp] = \
-                stats_don_joker["tours_jouer"].get(camp, 0) + 1
-            if jokers_offerts_par_coup(etat, idx, res_ia):
-                stats_don_joker["offerts"][camp] = \
-                    stats_don_joker["offerts"].get(camp, 0) + 1
-        info_don_joker = res_ia.get("don_joker")
-        if info_don_joker and info_don_joker.get("attente"):
-            stats_don_joker["attentes"][camp] = \
-                stats_don_joker["attentes"].get(camp, 0) + 1
+            vide_le_chevalet = (chevalet_avant
+                                - len(res_ia.get("ids_tuiles") or [])) <= 0
+            if not vide_le_chevalet:
+                stats_don_joker["tours_jouer"][camp] = \
+                    stats_don_joker["tours_jouer"].get(camp, 0) + 1
+                if jokers_rendus_libres_par_coup(etat, idx, res_ia):
+                    stats_don_joker["libres"][camp] = \
+                        stats_don_joker["libres"].get(camp, 0) + 1
+        info_joker = res_ia.get("joker")
+        if info_joker:
+            if info_joker.get("joker_libre_pioche"):
+                stats_don_joker["libre_pioche"][camp] = \
+                    stats_don_joker["libre_pioche"].get(camp, 0) + 1
+            if info_joker.get("jokers_main_gardes"):
+                stats_don_joker["jokers_gardes"][camp] = \
+                    stats_don_joker["jokers_gardes"].get(camp, 0) \
+                    + info_joker["jokers_main_gardes"]
+            if info_joker.get("echange_differe"):
+                stats_don_joker["echanges_differes"][camp] = \
+                    stats_don_joker["echanges_differes"].get(camp, 0) + 1
+            if info_joker.get("echange_differe_pioche"):
+                stats_don_joker["echanges_differes_pioche"][camp] = \
+                    stats_don_joker["echanges_differes_pioche"].get(camp, 0) + 1
 
     action = res_ia.get("action")
     if action == "jouer":
@@ -574,19 +603,24 @@ def comparer(niveau_a: str, niveau_b: str, nb_donnes: int, seed: int,
     fin), voir ``scripts/analyser_phases.py``. Indépendant d'``export_
     resultats`` ; mesure pure, ne change jamais le déroulement de la partie.
 
-    ``don_joker_a``/``don_joker_b`` (issue #252) : ``None`` (défaut) laisse
-    chaque camp le réglage NATUREL de son niveau (``niveaux.Bridage.
-    eviter_don_joker`` — activé pour Intermédiaire/Avancé/Expert, pas pour
-    Débutant/Facile) ; ``False`` force la règle anti-don de joker
-    DÉSACTIVÉE pour ce camp quel que soit son niveau (``--sans-don-joker-a``/
-    ``-b``) — pour comparer, à niveau et donnes identiques, une campagne
-    AVEC et une campagne SANS la règle (y compris quand les deux camps
-    portent le MÊME nom de niveau, p. ex. Expert contre Expert). Le résumé
-    renvoyé compte, PAR CAMP (``jokers_offerts_camp``, ``tours_jouer_camp``,
-    ``attentes_don_joker_camp``), les coups joués qui offrent un NOUVEAU
-    joker, le nombre de coups joués, et les tours où la règle a préféré
-    piocher plutôt que jouer — mesure indépendante du réglage, utile même
-    quand la règle est désactivée (campagne « avant » de référence)."""
+    ``don_joker_a``/``don_joker_b`` (issue #252, RÉÉCRIT par #253 — noms
+    conservés) : ``None`` (défaut) laisse chaque camp le réglage NATUREL de
+    son niveau (``niveaux.Bridage.eviter_don_joker`` — activé pour
+    Intermédiaire/Avancé/Expert, pas pour Débutant/Facile) ; ``False``
+    force la gestion du joker DÉSACTIVÉE pour ce camp quel que soit son
+    niveau (``--sans-don-joker-a``/``-b``) — pour comparer, à niveau et
+    donnes identiques, une campagne AVEC et une campagne SANS la règle (y
+    compris quand les deux camps portent le MÊME nom de niveau, p. ex.
+    Expert contre Expert). Le résumé renvoyé compte, PAR CAMP
+    (``jokers_libres_camp``, ``tours_jouer_camp``, ``libre_pioche_camp``,
+    ``jokers_gardes_camp``, ``echanges_differes_camp``,
+    ``echanges_differes_pioche_camp``) : les coups joués (hors coup qui
+    vide le chevalet) qui rendent NOUVEAU libre un joker, le nombre de ces
+    coups joués (dénominateur), les tours où l'IA a préféré piocher plutôt
+    que laisser un joker libre, le nombre de jokers de main gardés, et les
+    échanges facultatifs différés (et parmi eux ceux qui ont forcé une
+    pioche) — mesure indépendante du réglage, utile même quand la règle est
+    désactivée (campagne « avant » de référence)."""
     cfg_eval = {"A": evaluation_main.depuis_preset(eval_a, nb_manches),
                 "B": evaluation_main.depuis_preset(eval_b, nb_manches)}
     # aléa de jeu (graines de simulation), sans enjeu de sécurité
@@ -629,11 +663,17 @@ def comparer(niveau_a: str, niveau_b: str, nb_donnes: int, seed: int,
     # liste de ``(tuiles_deplacees, combos_modifiees)`` (voir
     # ``mesurer_perturbation``, ``moteur/solveur.py``).
     perturbations_expert: list[tuple[int, int]] = []
-    # Règle anti-don de joker (#252) : par CAMP, pas par niveau (voir
-    # jouer_un_tour).
+    # Gestion du joker (#253, REMPLACE #252) : par CAMP, pas par niveau
+    # (voir jouer_un_tour).
     don_joker_camp = {"A": don_joker_a, "B": don_joker_b}
-    stats_don_joker = {"offerts": {"A": 0, "B": 0}, "tours_jouer": {"A": 0, "B": 0},
-                       "attentes": {"A": 0, "B": 0}}
+    stats_don_joker = {
+        "tours_jouer": {"A": 0, "B": 0},
+        "libres": {"A": 0, "B": 0},
+        "libre_pioche": {"A": 0, "B": 0},
+        "jokers_gardes": {"A": 0, "B": 0},
+        "echanges_differes": {"A": 0, "B": 0},
+        "echanges_differes_pioche": {"A": 0, "B": 0},
+    }
 
     for i, graine in graines_jouees:
         for ordre, camps in enumerate((("A", "B"), ("B", "A"))):
@@ -755,12 +795,16 @@ def comparer(niveau_a: str, niveau_b: str, nb_donnes: int, seed: int,
         "nb_donnes_jouees": len(graines_jouees),
         "nb_parties": 2 * len(graines_jouees),
         "sans_exact": sans_exact,
-        # Règle anti-don de joker (#252), PAR CAMP (voir docstring).
+        # Gestion du joker (#253, REMPLACE #252), PAR CAMP (voir docstring).
         "don_joker_a": don_joker_a,
         "don_joker_b": don_joker_b,
-        "jokers_offerts_camp": dict(stats_don_joker["offerts"]),
+        "jokers_libres_camp": dict(stats_don_joker["libres"]),
         "tours_jouer_camp": dict(stats_don_joker["tours_jouer"]),
-        "attentes_don_joker_camp": dict(stats_don_joker["attentes"]),
+        "libre_pioche_camp": dict(stats_don_joker["libre_pioche"]),
+        "jokers_gardes_camp": dict(stats_don_joker["jokers_gardes"]),
+        "echanges_differes_camp": dict(stats_don_joker["echanges_differes"]),
+        "echanges_differes_pioche_camp": dict(
+            stats_don_joker["echanges_differes_pioche"]),
     }
 
 
@@ -902,25 +946,36 @@ def afficher_rapport(resume: dict) -> None:
              f"{moyenne(modifiees):.2f} combinaison(s) modifiée(s), "
              f"sur {len(perturbations)} coup(s) posé(s) par Expert.")
 
-    # Règle anti-don de joker (#252), PAR CAMP (voir docstring de comparer()
-    # — un même nom de niveau peut porter un réglage différent entre A et B).
-    jokers_offerts_camp = resume.get("jokers_offerts_camp") or {}
+    # Gestion du joker (#253, REMPLACE #252), PAR CAMP (voir docstring de
+    # comparer() — un même nom de niveau peut porter un réglage différent
+    # entre A et B).
+    jokers_libres_camp = resume.get("jokers_libres_camp") or {}
     tours_jouer_camp = resume.get("tours_jouer_camp") or {}
-    attentes_camp = resume.get("attentes_don_joker_camp") or {}
+    libre_pioche_camp = resume.get("libre_pioche_camp") or {}
+    jokers_gardes_camp = resume.get("jokers_gardes_camp") or {}
+    echanges_differes_camp = resume.get("echanges_differes_camp") or {}
+    echanges_differes_pioche_camp = \
+        resume.get("echanges_differes_pioche_camp") or {}
     if any(tours_jouer_camp.values()):
         print("-" * 70)
-        print("  Règle anti-don de joker (#252) :")
+        print("  Gestion du joker (#253) :")
         for camp, niveau in (("A", niveau_a), ("B", niveau_b)):
             n = tours_jouer_camp.get(camp, 0)
-            offerts = jokers_offerts_camp.get(camp, 0)
-            attentes = attentes_camp.get(camp, 0)
+            libres = jokers_libres_camp.get(camp, 0)
+            libre_pioche = libre_pioche_camp.get(camp, 0)
+            gardes = jokers_gardes_camp.get(camp, 0)
+            differes = echanges_differes_camp.get(camp, 0)
+            differes_pioche = echanges_differes_pioche_camp.get(camp, 0)
             reglage_camp = resume.get(f"don_joker_{camp.lower()}")
             suffixe = (" [règle désactivée]" if reglage_camp is False else "")
-            taux = (offerts / n * 100) if n else 0.0
-            print(f"    {niveau} (camp {camp}){suffixe} : {offerts}/{n} "
-                 f"coup(s) joué(s) posent ou laissent un joker offert "
-                 f"({taux:.1f} %) ; {attentes} tour(s) d'attente (pioche "
-                 f"plutôt que d'offrir).")
+            taux = (libres / n * 100) if n else 0.0
+            print(f"    {niveau} (camp {camp}){suffixe} : {libres}/{n} "
+                 f"coup(s) joué(s) (hors coup gagnant) laissent un joker "
+                 f"libre ({taux:.1f} %) ; {libre_pioche} tour(s) de pioche "
+                 f"à cause d'un joker libre sans alternative ; {gardes} "
+                 f"joker(s) de main gardé(s) plutôt que joué(s) ; "
+                 f"{differes} échange(s) facultatif(s) différé(s), dont "
+                 f"{differes_pioche} ayant forcé une pioche.")
     print("=" * 70)
 
 
@@ -991,7 +1046,8 @@ def main(argv: list[str]) -> int:
                              "désactivé par défaut (aucun changement de "
                              "comportement sans cette option).")
     parser.add_argument("--sans-don-joker-a", action="store_true",
-                        help="Désactive la règle anti-don de joker (#252) "
+                        help="Désactive la gestion du joker (#253 — "
+                             "remplace #252 ; nom du drapeau conservé) "
                              "pour le camp A, quel que soit son niveau "
                              "(défaut : réglage naturel du niveau — "
                              "activé pour Intermédiaire/Avancé/Expert). "

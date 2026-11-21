@@ -59,12 +59,19 @@ class Bridage:
     """Réglage de force d'un niveau. ``perturbation_max=None`` → illimité
     (solveur complet) ; ``taux_oubli`` ∈ [0, 1].
 
-    ``eviter_don_joker`` (issue #252) : si vrai, le niveau refuse de JOUER un
-    coup qui offre un joker à l'adversaire (voir ``moteur/ia.py``,
-    ``jouer_niveau_bride`` — définition et mécanisme détaillés dans
-    ``docs/contexte/ia_anti_don_joker.md``) quand une alternative existe,
-    quitte à poser moins de tuiles ou à piocher plutôt que de jouer ;
-    ``False`` (Débutant, Facile) laisse le comportement d'avant #252."""
+    ``eviter_don_joker`` (issue #252, RÉÉCRIT par #253 — nom du champ
+    conservé pour éviter de propager un renommage dans tout le code et les
+    campagnes existantes) : si vrai, le niveau applique l'ensemble des
+    règles de gestion du joker de l'issue #253 (voir ``moteur/ia.py``,
+    ``jouer_niveau_bride`` — arbre de décision complet et définitions dans
+    ``docs/contexte/ia_anti_don_joker.md``) : un joker de la main n'est joué
+    que s'il est UTILE, aucun joker n'est laissé LIBRE sur le plateau quand
+    un autre coup l'évite (pioche sinon, sans compteur ni limite — la
+    pioche bornée de #252 est SUPPRIMÉE par #253), un joker repris du
+    plateau que l'IA ne peut pas utiliser avec sa main est camouflé en
+    position non libre quand c'est possible, et un échange facultatif
+    « en réserve » peut être différé quelques tours. ``False`` (Débutant,
+    Facile) laisse le comportement d'avant #252/#253."""
     perturbation_max: int | None
     taux_oubli: float
     eviter_don_joker: bool = False
@@ -158,19 +165,29 @@ BRIDAGES: dict[str, Bridage] = {
                                  eviter_don_joker=True),
 }
 
-# Nombre maximal de tours CONSÉCUTIFS où un niveau soumis à
-# ``eviter_don_joker`` préfère piocher plutôt que de jouer un coup qui
-# offrirait un joker (issue #252) — paramètre réglable, au-delà duquel le
-# meilleur coup est joué malgré tout (voir ``moteur/ia.py``,
-# ``_appliquer_anti_don_joker``, et docs/contexte/ia_anti_don_joker.md).
-LIMITE_ATTENTE_DON_JOKER = 2
+# Échange différé (issue #253, point 6, REMPLACE la pioche bornée de #252 —
+# supprimée : plus de compteur ni de limite de tours pour la règle du joker
+# LIBRE elle-même, voir ``moteur/ia._appliquer_joker_libre``). Un échange
+# FACULTATIF (l'IA détient la tuile exacte de remplacement, ``_jokers_
+# recuperables``) dont le joker récupéré est « en réserve » (``_joker_en_
+# reserve`` : l'autre exemplaire de la tuile est visible sur le plateau, et
+# aucune recombinaison du plateau seul ne le libère) et que l'IA ne peut pas
+# utiliser avec le reste de sa main peut être DIFFÉRÉ au plus ce nombre de
+# tours CONSÉCUTIFS (propre à CE joker, pas un compteur global) :
+LIMITE_ECHANGE_DIFFERE = 3
+# ... ou ce nombre, réduit, si au moins un AUTRE joueur a STRICTEMENT moins
+# de ``SEUIL_TUILES_ADVERSAIRE_FAIBLE`` tuiles en main (nombre de tuiles,
+# visible de tous — jamais le contenu d'une main) :
+LIMITE_ECHANGE_DIFFERE_ADVERSAIRE_FAIBLE = 2
+SEUIL_TUILES_ADVERSAIRE_FAIBLE = 5
 
-# Clé du compteur d'attente persisté sur ``etat["joueurs"][idx]`` (issue
-# #252) — nombre de tours consécutifs où CE joueur a préféré piocher plutôt
-# que d'offrir un joker. Remis à 0 dès qu'un coup est effectivement joué
-# (évitement trouvé, coup forcé après la limite, ou coup qui ne posait pas
-# ce problème).
-CLE_ATTENTE_DON_JOKER = "tours_attente_don_joker"
+# Clé du compteur d'attente de l'échange différé, persisté sur
+# ``etat["joueurs"][idx]`` (issue #253) — ``dict`` ``{id_joker: n}`` (un
+# compteur PROPRE À CHAQUE JOKER, pas un compteur unique du joueur). Un
+# joker est retiré de ce dict dès que son échange est effectivement fait
+# (différé épuisé ou déclenchement immédiat) ou dès que sa réserve cesse
+# (voir ``moteur/ia._appliquer_echange_differe``).
+CLE_ATTENTE_ECHANGE_DIFFERE = "tours_attente_echange_differe"
 
 
 # Compatibilité (issue #235) : « Champion du Monde », niveau retiré (aucun

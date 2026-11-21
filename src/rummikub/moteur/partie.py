@@ -323,11 +323,12 @@ def nouvelle_manche(etat: dict) -> dict:
         joueur["mise_initiale_faite"] = False
         joueur["score_manche"] = 0
         # score_cumul est volontairement conservé.
-        # Règle anti-don de joker (issue #252) : le compteur d'attente est
-        # propre au plateau de la manche écoulée, remis à 0 sur le nouveau
-        # plateau vide (voir moteur/niveaux.CLE_ATTENTE_DON_JOKER, moteur/ia.
+        # Gestion du joker (issue #253) : le compteur d'échange différé est
+        # propre au plateau de la manche écoulée (les ids de joker y sont
+        # définis), remis à 0 sur le nouveau plateau vide (voir
+        # moteur/niveaux.CLE_ATTENTE_ECHANGE_DIFFERE, moteur/ia.
         # jouer_niveau_bride).
-        joueur.pop(niveaux.CLE_ATTENTE_DON_JOKER, None)
+        joueur.pop(niveaux.CLE_ATTENTE_ECHANGE_DIFFERE, None)
 
     etat["pioche"] = [t.as_dict() for t in distribution["pioche"]]
     etat["plateau"] = []
