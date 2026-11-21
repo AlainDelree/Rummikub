@@ -3379,23 +3379,33 @@ moment de partie, et la plus petite limite candidate qui égale au moins
 cette qualité, se lisent dans le fichier `--sortie` produit par la commande
 ci-dessus, pas dans ce paragraphe.
 
-## 19. Gestion du joker — Intermédiaire/Avancé/Expert (issue #253, REMPLACE #252)
+## 19. Gestion du joker — Intermédiaire/Avancé/Expert (issues #253/#254, REMPLACE #252)
 
-Intermédiaire, Avancé et Expert : un joker de la main n'est joué que s'il
-est UTILE (pose strictement plus de tuiles réelles que sans lui — sinon
-gardé) ; aucun NOUVEAU joker n'est laissé LIBRE (nouvelle définition — voir
-le fichier de domaine) quand une alternative existe, quitte à poser moins
-de tuiles ou à piocher (SANS compteur ni limite — l'attente bornée à 2
-tours de #252 est SUPPRIMÉE) ; un joker repris du plateau qu'on ne peut pas
-utiliser avec sa main est camouflé en position non libre quand c'est
-possible ; un échange facultatif « en réserve » peut être différé 2 ou 3
-tours. Un coup qui vide le chevalet reste TOUJOURS joué (exception
-absolue). Débutant et Facile inchangés. Paramètre par niveau
-`niveaux.Bridage.eviter_don_joker` (nom conservé de #252) ; forçable
-indépendamment du niveau via `jouer_niveau_bride(..., eviter_don_joker=
-...)` et `scripts/comparer_niveaux_ia.py --sans-don-joker-a`/`-b` (noms de
-drapeau conservés). Détail complet (définition, arbre de décision exact,
-exemples, limites, mesure) : voir `docs/contexte/ia_anti_don_joker.md`.
+Intermédiaire, Avancé et Expert : chaque joker de la main est évalué
+SÉPARÉMENT (#254) et n'est joué que s'il est UTILE (pose strictement plus
+de tuiles réelles que sans lui — sinon gardé, SAUF débarras de fin de
+match ci-dessous) ; aucun NOUVEAU joker n'est laissé LIBRE (nouvelle
+définition — voir le fichier de domaine) quand une alternative existe,
+quitte à poser moins de tuiles ou à piocher (SANS compteur ni limite —
+l'attente bornée à 2 tours de #252 est SUPPRIMÉE), SAUF si la pioche est
+vide : l'IA joue alors malgré tout (#254), passer ne débloquant rien de
+plus. Un joker repris du plateau qu'on ne peut pas utiliser avec sa main
+est camouflé en position non libre quand c'est possible ; un échange
+facultatif « en réserve » (test complété par #254, point 1) peut être
+différé 2 ou 3 tours — toute pioche faute d'alternative compte désormais
+dans ce délai (#254, point 3), et l'échange forcé par le délai est soumis
+à la même règle du joker libre que n'importe quel autre coup (#254,
+point 2). En match à PLUSIEURS manches, un joker inutile est posé quand
+même (même sans gain) si un adversaire a au plus 2 tuiles et la pioche
+moins de 30 tuiles (#254, point 7 — sa pénalité compterait sinon dans le
+score cumulé ; sans effet à une seule manche). Un coup qui vide le
+chevalet reste TOUJOURS joué (exception absolue). Débutant et Facile
+inchangés. Paramètre par niveau `niveaux.Bridage.eviter_don_joker` (nom
+conservé de #252) ; forçable indépendamment du niveau via
+`jouer_niveau_bride(..., eviter_don_joker=...)` et
+`scripts/comparer_niveaux_ia.py --sans-don-joker-a`/`-b` (noms de drapeau
+conservés). Détail complet (définition, arbre de décision exact, exemples,
+limites, mesure) : voir `docs/contexte/ia_anti_don_joker.md`.
 
 **Campagnes appariées à lancer par Alain** (premier plan, limite de temps
 ferme ; comparer avec/sans la règle à seed et donnes identiques) :

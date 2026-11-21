@@ -6,8 +6,11 @@ ia_anti_don_joker.md pour la définition complète et l'arbre de décision."""
 from rummikub.moteur import niveaux as _niveaux
 from rummikub.moteur.ia import (
     jouer_niveau_bride, jokers_libres_sur_plateau, jokers_rendus_libres_par_coup,
+    _joker_en_reserve,
 )
-from rummikub.moteur.partie import creer_partie, plateau_depuis_dict
+from rummikub.moteur.partie import (
+    creer_partie, plateau_depuis_dict, tuile_depuis_dict,
+)
 
 
 class _RngFixe:
@@ -122,6 +125,54 @@ def test_joker_deja_libre_avant_le_coup_n_est_pas_nouveau():
 
 
 # --------------------------------------------------------------------------- #
+# Point 1 — joker « en réserve » : test complet (#254)
+# --------------------------------------------------------------------------- #
+
+def test_joker_en_reserve_dechu_par_groupe4_deja_complet():
+    """Suite rouge 3-4-(joker_1=5) : le joker n'est pas déjà libre (bout
+    d'une suite de 3 seulement). Un groupe de 4 DÉJÀ COMPLET ailleurs sur
+    le plateau (rouge_5/bleu_5/noir_5/jaune_5) peut perdre n'importe quelle
+    tuile réelle (groupe de 3 valide restant) ; le rouge_5 ainsi libéré
+    correspond EXACTEMENT au joker_1 (même recombinaison que
+    ``_jokers_liberables_par_reduction_groupe4``, SANS aucune tuile de
+    main) : la tuile de remplacement devient donc disponible par un pur
+    déplacement de l'autre exemplaire visible — PAS en réserve, même si
+    l'unique autre exemplaire de rouge_5 est bien visible sur le plateau
+    (#254, point 1 — #253 ne détectait pas cette recombinaison, qui ne fait
+    pourtant partie d'aucune des 3 voies de ``jokers_libres_sur_plateau``)."""
+    plateau = plateau_depuis_dict([[
+        _t("rouge_3_a", 3, "rouge"), _t("rouge_4_a", 4, "rouge"),
+        _t("joker_1", est_joker=True),
+    ], [
+        _t("rouge_5_a", 5, "rouge"), _t("bleu_5_a", 5, "bleu"),
+        _t("noir_5_a", 5, "noir"), _t("jaune_5_a", 5, "jaune"),
+    ]])
+    assert "joker_1" not in jokers_libres_sur_plateau(plateau)  # pas déjà libre
+    rec = {"joker": plateau[0][2],
+          "remplacement": tuile_depuis_dict(_t("rouge_5_hand", 5, "rouge"))}
+    assert _joker_en_reserve(plateau, rec) is False
+
+
+def test_joker_en_reserve_tient_si_le_groupe_n_est_pas_deja_a_4():
+    """Voisin de ``test_joker_en_reserve_dechu_par_groupe4_deja_complet`` :
+    le groupe n'a que 3 tuiles (``jaune_5`` retirée), pas 4 — la réduction
+    de ``_jokers_liberables_par_reduction_groupe4`` exige soit un groupe
+    DÉJÀ à 4, soit une tuile de MAIN pour le compléter (chevalet vide ici,
+    donc aucun candidat) : aucune recombinaison du plateau seul ne libère
+    joker_1 — toujours en réserve."""
+    plateau = plateau_depuis_dict([[
+        _t("rouge_3_a", 3, "rouge"), _t("rouge_4_a", 4, "rouge"),
+        _t("joker_1", est_joker=True),
+    ], [
+        _t("rouge_5_a", 5, "rouge"), _t("bleu_5_a", 5, "bleu"),
+        _t("noir_5_a", 5, "noir"),
+    ]])
+    rec = {"joker": plateau[0][2],
+          "remplacement": tuile_depuis_dict(_t("rouge_5_hand", 5, "rouge"))}
+    assert _joker_en_reserve(plateau, rec) is True
+
+
+# --------------------------------------------------------------------------- #
 # Point 3 — joker en main UTILE
 # --------------------------------------------------------------------------- #
 
@@ -172,6 +223,63 @@ def test_joker_rend_l_ouverture_possible_est_joue():
     coup = jouer_niveau_bride(etat, 1, "Expert")
     assert coup["action"] == "jouer"
     assert set(coup["ids_tuiles"]) == {"joker_1", "rouge_11_a", "rouge_12_a"}
+    assert coup["joker"]["jokers_main_gardes"] == 0
+
+
+# --------------------------------------------------------------------------- #
+# Point 4 (#254) — deux jokers de main évalués SÉPARÉMENT (REMPLACE
+# l'évaluation collective de #253, point 3)
+# --------------------------------------------------------------------------- #
+
+def test_deux_jokers_en_main_un_seul_utile_est_joue():
+    """Main : joker_1, joker_2, rouge_7, rouge_8, noir_5, noir_6, noir_7,
+    bleu_2 (isolée, empêche de vider la main). rouge_7-8 ne forme rien SANS
+    AUCUN joker (2 tuiles seulement) : UN SEUL joker, combiné à rouge_7-8,
+    est UTILE (rouge_7-8-(joker=9), 2 réelles, contre 0 sans lui). noir_5-
+    6-7 est DÉJÀ une suite valide à 3 tuiles réelles SANS aucun joker : y
+    ajouter un second joker (en bout, 4e tuile) n'apporte AUCUNE tuile
+    réelle de plus (3 == 3) — ce second joker N'EST PAS utile. Les deux
+    jokers étant INTERCHANGEABLES pour le solveur, PEU IMPORTE lequel des
+    deux (joker_1 ou joker_2) finit assigné à quelle place : exactement UN
+    SEUL doit être posé, l'autre gardé. Sous #253 (évaluation collective),
+    les DEUX auraient été jugés utiles ensemble (5 réel avec les deux
+    contre 3 sans AUCUN des deux) et le second aurait été posé pour rien —
+    c'est exactement le bug que corrige #254, point 4."""
+    etat = _bot("Expert", plateau=[], chevalet=[
+        _t("joker_1", est_joker=True), _t("joker_2", est_joker=True),
+        _t("rouge_7_a", 7, "rouge"), _t("rouge_8_a", 8, "rouge"),
+        _t("noir_5_a", 5, "noir"), _t("noir_6_a", 6, "noir"),
+        _t("noir_7_a", 7, "noir"), _t("bleu_2_a", 2, "bleu"),
+    ])
+    coup = jouer_niveau_bride(etat, 1, "Expert")
+    assert coup["action"] == "jouer"
+    ids = set(coup["ids_tuiles"])
+    assert ids & {"joker_1", "joker_2"} and len(ids & {"joker_1", "joker_2"}) == 1
+    assert ids - {"joker_1", "joker_2"} == {
+        "rouge_7_a", "rouge_8_a", "noir_5_a", "noir_6_a", "noir_7_a"}
+    assert coup["joker"]["jokers_main_gardes"] == 1
+
+
+def test_deux_jokers_en_main_tous_deux_utiles_sont_joues():
+    """Voisin du test précédent : ``noir_7_a`` est retiré, ``noir_5_a`` et
+    ``noir_6_a`` ne forment donc plus une suite à 3 tuiles SANS joker (2
+    tuiles seulement). Les deux paires (rouge 7-8 et noir 5-6) ont chacune
+    BESOIN d'un joker pour être posées du tout, mais un seul joker ne peut
+    servir qu'à UNE paire à la fois : retirer séparément joker_1 OU joker_2
+    laisse chaque fois l'AUTRE joker disponible pour sauver une seule paire
+    (2 réelles, contre 4 réelles avec les deux) — chacun est donc UTILE
+    individuellement, et les deux sont posés."""
+    etat = _bot("Expert", plateau=[], chevalet=[
+        _t("joker_1", est_joker=True), _t("joker_2", est_joker=True),
+        _t("rouge_7_a", 7, "rouge"), _t("rouge_8_a", 8, "rouge"),
+        _t("noir_5_a", 5, "noir"), _t("noir_6_a", 6, "noir"),
+        _t("bleu_2_a", 2, "bleu"),
+    ])
+    coup = jouer_niveau_bride(etat, 1, "Expert")
+    assert coup["action"] == "jouer"
+    assert set(coup["ids_tuiles"]) == {
+        "joker_1", "rouge_7_a", "rouge_8_a",
+        "joker_2", "noir_5_a", "noir_6_a"}
     assert coup["joker"]["jokers_main_gardes"] == 0
 
 
@@ -248,6 +356,53 @@ def test_pioche_sans_compteur_ni_limite_si_seul_coup_laisse_un_joker_libre():
     coup2 = jouer_niveau_bride(etat, 1, "Expert")
     assert coup2["action"] == "piocher"
     assert coup2["joker"]["joker_libre_pioche"] is True
+
+
+# --------------------------------------------------------------------------- #
+# Point 5 (#254) — pioche vide : jouer plutôt que passer sans fin
+# --------------------------------------------------------------------------- #
+
+def test_joue_malgre_joker_libre_si_pioche_vide():
+    """Même plateau/main que ``test_pioche_sans_compteur_ni_limite_si_seul_
+    coup_laisse_un_joker_libre`` (SEULE option : étendre avec rouge_6,
+    joker_1 devient libre ; aucune alternative), mais la pioche est VIDE —
+    passer n'apporterait rien de mieux (elle resterait vide au tour
+    suivant) : l'IA joue le coup malgré le joker libre, plutôt que de
+    passer indéfiniment (#254, point 5 — remplace, dans ce seul cas, la
+    règle « piocher plutôt que de laisser un joker libre »)."""
+    etat = _bot("Expert",
+               plateau=[[
+                   _t("rouge_7_a", 7, "rouge"), _t("rouge_8_a", 8, "rouge"),
+                   _t("joker_1", est_joker=True),
+               ]],
+               chevalet=[_t("rouge_6_a", 6, "rouge"), _t("noir_2_a", 2, "noir")])
+    etat["pioche"] = []
+
+    coup = jouer_niveau_bride(etat, 1, "Expert")
+    assert coup["action"] == "jouer"
+    assert set(coup["ids_tuiles"]) == {"rouge_6_a"}
+    assert coup["joker"]["joker_libre_declenche"] is True
+    assert coup["joker"]["joker_libre_evite"] is False
+    assert coup["joker"]["joker_libre_pioche"] is False
+    assert coup["joker"]["joker_libre_force_pioche_vide"] is True
+
+
+def test_pioche_encore_si_pioche_non_vide_meme_scenario():
+    """Voisin EXACT du test précédent (même plateau/main), mais avec une
+    pioche NON vide (cas normal) : reproduit ``test_pioche_sans_compteur_
+    ni_limite_si_seul_coup_laisse_un_joker_libre`` — l'IA pioche, ne joue
+    PAS le coup qui laisse le joker libre."""
+    etat = _bot("Expert",
+               plateau=[[
+                   _t("rouge_7_a", 7, "rouge"), _t("rouge_8_a", 8, "rouge"),
+                   _t("joker_1", est_joker=True),
+               ]],
+               chevalet=[_t("rouge_6_a", 6, "rouge"), _t("noir_2_a", 2, "noir")])
+    assert etat["pioche"]  # non vide par construction normale de la partie
+
+    coup = jouer_niveau_bride(etat, 1, "Expert")
+    assert coup["action"] == "piocher"
+    assert coup["joker"]["joker_libre_force_pioche_vide"] is False
 
 
 # --------------------------------------------------------------------------- #
@@ -370,12 +525,68 @@ def test_echange_differe_jusqu_a_trois_tours_puis_fait():
     assert set(coup3["ids_tuiles"]) == {"noir_3_a"}
     assert etat["joueurs"][1][_niveaux.CLE_ATTENTE_ECHANGE_DIFFERE] == {"joker_1": 3}
 
-    # Quatrième décision (LIMITE_ECHANGE_DIFFERE=3 atteinte) : l'échange est
-    # fait, compteur de ce joker remis à 0.
+    # Quatrième décision (LIMITE_ECHANGE_DIFFERE=3 atteinte) : le point 6
+    # cesse de différer (compteur remis à 0) et tente de jouer l'échange —
+    # mais celui-ci est désormais SOUMIS au point 4 (#254, point 2) : la
+    # seule reposition possible du joker libéré (extension pure sur noir
+    # 8-9-10, ou sur le groupe rouge_6_b/bleu_6/noir_6) est TOUJOURS libre
+    # (bout de suite ≥4, ou groupe de 4) ; une alternative SANS l'échange
+    # existe (noir_3_a seul, sans toucher au plateau) — elle est prise à sa
+    # place, le joker reste sur le tapis (il est « en réserve », donc cela
+    # ne coûte rien). L'échange n'est donc PAS fait ce tour-ci non plus.
     coup4 = jouer_niveau_bride(etat, 1, "Expert")
     assert coup4["action"] == "jouer"
-    assert set(coup4["ids_tuiles"]) == {"rouge_6_a", "noir_3_a"}
+    assert set(coup4["ids_tuiles"]) == {"noir_3_a"}
     assert coup4["joker"]["echange_differe"] is False
+    assert coup4["joker"]["joker_libre_evite"] is True
+    assert etat["joueurs"][1].get(_niveaux.CLE_ATTENTE_ECHANGE_DIFFERE) == {}
+
+
+def test_echange_differe_force_et_joue_si_pioche_vide_et_aucune_alternative():
+    """Variante de ``test_echange_differe_jusqu_a_trois_tours_puis_fait`` où
+    l'« autre coup » (noir_3) n'est PAS disponible (chevalet réduit à
+    rouge_6_a seul) : après 3 tours de pioche comptée (#254, point 3), le
+    4e appel force — le point 4 ne trouve ÉVIDEMMENT aucune alternative
+    (aucune autre tuile en main) ; si la pioche est VIDE, l'échange est
+    joué quand même (#254, point 5) plutôt que de passer sans fin."""
+    etat = _bot("Expert",
+               plateau=[[
+                   _t("rouge_4_a", 4, "rouge"), _t("rouge_5_a", 5, "rouge"),
+                   _t("joker_1", est_joker=True),
+               ], [
+                   _t("rouge_6_b", 6, "rouge"), _t("bleu_6_a", 6, "bleu"),
+                   _t("noir_6_a", 6, "noir"),
+               ]],
+               chevalet=[_t("rouge_6_a", 6, "rouge"), _t("bleu_9_a", 9, "bleu")])
+
+    for n in (1, 2, 3):
+        coup = jouer_niveau_bride(etat, 1, "Expert")
+        assert coup["action"] == "piocher"
+        assert etat["joueurs"][1][_niveaux.CLE_ATTENTE_ECHANGE_DIFFERE] == {
+            "joker_1": n}
+
+    # Voisin (limite pas encore atteinte, pioche non vide) : comportement
+    # inchangé ci-dessus (3 pioches comptées). Au 4e appel, limite atteinte
+    # : si la pioche N'EST PAS vide, point 4 pioche encore (sans compteur
+    # ni limite, "mieux vaut le laisser sur le tapis", #254 point 2).
+    coup4_pioche_dispo = jouer_niveau_bride(etat, 1, "Expert")
+    assert coup4_pioche_dispo["action"] == "piocher"
+    assert etat["joueurs"][1].get(_niveaux.CLE_ATTENTE_ECHANGE_DIFFERE) == {}
+
+    # Au tour suivant (nouveau cycle, compteur reparti de 0), si la pioche
+    # est VIDE : l'échange est joué (#254, point 5).
+    for n in (1, 2, 3):
+        jouer_niveau_bride(etat, 1, "Expert")
+    etat["pioche"] = []
+    coup_force = jouer_niveau_bride(etat, 1, "Expert")
+    assert coup_force["action"] == "jouer"
+    assert set(coup_force["ids_tuiles"]) == {"rouge_6_a"}
+    # Forcé par la limite du point 6 (délai expiré) ET par le point 5 (pioche
+    # vide, aucune alternative trouvée par le point 4) : les deux drapeaux
+    # correspondent à des déclencheurs différents (voir
+    # ``_appliquer_echange_differe``/``_appliquer_joker_libre``) ; ici c'est
+    # le second qui a effectivement décidé de jouer malgré le joker libre.
+    assert coup_force["joker"]["joker_libre_force_pioche_vide"] is True
     assert etat["joueurs"][1].get(_niveaux.CLE_ATTENTE_ECHANGE_DIFFERE) == {}
 
 
@@ -394,10 +605,16 @@ def test_echange_differe_limite_a_deux_tours_si_adversaire_faible():
     assert set(coup2["ids_tuiles"]) == {"noir_3_a"}
     assert etat["joueurs"][1][_niveaux.CLE_ATTENTE_ECHANGE_DIFFERE] == {"joker_1": 2}
 
-    # Troisième décision (LIMITE_ECHANGE_DIFFERE_ADVERSAIRE_FAIBLE=2 atteinte).
+    # Troisième décision (LIMITE_ECHANGE_DIFFERE_ADVERSAIRE_FAIBLE=2
+    # atteinte) : comme au 4e tour de ``test_echange_differe_jusqu_a_trois_
+    # tours_puis_fait``, le point 4 trouve une alternative (noir_3_a seul)
+    # à la place de l'échange forcé, qui laisserait un joker libre (#254,
+    # point 2) : le joker reste en réserve sur le tapis.
     coup3 = jouer_niveau_bride(etat, 1, "Expert")
     assert coup3["action"] == "jouer"
-    assert set(coup3["ids_tuiles"]) == {"rouge_6_a", "noir_3_a"}
+    assert set(coup3["ids_tuiles"]) == {"noir_3_a"}
+    assert coup3["joker"]["joker_libre_evite"] is True
+    assert etat["joueurs"][1].get(_niveaux.CLE_ATTENTE_ECHANGE_DIFFERE) == {}
 
 
 def test_echange_fait_aussitot_si_joker_utilisable_avec_la_main():
@@ -462,8 +679,10 @@ def test_compteur_differe_retire_quand_la_reserve_cesse():
 def test_echange_differe_ne_passe_pas_le_tour_sauf_coup_unique():
     """Pendant le différé, l'IA joue normalement son autre coup (noir_3,
     voir ``_etat_echange_en_reserve``) — ce n'est pas un tour passé. Si
-    l'échange est le SEUL coup possible, elle pioche (sans compter un tour
-    d'attente)."""
+    l'échange est le SEUL coup possible, elle pioche — et ``#254`` (point 3)
+    CORRIGE #253 : ce tour de pioche compte désormais dans la limite
+    d'attente (#253 ne le comptait pas, permettant une attente sans
+    limite)."""
     etat = _etat_echange_en_reserve()
     coup = jouer_niveau_bride(etat, 1, "Expert")
     assert coup["action"] == "jouer"  # pas un tour passé
@@ -484,7 +703,112 @@ def test_echange_differe_ne_passe_pas_le_tour_sauf_coup_unique():
     coup_seul = jouer_niveau_bride(etat_seul_coup, 1, "Expert")
     assert coup_seul["action"] == "piocher"
     assert etat_seul_coup["joueurs"][1].get(
-        _niveaux.CLE_ATTENTE_ECHANGE_DIFFERE) in (None, {})
+        _niveaux.CLE_ATTENTE_ECHANGE_DIFFERE) == {"joker_1": 1}
+
+
+# --------------------------------------------------------------------------- #
+# Point 7 (#254) — débarras du joker inutile en fin de match multi-manches
+# --------------------------------------------------------------------------- #
+
+def _pioche_factice(n):
+    return [_t(f"pioche_{i}") for i in range(n)]
+
+
+def _etat_joker_non_utile_fin_match(nb_manches, tuiles_adversaire, taille_pioche):
+    """Même scénario que ``test_joker_en_main_non_utile_est_garde`` (joker
+    non utile : rouge 7-8-9-(joker) n'ajoute aucune tuile réelle), avec un
+    match/une pioche/un adversaire paramétrables pour tester les 3 seuils
+    du point 7."""
+    etat = _bot("Expert", plateau=[], chevalet=[
+        _t("joker_1", est_joker=True),
+        _t("rouge_7_a", 7, "rouge"), _t("rouge_8_a", 8, "rouge"),
+        _t("rouge_9_a", 9, "rouge"), _t("noir_2_a", 2, "noir"),
+    ])
+    etat["config"]["nb_manches"] = nb_manches
+    etat["joueurs"][0]["chevalet"] = [
+        _t(f"adv_{i}", 1, "bleu") for i in range(tuiles_adversaire)]
+    etat["pioche"] = _pioche_factice(taille_pioche)
+    return etat
+
+
+def test_joker_inutile_debarrasse_en_fin_de_match_multi_manches():
+    """Match à 2 manches, adversaire à AU PLUS 2 tuiles (ici 2), pioche à
+    STRICTEMENT MOINS de 30 tuiles (ici 10) : les trois conditions du point
+    7 sont réunies — le joker, normalement gardé (voir ``test_joker_en_
+    main_non_utile_est_garde``, nb_manches=1), est posé quand même (une
+    pose existait déjà pour lui dans le coup de base, même sans gain)."""
+    etat = _etat_joker_non_utile_fin_match(
+        nb_manches=2, tuiles_adversaire=2, taille_pioche=10)
+    coup = jouer_niveau_bride(etat, 1, "Expert")
+    assert coup["action"] == "jouer"
+    assert set(coup["ids_tuiles"]) == {
+        "joker_1", "rouge_7_a", "rouge_8_a", "rouge_9_a"}
+    assert coup["joker"]["jokers_main_gardes"] == 0
+    assert coup["joker"]["jokers_debarrasses_fin_match"] == 1
+
+
+def test_joker_garde_si_match_a_une_seule_manche():
+    """Voisin : match à UNE SEULE manche (``nb_manches=1``, défaut) — la
+    règle du point 7 ne s'applique JAMAIS, même avec un adversaire à 2
+    tuiles et une pioche à 10 tuiles (identique à ``test_joker_en_main_non_
+    utile_est_garde``) : perdre avec ou sans joker en main ne change rien
+    à une seule manche."""
+    etat = _etat_joker_non_utile_fin_match(
+        nb_manches=1, tuiles_adversaire=2, taille_pioche=10)
+    coup = jouer_niveau_bride(etat, 1, "Expert")
+    assert coup["action"] == "jouer"
+    assert set(coup["ids_tuiles"]) == {"rouge_7_a", "rouge_8_a", "rouge_9_a"}
+    assert coup["joker"]["jokers_main_gardes"] == 1
+    assert coup["joker"]["jokers_debarrasses_fin_match"] == 0
+
+
+def test_joker_garde_si_aucun_adversaire_a_au_plus_deux_tuiles():
+    """Voisin (valeur limite) : match à 2 manches, pioche à 10 tuiles, mais
+    l'adversaire a 3 tuiles — STRICTEMENT AU-DESSUS du seuil « au plus 2 » :
+    le joker reste gardé."""
+    etat = _etat_joker_non_utile_fin_match(
+        nb_manches=2, tuiles_adversaire=3, taille_pioche=10)
+    coup = jouer_niveau_bride(etat, 1, "Expert")
+    assert set(coup["ids_tuiles"]) == {"rouge_7_a", "rouge_8_a", "rouge_9_a"}
+    assert coup["joker"]["jokers_debarrasses_fin_match"] == 0
+
+
+def test_joker_garde_si_pioche_a_trente_tuiles_exactement():
+    """Voisin (valeur limite) : match à 2 manches, adversaire à 2 tuiles,
+    mais la pioche contient EXACTEMENT 30 tuiles — pas « strictement moins
+    de 30 » : le joker reste gardé."""
+    etat = _etat_joker_non_utile_fin_match(
+        nb_manches=2, tuiles_adversaire=2, taille_pioche=30)
+    coup = jouer_niveau_bride(etat, 1, "Expert")
+    assert set(coup["ids_tuiles"]) == {"rouge_7_a", "rouge_8_a", "rouge_9_a"}
+    assert coup["joker"]["jokers_debarrasses_fin_match"] == 0
+
+
+def test_joker_debarrasse_si_pioche_a_vingt_neuf_tuiles():
+    """Voisin immédiat du précédent, juste sous le seuil (29 < 30) : le
+    joker est posé."""
+    etat = _etat_joker_non_utile_fin_match(
+        nb_manches=2, tuiles_adversaire=2, taille_pioche=29)
+    coup = jouer_niveau_bride(etat, 1, "Expert")
+    assert set(coup["ids_tuiles"]) == {
+        "joker_1", "rouge_7_a", "rouge_8_a", "rouge_9_a"}
+    assert coup["joker"]["jokers_debarrasses_fin_match"] == 1
+
+
+def test_regle_fin_de_match_desactivable_en_simulation():
+    """``DEBARRAS_JOKER_FIN_MATCH_ACTIF=False`` désactive la règle entière
+    (#254, point 7), même si toutes les conditions numériques sont
+    réunies — utilisé par les scripts de simulation."""
+    etat = _etat_joker_non_utile_fin_match(
+        nb_manches=2, tuiles_adversaire=2, taille_pioche=10)
+    ancien = _niveaux.DEBARRAS_JOKER_FIN_MATCH_ACTIF
+    _niveaux.DEBARRAS_JOKER_FIN_MATCH_ACTIF = False
+    try:
+        coup = jouer_niveau_bride(etat, 1, "Expert")
+    finally:
+        _niveaux.DEBARRAS_JOKER_FIN_MATCH_ACTIF = ancien
+    assert set(coup["ids_tuiles"]) == {"rouge_7_a", "rouge_8_a", "rouge_9_a"}
+    assert coup["joker"]["jokers_debarrasses_fin_match"] == 0
 
 
 # --------------------------------------------------------------------------- #

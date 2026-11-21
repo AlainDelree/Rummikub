@@ -385,6 +385,12 @@ def jouer_un_tour(etat: dict, idx: int, temps_par_niveau: dict,
             if info_joker.get("echange_differe_pioche"):
                 stats_don_joker["echanges_differes_pioche"][camp] = \
                     stats_don_joker["echanges_differes_pioche"].get(camp, 0) + 1
+            if info_joker.get("jokers_debarrasses_fin_match"):
+                # (#254, point 7) : jokers inutiles posés quand même pour
+                # éviter leur pénalité en fin de match à plusieurs manches.
+                stats_don_joker["jokers_debarrasses_fin_match"][camp] = \
+                    stats_don_joker["jokers_debarrasses_fin_match"].get(
+                        camp, 0) + info_joker["jokers_debarrasses_fin_match"]
 
     action = res_ia.get("action")
     if action == "jouer":
@@ -673,6 +679,7 @@ def comparer(niveau_a: str, niveau_b: str, nb_donnes: int, seed: int,
         "jokers_gardes": {"A": 0, "B": 0},
         "echanges_differes": {"A": 0, "B": 0},
         "echanges_differes_pioche": {"A": 0, "B": 0},
+        "jokers_debarrasses_fin_match": {"A": 0, "B": 0},
     }
 
     for i, graine in graines_jouees:
@@ -805,6 +812,8 @@ def comparer(niveau_a: str, niveau_b: str, nb_donnes: int, seed: int,
         "echanges_differes_camp": dict(stats_don_joker["echanges_differes"]),
         "echanges_differes_pioche_camp": dict(
             stats_don_joker["echanges_differes_pioche"]),
+        "jokers_debarrasses_fin_match_camp": dict(
+            stats_don_joker["jokers_debarrasses_fin_match"]),
     }
 
 
@@ -956,9 +965,11 @@ def afficher_rapport(resume: dict) -> None:
     echanges_differes_camp = resume.get("echanges_differes_camp") or {}
     echanges_differes_pioche_camp = \
         resume.get("echanges_differes_pioche_camp") or {}
+    jokers_debarrasses_fin_match_camp = \
+        resume.get("jokers_debarrasses_fin_match_camp") or {}
     if any(tours_jouer_camp.values()):
         print("-" * 70)
-        print("  Gestion du joker (#253) :")
+        print("  Gestion du joker (#253/#254) :")
         for camp, niveau in (("A", niveau_a), ("B", niveau_b)):
             n = tours_jouer_camp.get(camp, 0)
             libres = jokers_libres_camp.get(camp, 0)
@@ -966,6 +977,7 @@ def afficher_rapport(resume: dict) -> None:
             gardes = jokers_gardes_camp.get(camp, 0)
             differes = echanges_differes_camp.get(camp, 0)
             differes_pioche = echanges_differes_pioche_camp.get(camp, 0)
+            debarrasses = jokers_debarrasses_fin_match_camp.get(camp, 0)
             reglage_camp = resume.get(f"don_joker_{camp.lower()}")
             suffixe = (" [règle désactivée]" if reglage_camp is False else "")
             taux = (libres / n * 100) if n else 0.0
@@ -975,7 +987,9 @@ def afficher_rapport(resume: dict) -> None:
                  f"à cause d'un joker libre sans alternative ; {gardes} "
                  f"joker(s) de main gardé(s) plutôt que joué(s) ; "
                  f"{differes} échange(s) facultatif(s) différé(s), dont "
-                 f"{differes_pioche} ayant forcé une pioche.")
+                 f"{differes_pioche} ayant forcé une pioche ; {debarrasses} "
+                 f"joker(s) inutile(s) posé(s) pour s'en débarrasser en fin "
+                 f"de match (#254, point 7).")
     print("=" * 70)
 
 

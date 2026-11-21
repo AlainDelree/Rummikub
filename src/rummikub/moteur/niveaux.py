@@ -189,6 +189,31 @@ SEUIL_TUILES_ADVERSAIRE_FAIBLE = 5
 # (voir ``moteur/ia._appliquer_echange_differe``).
 CLE_ATTENTE_ECHANGE_DIFFERE = "tours_attente_echange_differe"
 
+# Débarras du joker inutile en fin de MATCH multi-manches (#254, point 7).
+# Un joker de main jugé NON utile (``moteur/ia._appliquer_joker_utile``) est
+# normalement gardé en main (voir §4) — SAUF en fin de match à plusieurs
+# manches (``etat["config"]["nb_manches"] > 1``), où le conserver jusqu'à la
+# fin de la DERNIÈRE manche perdue coûterait sa pénalité
+# (``valeur_joker_penalite``, défaut 30, voir ``moteur/score.
+# calculer_scores_manche``) dans le score CUMULÉ du match — alors qu'à une
+# seule manche, perdre avec ou sans joker en main ne change rien (aucun
+# score cumulé au-delà de cette manche). Activé seulement si TOUTES les
+# conditions suivantes tiennent (nombres visibles de tous, jamais le
+# contenu d'une main) :
+#   * ``nb_manches > 1`` (match à plusieurs manches) ;
+#   * au moins un AUTRE joueur a AU PLUS ``SEUIL_TUILES_ADVERSAIRE_FIN_MATCH``
+#     tuiles en main (fin de manche proche) ;
+#   * la pioche contient STRICTEMENT MOINS de ``SEUIL_PIOCHE_FIN_MATCH``
+#     tuiles (fin de manche proche par épuisement de la pioche).
+# Le joker n'est alors posé que SI une pose existe déjà (même sans gain de
+# tuile réelle) pour lui dans le coup de base — jamais forcé par une
+# recherche supplémentaire. ``DEBARRAS_JOKER_FIN_MATCH_ACTIF=False`` (lu à
+# l'appel, comme ``ia.UTILISER_SOLVEUR_EXACT``) désactive entièrement cette
+# règle en simulation, sans toucher aux deux seuils.
+DEBARRAS_JOKER_FIN_MATCH_ACTIF = True
+SEUIL_TUILES_ADVERSAIRE_FIN_MATCH = 2
+SEUIL_PIOCHE_FIN_MATCH = 30
+
 
 # Compatibilité (issue #235) : « Champion du Monde », niveau retiré (aucun
 # effet mesurable de ses stratégies multi-tours sur le taux de victoire face
