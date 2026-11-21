@@ -316,3 +316,173 @@ def test_reprise_match_recent_au_milieu_conserve_les_manches():
     normaliser_etat_reprise(etat)        # reprise à l'identique
     assert etat["config"]["nb_manches"] == 3
     assert etat["manche_numero"] == 2
+
+
+# --------------------------------------------------------------------------- #
+# Blocage de manche : vraie règle du Rummikub (issue #255, remplace
+# l'ancienne approximation « pioche vide termine la manche immédiatement »).
+# --------------------------------------------------------------------------- #
+
+def _vider_pioche_et_garnir(etat, chevalets):
+    """Vide la pioche et donne à chaque joueur ``i`` le chevalet
+    ``chevalets[i]`` (liste de Tuile) — prépare un scénario de blocage."""
+    etat["pioche"] = []
+    for i, tuiles in enumerate(chevalets):
+        etat["joueurs"][i]["chevalet"] = [x.as_dict() for x in tuiles]
+    etat["index_joueur_actuel"] = 0
+
+
+def test_passer_tour_seul_ne_termine_pas_la_manche_meme_pioche_vide():
+    """Un seul passage (pioche vide) ne suffit pas à bloquer la manche : il
+    faut un tour COMPLET de passes (tous les joueurs)."""
+    etat = _partie(1, nb_joueurs=2)
+    _vider_pioche_et_garnir(etat, [[t(1, "noir")], [t(2, "noir")]])
+    passer_tour(etat)
+    assert etat["manche_terminee"] is False
+    assert etat["passes_consecutives"] == 1
+    assert etat["index_joueur_actuel"] == 1
+
+
+def test_manche_se_termine_par_blocage_apres_un_tour_complet_de_passes():
+    """2 joueurs : la manche se termine BLOQUÉE quand les deux ont passé de
+    suite, pioche vide. Le gagnant est celui dont les tuiles restantes
+    valent le moins de points (#255, point 4) — pas un chevalet vide."""
+    etat = _partie(1, nb_joueurs=2)
+    _vider_pioche_et_garnir(
+        etat, [[t(1, "noir")], [t(13, "rouge"), t(13, "bleu")]])
+    passer_tour(etat)   # joueur 0 passe
+    assert etat["manche_terminee"] is False
+    res = passer_tour(etat)   # joueur 1 passe : tour complet de passes
+    assert res["ok"] is True
+    assert etat["manche_terminee"] is True
+    assert etat["manche_bloquee"] is True
+    # Joueur 0 : 1 pt de pénalité ; joueur 1 : 26 pts → joueur 0 gagne.
+    assert etat["gagnant_manche_index"] == 0
+    assert etat["joueurs"][0]["score_manche"] == 26
+    assert etat["joueurs"][1]["score_manche"] == -26
+    assert etat["joueurs"][0]["score_cumul"] == 26
+    assert etat["joueurs"][1]["score_cumul"] == -26
+
+
+def test_pose_reinitialise_le_compteur_de_passes():
+    """Une pose réussie remet le compteur de passes à 0 : le blocage exige
+    un tour COMPLET de passes consécutives, sans aucune pose entre-temps."""
+    etat = _partie(1, nb_joueurs=2)
+    _vider_pioche_et_garnir(
+        etat, [[t(1, "noir")],
+              [t(5, "rouge"), t(6, "rouge"), t(7, "rouge"), t(9, "noir")]])
+    passer_tour(etat)   # joueur 0 passe (compteur=1)
+    assert etat["passes_consecutives"] == 1
+
+    # Joueur 1 pose une suite valide (mise initiale déjà faite, hors mise),
+    # SANS vider son chevalet (une tuile, noir_9, reste en main).
+    etat["joueurs"][1]["mise_initiale_faite"] = True
+    nouveau_plateau = [[t(5, "rouge").as_dict(), t(6, "rouge").as_dict(),
+                        t(7, "rouge").as_dict()]]
+    res = jouer_tour(etat, ["rouge_5_a", "rouge_6_a", "rouge_7_a"],
+                     nouveau_plateau)
+    assert res["ok"] is True
+    assert etat["passes_consecutives"] == 0   # remis à 0 par la pose
+    assert etat["manche_terminee"] is False    # pas encore un tour complet
+
+    # Il faut repartir sur un tour complet de passes pour bloquer.
+    passer_tour(etat)   # joueur 0
+    assert etat["manche_terminee"] is False
+    passer_tour(etat)   # joueur 1
+    assert etat["manche_terminee"] is True
+    assert etat["manche_bloquee"] is True
+
+
+def test_piocher_sans_tuile_compte_comme_un_passe_pour_le_blocage():
+    """``piocher`` sur une pioche déjà vide ne tire aucune tuile — #255 :
+    équivaut à un passage pour le compteur de blocage (sinon la partie ne
+    bloquerait jamais par cette voie)."""
+    etat = _partie(1, nb_joueurs=2)
+    _vider_pioche_et_garnir(etat, [[t(1, "noir")], [t(2, "noir")]])
+    res = piocher(etat)
+    assert res["tuiles_piochees"] == []
+    assert etat["passes_consecutives"] == 1
+    assert etat["manche_terminee"] is False
+    res2 = piocher(etat)
+    assert res2["tuiles_piochees"] == []
+    assert etat["manche_terminee"] is True
+    assert etat["manche_bloquee"] is True
+
+
+def test_piocher_une_vraie_tuile_ne_touche_pas_au_compteur_de_passes():
+    """Une pioche qui tire réellement une tuile (pile non vide) n'est pas un
+    passage : le compteur de blocage n'est pas affecté."""
+    etat = _partie(1, nb_joueurs=2)
+    etat["joueurs"][0]["chevalet"] = [t(1, "noir").as_dict()]
+    etat["joueurs"][1]["chevalet"] = [t(2, "noir").as_dict()]
+    etat["index_joueur_actuel"] = 1
+    etat["passes_consecutives"] = 1   # joueur 0 avait passé juste avant
+    res = piocher(etat, 1)
+    assert len(res["tuiles_piochees"]) == 1
+    assert etat["passes_consecutives"] == 1   # inchangé (pioche non vide)
+
+
+def test_manche_bloquee_a_trois_joueurs():
+    """La règle de blocage fonctionne aussi à 3 joueurs (pas seulement 2) :
+    il faut un tour COMPLET de 3 passes consécutives."""
+    etat = _partie(1, nb_joueurs=3)
+    _vider_pioche_et_garnir(
+        etat, [[t(10, "noir")], [t(1, "noir")],
+               [t(13, "rouge"), t(13, "bleu")]])
+    passer_tour(etat)   # joueur 0
+    assert etat["manche_terminee"] is False
+    passer_tour(etat)   # joueur 1
+    assert etat["manche_terminee"] is False
+    passer_tour(etat)   # joueur 2 : tour complet
+    assert etat["manche_terminee"] is True
+    assert etat["manche_bloquee"] is True
+    # Joueur 1 (1 pt) est le moins pénalisé : il gagne.
+    assert etat["gagnant_manche_index"] == 1
+
+
+def test_manche_bloquee_ne_peut_jamais_durer_indefiniment():
+    """Garde-fou de construction (#255, point 5) : même si tous les joueurs
+    passent indéfiniment (pioche vide), la manche se termine forcément au
+    plus tard après ``nb_joueurs`` passages consécutifs — jamais de partie
+    infinie par cette voie."""
+    etat = _partie(1, nb_joueurs=4)
+    _vider_pioche_et_garnir(
+        etat, [[t(1, "noir")], [t(2, "noir")], [t(3, "noir")], [t(4, "noir")]])
+    for _ in range(4):
+        assert etat["manche_terminee"] is False
+        passer_tour(etat)
+    assert etat["manche_terminee"] is True
+    assert etat["manche_bloquee"] is True
+
+
+def test_reprise_partie_sauvegardee_avec_pioche_vide_continue_sans_erreur():
+    """Issue #255, point 7 : une partie sauvegardée AVANT cette issue (donc
+    sans ``passes_consecutives``/``manche_bloquee``), avec une pioche déjà
+    vide et la manche non terminée, continue sous la nouvelle règle sans
+    erreur — jusqu'au blocage normal."""
+    etat = _partie(1, nb_joueurs=2)
+    _vider_pioche_et_garnir(etat, [[t(1, "noir")], [t(2, "noir")]])
+    del etat["passes_consecutives"]
+    del etat["manche_bloquee"]
+
+    normaliser_etat_reprise(etat)
+    assert etat["passes_consecutives"] == 0
+    assert etat["manche_bloquee"] is False
+
+    passer_tour(etat)
+    assert etat["manche_terminee"] is False
+    passer_tour(etat)
+    assert etat["manche_terminee"] is True
+    assert etat["manche_bloquee"] is True
+
+
+def test_partie_deja_terminee_non_modifiee_par_la_reprise():
+    """Une partie déjà terminée n'est pas modifiée par la normalisation de
+    reprise (#255, point 7)."""
+    etat = _partie(1, nb_joueurs=2)
+    _finir_manche(etat, 0, [t(10, "rouge")])
+    assert etat["terminee"] is True
+    score_cumul_avant = [j["score_cumul"] for j in etat["joueurs"]]
+    normaliser_etat_reprise(etat)
+    assert etat["terminee"] is True
+    assert [j["score_cumul"] for j in etat["joueurs"]] == score_cumul_avant

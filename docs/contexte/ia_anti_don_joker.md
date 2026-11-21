@@ -242,22 +242,28 @@ tuiles). Si AUCUNE des alternatives essayées n'en évite :
   une pioche impossible.
 
 **Comment la pioche vide est détectée** : `not etat.get("pioche")` — un
-test visible de tous, jamais le contenu d'une main. **Remarque
-importante** : dans le moteur de partie (`moteur/partie._terminer_tour`),
-la manche se termine IMMÉDIATEMENT dès que la pioche est vide à la fin
-d'UN tour, quelle que soit l'action jouée ce tour-là (pose, pioche ou
-passe) — ce comportement de fin de manche est INCHANGÉ par #254. Une
-conséquence : dans une PARTIE RÉELLE qui se déroule tour par tour sans
-interruption, la pioche ne peut jamais être observée vide au DÉBUT d'une
-décision (si elle l'était devenue au tour précédent, la manche aurait déjà
-pris fin à ce moment-là) — ce chemin de code est donc surtout exercé
-directement par les tests unitaires (état construit avec `pioche: []`) et
-sert de filet de robustesse plutôt que d'un cas fréquent en jeu normal ;
-il reste nécessaire pour toute situation où l'état est reconstruit
-autrement (replay, analyse de coups ratés). Un test dédié confirme que ce
-comportement de fin de manche empêche toute attente indéfinie par des
-passes volontaires une fois la pioche épuisée (`tests/test_moteur.py`,
-voir aussi le test ci-dessous pour la décision de l'IA elle-même).
+test visible de tous, jamais le contenu d'une main. **Mise à jour #255
+(remplace la remarque d'avant #255, devenue fausse)** : avant #255, le
+moteur de partie (`moteur/partie._terminer_tour`) terminait la manche
+IMMÉDIATEMENT dès que la pioche était vide à la fin d'UN tour, quelle que
+soit l'action jouée ce tour-là — ce qui rendait ce chemin de code
+INATTEIGNABLE en jeu réel tour par tour (la pioche ne pouvait jamais être
+observée vide au DÉBUT d'une décision, la manche ayant déjà pris fin au
+tour précédent) : il n'était exercé que par les tests unitaires (état
+construit directement avec `pioche: []`). **#255 implémente la vraie
+règle** : la pioche vide ne termine plus la manche à elle seule — elle
+termine seulement de piocher (`moteur/partie.piocher` ne tire alors plus
+aucune tuile) ; un joueur qui ne peut pas jouer PASSE (`passer_tour`), et
+la manche ne se termine que par un chevalet vidé ou par un **blocage**
+(pioche vide ET tous les joueurs ont passé un tour complet de suite sans
+qu'aucun coup ne soit joué entre-temps, voir CONTEXTE.md §3bis). **Ce
+chemin de code (pioche vide au début d'une décision de l'IA) est donc
+désormais un cas FRÉQUENT en jeu réel** (en fin de manche, surtout à
+plusieurs joueurs), pas seulement un filet de robustesse pour les tests
+unitaires ou le replay — toutes les règles ci-dessus (§5, §6, §7ter/
+7quater) qui distinguent « pioche vide » de « pioche non vide » sont
+donc désormais exercées en jeu normal, pas seulement par leurs tests
+dédiés.
 
 **Exemples** :
 - *Alternative trouvée* : plateau `rouge_7, rouge_8, (joker=9)` (pas
@@ -625,7 +631,9 @@ joker libre ; le point 3 (compteur pendant une pioche) ne change rien tant
 que le délai n'est pas atteint par cette voie ; le point 4 (jokers
 évalués séparément) ne change rien tant que l'IA n'a pas deux jokers en
 main simultanément ; le point 5 (pioche vide) ne se déclenche jamais en
-jeu réel tour par tour (voir §5) ; le point 7 (fin de match) exige
+jeu réel tour par tour (voir §5 — vrai SEULEMENT pour cette campagne,
+jouée avant #255 ; depuis #255, la pioche vide persiste sur plusieurs
+tours réels, voir la mise à jour de §5) ; le point 7 (fin de match) exige
 `nb_manches > 1`, absent de cette campagne à 1 manche. Ces 7 points
 restent chacun couverts par un test unitaire DÉDIÉ (§4 à §8bis) qui les
 exerce directement, indépendamment de cette mesure globale. Le match étant

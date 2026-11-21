@@ -146,11 +146,19 @@ tests/                      pytest : test_moteur.py + test_ia.py + test_descript
   `lireNbManches`/`remplirChampManches` et côté moteur dans `creer_partie`).
   Code : `accueil.html`/`accueil.js`/`accueil.css` (`#choix-manches`,
   `#acc-manches`).
-- **Fin d'une manche** : un joueur vide son chevalet, ou la partie est
-  bloquée (pioche épuisée — règle existante, approximation de « tous
-  bloqués »). `calculer_scores_manche` applique alors le barème (perdants :
-  −somme des pénalités de leur chevalet, joker à la valeur du réglage ;
-  gagnant : +total) et l'**ajoute aux `score_cumul`**.
+- **Fin d'une manche** (issue #255, vraie règle du Rummikub) : un joueur
+  vide son chevalet, OU la manche est **bloquée** — la pioche est vide ET
+  tous les joueurs ont passé un tour complet de suite sans qu'aucun coup
+  n'ait été joué (`etat["passes_consecutives"] >= nb_joueurs`, remis à 0 par
+  la moindre pose réussie, voir `moteur/partie._terminer_tour`/
+  `jouer_tour`/`passer_tour`/`piocher`). Tant que la pioche n'est pas vide,
+  on continue à piocher normalement — l'ancienne fin immédiate « pioche
+  vide » (approximation) a disparu. `calculer_scores_manche` applique le
+  barème (perdants : −somme des pénalités de leur chevalet, joker à la
+  valeur du réglage ; gagnant : +total) ; pour une manche bloquée, le
+  gagnant est celui dont les tuiles restantes valent le moins (même
+  barème), `etat["manche_bloquee"]` est posé à `True` — et l'**ajoute aux
+  `score_cumul`**.
 - **Avec une seule manche** (défaut), les points restants ne départagent que
   les parties bloquées : le gagnant est celui qui vide son chevalet (plus
   haut `score_cumul` = plus haut `score_manche`). **Avec au moins deux
@@ -217,7 +225,9 @@ de manche intermédiaire, classement final, affichage de l'égalité).
 - Clés de l'état : `id, phase, tour_numero, manche_numero,
   index_joueur_actuel, joueurs[], pioche[], plateau[], plateau_debut_tour,
   chevalet_debut_tour, index_debut_tour, tour_debut_tour, historique[],
-  manche_terminee, gagnant_manche_index, config{}`. À la fin du MATCH
+  manche_terminee, manche_bloquee, passes_consecutives,
+  gagnant_manche_index, config{}` (`manche_bloquee`/`passes_consecutives` :
+  vraie règle de blocage, issue #255, voir §3bis). À la fin du MATCH
   (dernière manche), s'ajoutent `terminee`, `gagnant_match_index` (plus haut
   score cumulé) et `egalite_match` (issue #203). Un joueur :
   `nom, est_ia, niveau, chevalet[], mise_initiale_faite, score_manche, score_cumul`.
@@ -267,8 +277,9 @@ Tout le cœur du projet est en place et testé :
 - ✅ UI pywebview : accueil (réglages, reprise de partie) + jeu (câblé à l'API).
 
 Reste possible / à confirmer selon les futures issues : polish UI, équilibrage
-IA, gestion fine de « tous bloqués » (actuellement approximée par pioche vide),
-icône `assets/rummikub.ico` (facultative, absente → aucune icône).
+IA, icône `assets/rummikub.ico` (facultative, absente → aucune icône). La
+gestion fine de « tous bloqués » (autrefois approximée par pioche vide) est
+IMPLÉMENTÉE depuis #255 — voir §3bis et §4 (`score.py`).
 
 ## 6. Tests
 
@@ -960,7 +971,8 @@ répond à ce risque.
 
   Affiche : victoires/taux/marge d'erreur (IC 95 %) par niveau, nombre
   moyen de tuiles/points de pénalité du perdant, durée moyenne en tours,
-  répartition des fins de partie (chevalet vidé / pioche épuisée / arrêtée
+  répartition des fins de partie (chevalet vidé / manche bloquée — vraie
+  règle du blocage, issue #255, pioche vide ET tous passés — / arrêtée
   par le garde-fou anti-blocage), temps de calcul moyen/maximal d'un
   tour de décision par niveau (repérage d'un emballement de la recherche de
   libération de joker), et, **depuis #187**, le nombre d'anomalies de
@@ -2008,9 +2020,12 @@ une au fur et à mesure que de futures issues les testent/implémentent.
   départage aujourd'hui les coups équivalents en préférant celui qui pose
   le plus de points (§8bis). Dans une partie d'une seule manche (§3bis,
   configuration actuelle de l'application), ces points ne changent le
-  vainqueur que si la partie se termine **bloquée** (pioche épuisée, plus
-  aucun coup possible) : gagne alors celui dont les tuiles restantes valent
-  le moins. Sinon, la partie est gagnée par celui qui vide son chevalet en
+  vainqueur que si la partie se termine **bloquée** (pioche épuisée ET plus
+  personne ne peut jouer un tour complet — vraie règle implémentée par
+  #255, voir §3bis/§4 ; avant #255 cette description n'était qu'une
+  hypothèse, la fin « pioche vide » étant alors immédiate quel que soit le
+  coup) : gagne alors celui dont les tuiles restantes valent le moins.
+  Sinon, la partie est gagnée par celui qui vide son chevalet en
   premier, et les points ne changent que la marge affichée en fin de
   partie. **Hypothèse** : le critère des points ne devrait passer en
   premier que si la pioche est vide ou presque, ou si plusieurs manches

@@ -148,7 +148,7 @@ def jouer_paire(niveau_faible: str, niveau_fort: str, nb_donnes: int,
     reproductible."""
     victoires_fort = matchs_decides = nuls = 0
     donnes_jouees = 0
-    fins = {"chevalet_vide": 0, "pioche_vide": 0, "garde_fou": 0}
+    fins = {"chevalet_vide": 0, "manche_bloquee": 0, "garde_fou": 0}
     identiques = _niveaux_identiques(niveau_faible, niveau_fort)
     for i in range(nb_donnes):
         if deadline is not None and time.monotonic() >= deadline:

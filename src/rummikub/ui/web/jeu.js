@@ -2361,6 +2361,12 @@ function afficherFinManche() {
   const gi = etat.gagnant_manche_index;
   const gagnant = (gi != null && etat.joueurs[gi]) ? etat.joueurs[gi].nom : "—";
   document.getElementById("titre-fin").textContent = "🏆 " + gagnant + " remporte la manche";
+  // Manche bloquée (issue #255) : plus personne ne peut jouer, la pioche
+  // étant vide — le gagnant n'a pas forcément vidé son chevalet, juste le
+  // moins pénalisé. Note affichée pour éviter toute confusion côté joueur.
+  document.getElementById("sous-titre-fin").textContent = etat.manche_bloquee
+    ? "Plus personne ne peut jouer (pioche épuisée) — moins de pénalité l'emporte."
+    : "";
 
   const table = document.getElementById("tableau-scores");
   let html = "<tr><th>Joueur</th><th>Manche</th><th>Total</th></tr>";

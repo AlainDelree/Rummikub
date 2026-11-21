@@ -19,7 +19,7 @@ def _resume_minimal(**overrides) -> dict:
         "victoires": {"A": 0, "B": 0},
         "matchs_nuls": 0, "matchs_decides": 0,
         "cumul_par_camp": {"A": [], "B": []},
-        "fins": {"chevalet_vide": 0, "pioche_vide": 0, "garde_fou": 0},
+        "fins": {"chevalet_vide": 0, "manche_bloquee": 0, "garde_fou": 0},
         "penalites_perdant": [], "tuiles_perdant": [], "tours_decidees": [],
         "temps_par_niveau": {"Expert": [0.1] * 10},
         "coups_invalides_total": 0, "coups_tuiles_disparues_total": 0,

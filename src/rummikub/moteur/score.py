@@ -17,6 +17,20 @@ def calculer_scores_manche(joueurs: list[dict], valeur_joker: int) -> list[dict]
     Gagnant (chevalet vide) : score_manche = somme des |score_manche| des perdants
     Met à jour joueur["score_manche"] et joueur["score_cumul"] en place.
     Retourne la liste mise à jour.
+
+    Manche BLOQUÉE (issue #255, vraie règle : plus personne ne peut jouer,
+    pioche vide) : aucun chevalet n'est vide. Le gagnant est alors celui dont
+    les tuiles restantes valent le MOINS de points (même barème de pénalité,
+    joker compris) — reprend tel quel le barème ci-dessus pour les perdants ;
+    en cas d'égalité stricte au plus bas total, le premier joueur dans
+    l'ordre (``joueurs``) est désigné gagnant (même convention que
+    :func:`trouver_gagnant_manche`/:func:`trouver_gagnant_match`, qui
+    tranchent aussi par ordre à score égal). Point douteux signalé au
+    rapport de clôture #255 : aucune règle d'égalité de manche n'existait
+    avant cette issue (une manche se terminait jusqu'ici toujours par un
+    chevalet vide, donc un gagnant unique par construction) ; ce choix n'est
+    pas tiré des règles officielles du Rummikub, qui ne détaillent pas ce
+    cas, mais c'est le plus simple cohérent avec le reste du barème.
     """
     gagnant_index = None
     for i, joueur in enumerate(joueurs):
@@ -24,16 +38,22 @@ def calculer_scores_manche(joueurs: list[dict], valeur_joker: int) -> list[dict]
             gagnant_index = i
             break
 
+    penalites = [sum(_penalite_tuile(t, valeur_joker) for t in j["chevalet"])
+                for j in joueurs]
+
+    if gagnant_index is None:
+        # Manche bloquée : personne n'a vidé son chevalet, le moins pénalisé
+        # gagne (voir docstring ci-dessus).
+        gagnant_index = min(range(len(joueurs)), key=lambda i: penalites[i])
+
     total_penalites = 0
     for i, joueur in enumerate(joueurs):
         if i == gagnant_index:
             continue
-        penalite = sum(_penalite_tuile(t, valeur_joker) for t in joueur["chevalet"])
-        joueur["score_manche"] = -penalite
-        total_penalites += penalite
+        joueur["score_manche"] = -penalites[i]
+        total_penalites += penalites[i]
 
-    if gagnant_index is not None:
-        joueurs[gagnant_index]["score_manche"] = total_penalites
+    joueurs[gagnant_index]["score_manche"] = total_penalites
 
     for joueur in joueurs:
         joueur["score_cumul"] = joueur.get("score_cumul", 0) + joueur["score_manche"]

@@ -602,6 +602,9 @@ button:disabled { opacity: 0.4; cursor: not-allowed; }
   background: rgba(0,0,0,0.7); z-index: 100;
   align-items: center; justify-content: center; }
 
+.sous-titre-fin { color: var(--couleur-texte-attenue, #94a3b8); font-size: 0.9rem;
+  margin: -4px 0 8px; }
+
 #tableau-scores, #tableau-classement { width: 100%; border-collapse: collapse; margin: 12px 0; }
 #tableau-scores th, #tableau-scores td,
 #tableau-classement th, #tableau-classement td { padding: 6px 8px; text-align: left;

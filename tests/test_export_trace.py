@@ -89,7 +89,7 @@ def test_trace_une_partie_courte_lignes_coherentes_et_resultat(tmp_path):
         assert r["perdant_camp"] in r["ordre"]
         assert r["vainqueur_camp"] != r["perdant_camp"]
         assert r["tuiles_restantes_perdant"] >= 0
-        assert r["fin"] in ("chevalet_vide", "pioche_vide")
+        assert r["fin"] in ("chevalet_vide", "manche_bloquee")
         assert r["tours"] > 0
 
 

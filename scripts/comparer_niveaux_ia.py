@@ -184,7 +184,7 @@ def _ecrire_trace_resultat(trace_ctx: dict, manche_numero: int,
         "vainqueur_camp": camps[gi], "vainqueur_niveau": niveau_camp[camps[gi]],
         "perdant_camp": camps[pi], "perdant_niveau": niveau_camp[camps[pi]],
         "tuiles_restantes_perdant": res_manche["tuiles_restantes"][pi],
-        "fin": "pioche_vide" if res_manche["pioche_vide"] else "chevalet_vide",
+        "fin": "manche_bloquee" if res_manche["manche_bloquee"] else "chevalet_vide",
         "tours": res_manche["tours"],
     })
 
@@ -435,8 +435,10 @@ def _jouer_une_manche(etat: dict, max_tours: int, temps_par_niveau: dict,
                       dons_joker_configs: list = None,
                       stats_don_joker: dict = None) -> dict:
     """Joue la manche courante de ``etat`` jusqu'à sa fin naturelle (chevalet
-    vidé ou pioche épuisée) ou jusqu'au garde-fou ``max_tours``. Retourne les
-    statistiques de CETTE manche ; ``etat`` est muté en place."""
+    vidé, ou manche BLOQUÉE — vraie règle #255 : pioche vide ET tous les
+    joueurs ont passé un tour complet sans jouer) ou jusqu'au garde-fou
+    ``max_tours``. Retourne les statistiques de CETTE manche ; ``etat`` est
+    muté en place."""
     tours = 0
     coups_invalides = 0
     coups_tuiles_disparues = 0
@@ -465,13 +467,16 @@ def _jouer_une_manche(etat: dict, max_tours: int, temps_par_niveau: dict,
                         tours, "; ".join(anomalies))
         backup_debut_tour(etat)
 
-    pioche_vide = (not arretee_garde_fou and len(etat["pioche"]) == 0
-                  and all(len(j["chevalet"]) > 0 for j in etat["joueurs"]))
+    # Manche bloquée (issue #255) : le moteur a déjà tranché
+    # (``etat["manche_bloquee"]``, posé par ``_terminer_tour``) — jamais
+    # recalculé ici, sauf arrêt par le garde-fou (partie abandonnée, ni
+    # chevalet vidé ni manche bloquée au sens du moteur).
+    manche_bloquee = not arretee_garde_fou and bool(etat.get("manche_bloquee"))
 
     return {
         "tours": tours,
         "arretee_garde_fou": arretee_garde_fou,
-        "pioche_vide": pioche_vide,
+        "manche_bloquee": manche_bloquee,
         "gagnant_manche_index": etat["gagnant_manche_index"],
         "scores_manche": [j["score_manche"] for j in etat["joueurs"]],
         "tuiles_restantes": [len(j["chevalet"]) for j in etat["joueurs"]],
@@ -649,7 +654,7 @@ def comparer(niveau_a: str, niveau_b: str, nb_donnes: int, seed: int,
     penalites_perdant: list[int] = []
     tuiles_perdant: list[int] = []
     tours_decidees: list[int] = []
-    fins = {"chevalet_vide": 0, "pioche_vide": 0, "garde_fou": 0}
+    fins = {"chevalet_vide": 0, "manche_bloquee": 0, "garde_fou": 0}
     temps_par_niveau: dict[str, list[float]] = {}
     coups_invalides_total = 0
     coups_tuiles_disparues_total = 0
@@ -732,7 +737,7 @@ def comparer(niveau_a: str, niveau_b: str, nb_donnes: int, seed: int,
                 gi = m["gagnant_manche_index"]
                 perdant_idx = 1 - gi
                 tours_decidees.append(m["tours"])
-                fins["pioche_vide" if m["pioche_vide"] else "chevalet_vide"] += 1
+                fins["manche_bloquee" if m["manche_bloquee"] else "chevalet_vide"] += 1
                 penalites_perdant.append(-m["scores_manche"][perdant_idx])
                 tuiles_perdant.append(m["tuiles_restantes"][perdant_idx])
 
@@ -896,7 +901,7 @@ def afficher_rapport(resume: dict) -> None:
     print("-" * 70)
     print(f"  RÉSULTATS PAR MANCHE ({n_manches} manche(s) jouée(s)) :")
     print(f"  Fins de manche : {fins['chevalet_vide']} par chevalet vidé, "
-         f"{fins['pioche_vide']} par pioche épuisée (bloqué), "
+         f"{fins['manche_bloquee']} par blocage (tous passés, pioche épuisée), "
          f"{fins['garde_fou']} match(s) arrêté(s) par le garde-fou (max tours).")
     print(f"  Durée moyenne d'une manche décidée : "
          f"{moyenne(resume['tours_decidees']):.1f} tour(s).")

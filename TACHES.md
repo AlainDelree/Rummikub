@@ -15,9 +15,9 @@
 
 ## Bugs connus / points d'attention
 
-- Fin de manche simplifiée : "tous bloqués" est approximé par "pioche vide"
-  (détection exacte nécessiterait un générateur de coups complet)
-- jeu_nouvelle_manche non encore implémenté côté Python (stub dans api.py)
+- (résolu, issue #255) Fin de manche "tous bloqués" implémentée pour de
+  vrai (pioche vide ET tous les joueurs ont passé un tour complet), ne
+  s'approxime plus par "pioche vide" seule.
 
 ## Idées futures
 

@@ -82,7 +82,14 @@ def creer_partie(config_joueurs: list[dict], config_regles: dict) -> dict:
         "historique": [],
         "dernier_coup_ia": None,
         "manche_terminee": False,
+        "manche_bloquee": False,
         "gagnant_manche_index": None,
+        # Compteur de passes consécutives, tous joueurs confondus (issue
+        # #255) : remis à 0 par toute pose réussie, incrémenté par un
+        # passage (ou une pioche qui ne tire aucune tuile, pioche déjà
+        # vide) — sert à détecter le blocage (pioche vide ET tout le monde
+        # a passé un tour complet sans jouer), voir ``_terminer_tour``.
+        "passes_consecutives": 0,
         "config": {
             # Nombre de manches du match (issue #203, suite de #192) : un vrai
             # compteur de manches (``manche_numero``) pilote désormais la fin
@@ -225,7 +232,11 @@ def jouer_tour(etat: dict,
     _ajouter_historique(etat, etat["index_joueur_actuel"],
                         description, points_poses)
 
-    # 8. Terminer le tour.
+    # 8. Un coup joué rompt toute série de passes en cours (issue #255) :
+    #    le blocage exige un tour COMPLET de passes consécutives.
+    etat["passes_consecutives"] = 0
+
+    # 9. Terminer le tour.
     _terminer_tour(etat)
 
     return {"ok": True, "etat": etat}
@@ -235,6 +246,13 @@ def piocher(etat: dict, nb: int = 1) -> dict:
     """
     Pioche nb tuiles (ou moins si pioche vide), les ajoute au chevalet.
     Appelle _terminer_tour.
+
+    Issue #255 (vraie règle « on ne pioche plus ») : si la pioche est déjà
+    vide, aucune tuile n'est tirée — ce tour équivaut alors à un passage
+    pour le compteur de blocage (``passes_consecutives``), exactement comme
+    ``passer_tour``. Une vraie pioche (au moins une tuile tirée) ne change
+    pas ce compteur : la pioche n'étant pas vide, le blocage ne peut de
+    toute façon pas se déclencher ce tour-là.
     """
     joueur = etat["joueurs"][etat["index_joueur_actuel"]]
     piochees: list[dict] = []
@@ -245,6 +263,9 @@ def piocher(etat: dict, nb: int = 1) -> dict:
         joueur["chevalet"].append(tuile)
         piochees.append(tuile)
 
+    if not piochees:
+        etat["passes_consecutives"] = etat.get("passes_consecutives", 0) + 1
+
     _ajouter_historique(etat, etat["index_joueur_actuel"],
                         f"{joueur['nom']} a pioché {len(piochees)} tuile(s)", 0)
     _terminer_tour(etat)
@@ -253,7 +274,10 @@ def piocher(etat: dict, nb: int = 1) -> dict:
 
 
 def passer_tour(etat: dict) -> dict:
-    """Appelle _terminer_tour directement."""
+    """Passe le tour (aucun coup possible, pioche vide — règle #255).
+    Incrémente le compteur de passes consécutives, puis appelle
+    _terminer_tour."""
+    etat["passes_consecutives"] = etat.get("passes_consecutives", 0) + 1
     _ajouter_historique(etat, etat["index_joueur_actuel"],
                         f"{etat['joueurs'][etat['index_joueur_actuel']]['nom']} "
                         f"a passé son tour", 0)
@@ -263,20 +287,28 @@ def passer_tour(etat: dict) -> dict:
 
 def _terminer_tour(etat: dict) -> None:
     """
-    Vérifie fin de manche (chevalet vide OU pioche vide).
+    Vérifie fin de manche : chevalet vide (inchangé), ou manche BLOQUÉE
+    (issue #255, vraie règle du Rummikub — remplace l'ancienne approximation
+    « pioche vide ») : la pioche est vide ET tous les joueurs ont passé un
+    tour complet de suite sans qu'aucun coup n'ait été joué entre-temps
+    (``passes_consecutives >= nb_joueurs``, remis à 0 par la moindre pose
+    réussie — voir ``jouer_tour``). Une pioche non vide ne peut jamais
+    déclencher le blocage : on continue alors à piocher normalement.
     Si fin : calculer_scores_manche, marquer manche_terminee.
     Sinon : passer au joueur suivant, incrémenter tour_numero.
     """
     joueur = etat["joueurs"][etat["index_joueur_actuel"]]
     chevalet_vide = len(joueur["chevalet"]) == 0
     pioche_vide = len(etat["pioche"]) == 0
+    nb_joueurs = len(etat["joueurs"])
+    manche_bloquee = (pioche_vide
+                      and etat.get("passes_consecutives", 0) >= nb_joueurs)
 
-    # Simplification : la manche se termine si un chevalet est vide, ou si la
-    # pioche est épuisée (approximation de « tous bloqués »).
-    if chevalet_vide or pioche_vide:
+    if chevalet_vide or manche_bloquee:
         calculer_scores_manche(etat["joueurs"],
                                etat["config"]["valeur_joker_penalite"])
         etat["manche_terminee"] = True
+        etat["manche_bloquee"] = manche_bloquee
         etat["gagnant_manche_index"] = trouver_gagnant_manche(etat["joueurs"])
         if est_fin_partie(etat):
             # Dernière manche : le match est terminé. Le vainqueur du MATCH est
@@ -288,8 +320,8 @@ def _terminer_tour(etat: dict) -> None:
             etat["egalite_match"] = egalite_sommet_match(etat["joueurs"])
         return
 
-    nb = len(etat["joueurs"])
-    etat["index_joueur_actuel"] = (etat["index_joueur_actuel"] + 1) % nb
+    etat["index_joueur_actuel"] = (
+        (etat["index_joueur_actuel"] + 1) % nb_joueurs)
     etat["tour_numero"] += 1
 
 
@@ -337,6 +369,8 @@ def nouvelle_manche(etat: dict) -> dict:
     etat["historique"] = []
     etat["dernier_coup_ia"] = None
     etat["manche_terminee"] = False
+    etat["manche_bloquee"] = False
+    etat["passes_consecutives"] = 0
     etat["gagnant_manche_index"] = None
     etat["manche_numero"] = etat.get("manche_numero", 1) + 1
     etat["index_joueur_actuel"] = (etat["manche_numero"] - 1) % nb_joueurs
@@ -356,8 +390,17 @@ def normaliser_etat_reprise(etat: dict) -> dict:
     reprise comme une partie d'UNE SEULE manche (aucun point de départ fiable
     pour un décompte). Une partie créée depuis #203 porte toujours
     ``manche_numero`` et conserve donc son vrai nombre de manches à la reprise
-    (y compris au milieu d'un match)."""
+    (y compris au milieu d'un match).
+
+    Issue #255 : une partie enregistrée AVANT la vraie règle de blocage n'a
+    pas de ``passes_consecutives`` (ni ``manche_bloquee``) — retombe à 0/
+    ``False``, ce qui ne fausse rien : le compteur repart simplement de zéro
+    à la reprise, y compris si la pioche est déjà vide et la manche non
+    terminée (la manche continue alors normalement sous la nouvelle règle,
+    jusqu'à un plein tour de passes ou une pose qui vide un chevalet)."""
     etat.setdefault("config", {})
+    etat.setdefault("passes_consecutives", 0)
+    etat.setdefault("manche_bloquee", False)
     if "manche_numero" not in etat:
         etat["config"]["nb_manches"] = 1
         etat["manche_numero"] = 1

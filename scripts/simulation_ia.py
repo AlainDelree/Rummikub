@@ -193,15 +193,20 @@ def simuler(nb_joueurs: int, niveaux: list[str] | None, nb_manches: int,
         manches_jouees += 1
         gi = etat["gagnant_manche_index"]
         scores = {j["nom"]: j["score_manche"] for j in etat["joueurs"]}
+        # Distinction chevalet vidé / manche bloquée (issue #255, point 6) :
+        # ``etat["manche_bloquee"]`` est posé par le moteur lui-même
+        # (``moteur/partie._terminer_tour``), jamais recalculé ici.
+        fin_manche = "manche_bloquee" if etat.get("manche_bloquee") else "chevalet_vide"
         manches.append({
             "numero": numero_manche,
             "tours": tours_manche,
             "gagnant": etat["joueurs"][gi]["nom"] if gi is not None else None,
             "scores_manche": scores,
+            "fin": fin_manche,
         })
         logger.info(
-            "Manche %d terminée en %d tour(s). Scores de la manche : %s",
-            numero_manche, tours_manche, scores)
+            "Manche %d terminée en %d tour(s) (%s). Scores de la manche : %s",
+            numero_manche, tours_manche, fin_manche, scores)
 
         if numero_manche < nb_manches:
             etat = nouvelle_manche(etat)
@@ -226,6 +231,11 @@ def simuler(nb_joueurs: int, niveaux: list[str] | None, nb_manches: int,
         "gagnant_match": gagnant_match,
         "manches": manches,
         "bloquee": bloquee,
+        # Distinction chevalet vidé / manche bloquée (issue #255, point 6).
+        "fins": {
+            "chevalet_vide": sum(1 for m in manches if m["fin"] == "chevalet_vide"),
+            "manche_bloquee": sum(1 for m in manches if m["fin"] == "manche_bloquee"),
+        },
     }
 
 
@@ -304,6 +314,11 @@ def main(argv: list[str]) -> int:
         for m in resume["manches"]:
             print(f"  - Manche {m['numero']} ({m['tours']} tour(s)) : "
                   f"gagnée par {m['gagnant']} — {m['scores_manche']}")
+    if resume["manches_jouees"]:
+        fins = resume["fins"]
+        print(f"Fins de manche : {fins['chevalet_vide']} par chevalet vidé, "
+              f"{fins['manche_bloquee']} par blocage (tous passés, pioche "
+              f"épuisée).")
     print(f"Scores cumulés finaux : {resume['scores_finaux']}")
     if resume["gagnant_match"] is not None:
         print(f"Vainqueur du match (score cumulé le plus élevé) : "
