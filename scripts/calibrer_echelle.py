@@ -270,7 +270,8 @@ class ReglagesIncompatibles(Exception):
 
 def construire_empreinte(mode: str, taches: list[Tache], donnes: int, seed: int,
                          max_tours: int, budget_solveur: float | None,
-                         cible_basse: float, cible_haute: float) -> dict:
+                         cible_basse: float, cible_haute: float,
+                         fin_manche_pioche_vide_test: bool = False) -> dict:
     return {
         "mode": mode,
         "taches": [
@@ -284,6 +285,11 @@ def construire_empreinte(mode: str, taches: list[Tache], donnes: int, seed: int,
         "budget_solveur": budget_solveur,
         "cible_basse": cible_basse,
         "cible_haute": cible_haute,
+        # Réglage de test #256 (désactivé par défaut) : fait partie des
+        # paramètres de la série au même titre que graine/max_tours/budget/
+        # cible — reprendre ou prolonger le dossier avec l'AUTRE règle est
+        # refusé (voir verifier_ou_ecrire_empreinte).
+        "fin_manche_pioche_vide_test": fin_manche_pioche_vide_test,
     }
 
 
@@ -296,17 +302,27 @@ def verifier_ou_ecrire_empreinte(dossier: Path, empreinte: dict) -> dict:
     initialisé : si les réglages (hors ``donnes``, qui peut AUGMENTER pour
     prolonger la série sans la recommencer) sont IDENTIQUES, renvoie
     l'empreinte existante (``donnes`` porté au plus grand des deux) ; sinon
-    lève :class:`ReglagesIncompatibles` SANS rien écrire ni jouer."""
+    lève :class:`ReglagesIncompatibles` SANS rien écrire ni jouer.
+
+    Un dossier écrit AVANT l'issue #256 n'a pas de clé
+    ``fin_manche_pioche_vide_test`` dans son ``reglages.json`` : il est
+    considéré comme la règle RÉELLE (``False``), exactement comme s'il avait
+    été créé avec cette valeur — comparaison et reprise se comportent donc
+    normalement (dossier upgradé en mémoire avant comparaison ; réécrit sur
+    disque seulement si ``donnes`` augmente par ailleurs, comme pour toute
+    reprise)."""
     chemin = dossier / "reglages.json"
     if not chemin.is_file():
         _ecrire_json_atomique(chemin, empreinte)
         return empreinte
     existant = json.loads(chemin.read_text(encoding="utf-8"))
+    existant.setdefault("fin_manche_pioche_vide_test", False)
     if _sans_donnes(existant) != _sans_donnes(empreinte):
         raise ReglagesIncompatibles(
             f"le dossier {dossier} contient déjà une série de calibration "
             "avec des réglages DIFFÉRENTS (niveaux/réglages, paires ou "
-            "balayage, graine, max_tours, budget solveur, ou cible). "
+            "balayage, graine, max_tours, budget solveur, cible, ou règle "
+            "de fin de manche --fin-manche-pioche-vide-test). "
             "Relancez dans un dossier vide, ou reprenez avec EXACTEMENT les "
             "mêmes réglages (seul --donnes peut augmenter pour prolonger "
             "la série).")
@@ -400,14 +416,18 @@ def _tronquer_si_necessaire(chemin: Path) -> int:
 
 def jouer_tache(tache: Tache, dossier: Path, donnes_visees: int, seed: int,
                 max_tours: int, budget_solveur: float | None,
-                deadline: float | None, on_donne=None) -> bool:
+                deadline: float | None, on_donne=None,
+                fin_manche_pioche_vide_test: bool = False) -> bool:
     """Joue, DONNE PAR DONNE, les donnes manquantes de ``tache`` jusqu'à
     ``donnes_visees`` (reprise à la dernière donne complète). Chaque donne est
     un appel à ``comparer()`` (``donnes_debut``/``donnes_fin``, #228 point 5,
     ``mode_fichier="a"``) qui écrit ses deux parties miroir dans le fichier
     JSON Lines de la tâche. ``on_donne``, si fourni, est appelé après CHAQUE
     donne (mode séquentiel uniquement : pas picklable pour un sous-processus).
-    Renvoie ``True`` si interrompu par ``deadline`` avant ``donnes_visees``."""
+    Renvoie ``True`` si interrompu par ``deadline`` avant ``donnes_visees``.
+
+    ``fin_manche_pioche_vide_test`` (issue #256) : réglage de TEST, désactivé
+    par défaut — transmis tel quel à ``comparer()``."""
     _niveaux.BRIDAGES[tache.niveau_a] = tache.bridage_a
     _niveaux.BRIDAGES[tache.niveau_b] = tache.bridage_b
     chemin = fichier_tache(dossier, tache.label)
@@ -418,7 +438,8 @@ def jouer_tache(tache: Tache, dossier: Path, donnes_visees: int, seed: int,
         comparer(tache.niveau_a, tache.niveau_b, donnes_visees, seed, max_tours,
                 nb_manches=1, preferer_simple=True, export_resultats=str(chemin),
                 budget_temps=budget_solveur, donnes_debut=i, donnes_fin=i + 1,
-                mode_fichier="a")
+                mode_fichier="a",
+                fin_manche_pioche_vide=fin_manche_pioche_vide_test)
         if on_donne is not None:
             on_donne()
     return False
@@ -427,7 +448,7 @@ def jouer_tache(tache: Tache, dossier: Path, donnes_visees: int, seed: int,
 def jouer_campagne(dossier: Path, taches: list[Tache], donnes_visees: int, seed: int,
                    max_tours: int, budget_solveur: float | None, nb_processus: int,
                    deadline: float | None, cible_basse: float, cible_haute: float,
-                   mode: str) -> bool:
+                   mode: str, fin_manche_pioche_vide_test: bool = False) -> bool:
     """Joue toutes les ``taches``, en 1 processus (séquentiel, rapport
     régénéré après CHAQUE donne) ou 2 (une tâche par processus, rapport
     régénéré toutes les ~2s depuis le disque pendant que les travailleurs
@@ -436,7 +457,8 @@ def jouer_campagne(dossier: Path, taches: list[Tache], donnes_visees: int, seed:
 
     def _rapport_partiel() -> None:
         _ecrire_rapport_disque(dossier, taches, donnes_visees, seed, cible_basse,
-                               cible_haute, mode, time.monotonic() - debut, None)
+                               cible_haute, mode, time.monotonic() - debut, None,
+                               fin_manche_pioche_vide_test)
 
     if nb_processus <= 1:
         interrompu = False
@@ -445,13 +467,16 @@ def jouer_campagne(dossier: Path, taches: list[Tache], donnes_visees: int, seed:
                 interrompu = True
                 break
             if jouer_tache(tache, dossier, donnes_visees, seed, max_tours,
-                           budget_solveur, deadline, on_donne=_rapport_partiel):
+                           budget_solveur, deadline, on_donne=_rapport_partiel,
+                           fin_manche_pioche_vide_test=fin_manche_pioche_vide_test):
                 interrompu = True
                 break
     else:
         with ProcessPoolExecutor(max_workers=nb_processus) as executor:
-            futures = [executor.submit(jouer_tache, t, dossier, donnes_visees, seed,
-                                       max_tours, budget_solveur, deadline)
+            futures = [executor.submit(
+                            jouer_tache, t, dossier, donnes_visees, seed,
+                            max_tours, budget_solveur, deadline, None,
+                            fin_manche_pioche_vide_test)
                       for t in taches]
             restantes = set(futures)
             while restantes:
@@ -461,7 +486,8 @@ def jouer_campagne(dossier: Path, taches: list[Tache], donnes_visees: int, seed:
 
     duree = time.monotonic() - debut
     _ecrire_rapport_disque(dossier, taches, donnes_visees, seed, cible_basse,
-                           cible_haute, mode, duree, interrompu)
+                           cible_haute, mode, duree, interrompu,
+                           fin_manche_pioche_vide_test)
     return interrompu
 
 
@@ -540,7 +566,8 @@ def _ligne_resultat(t: Tache, stats: dict, taux: float, marge: float,
 
 def generer_rapport(dossier: Path, taches: list[Tache], donnes_visees: int, seed: int,
                     cible_basse: float, cible_haute: float, mode: str,
-                    duree_s: float | None, interrompu: bool | None) -> str:
+                    duree_s: float | None, interrompu: bool | None,
+                    fin_manche_pioche_vide_test: bool = False) -> str:
     lignes = ["=" * 78,
               "CALIBRATION DE L'ÉCHELLE DES NIVEAUX PAR DUELS (issue #240)"]
     lignes.extend(entete_machine())
@@ -548,6 +575,12 @@ def generer_rapport(dossier: Path, taches: list[Tache], donnes_visees: int, seed
     lignes.append(f"donnes_visees={donnes_visees} seed={seed} "
                   f"mode={'balayage' if mode == 'balayage' else 'paires'} "
                   f"cible={cible_basse * 100:.0f}-{cible_haute * 100:.0f} %")
+    if fin_manche_pioche_vide_test:
+        lignes.append("Règle de fin de manche : fin à la pioche vide "
+                      "(TEST, #256) — ne remplace pas une vérification "
+                      "finale avec la vraie règle.")
+    else:
+        lignes.append("Règle de fin de manche : réelle (blocage, #255).")
     lignes.append("=" * 78)
     lignes.append("")
     lignes.append("Réglages joués dans ce dossier :")
@@ -615,9 +648,11 @@ def generer_rapport(dossier: Path, taches: list[Tache], donnes_visees: int, seed
 def _ecrire_rapport_disque(dossier: Path, taches: list[Tache], donnes_visees: int,
                            seed: int, cible_basse: float, cible_haute: float,
                            mode: str, duree_s: float | None,
-                           interrompu: bool | None) -> None:
+                           interrompu: bool | None,
+                           fin_manche_pioche_vide_test: bool = False) -> None:
     texte = generer_rapport(dossier, taches, donnes_visees, seed, cible_basse,
-                            cible_haute, mode, duree_s, interrompu)
+                            cible_haute, mode, duree_s, interrompu,
+                            fin_manche_pioche_vide_test)
     _ecrire_atomique(dossier / "rapport.txt", texte)
 
 
@@ -633,7 +668,9 @@ def commande_statut(dossier: Path) -> int:
     taches = taches_depuis_empreinte(empreinte)
     print(generer_rapport(dossier, taches, empreinte["donnes"], empreinte["seed"],
                           empreinte["cible_basse"], empreinte["cible_haute"],
-                          empreinte["mode"], duree_s=None, interrompu=None), end="")
+                          empreinte["mode"], duree_s=None, interrompu=None,
+                          fin_manche_pioche_vide_test=empreinte.get(
+                              "fin_manche_pioche_vide_test", False)), end="")
     return 0
 
 
@@ -699,6 +736,16 @@ def _construire_parser() -> argparse.ArgumentParser:
                         help="Limite de temps FERME, en secondes, pour toute "
                              "la campagne (garde-fou externe par "
                              "sous-processus, voir _limite_temps_ferme.py).")
+    parser.add_argument("--fin-manche-pioche-vide-test", action="store_true",
+                        help="Réglage de TEST (issue #256, désactivé par "
+                             "défaut) : termine chaque manche dès que la "
+                             "pioche est vide après un coup, comme avant "
+                             "#255, au lieu d'attendre le blocage — "
+                             "raccourcit nettement les campagnes de mesure. "
+                             "Ne change jamais le jeu réel. Fait partie des "
+                             "paramètres enregistrés avec le dossier : "
+                             "reprendre un dossier existant avec l'AUTRE "
+                             "règle est refusé.")
     parser.add_argument("-v", "--verbose", action="store_true",
                         help="Journalise le détail de la campagne.")
     parser.add_argument("--_worker", action="store_true", help=argparse.SUPPRESS)
@@ -757,7 +804,8 @@ def _executer(args, dossier: Path, mode: str, taches: list[Tache]) -> int:
     dossier.mkdir(parents=True, exist_ok=True)
     empreinte = construire_empreinte(mode, taches, args.donnes, args.seed,
                                      args.max_tours, args.budget_solveur,
-                                     args.cible_basse, args.cible_haute)
+                                     args.cible_basse, args.cible_haute,
+                                     args.fin_manche_pioche_vide_test)
     try:
         empreinte = verifier_ou_ecrire_empreinte(dossier, empreinte)
     except ReglagesIncompatibles as exc:
@@ -770,7 +818,8 @@ def _executer(args, dossier: Path, mode: str, taches: list[Tache]) -> int:
     interrompu = jouer_campagne(dossier, taches, donnes_visees, args.seed,
                                 args.max_tours, args.budget_solveur,
                                 args.processus, deadline, args.cible_basse,
-                                args.cible_haute, mode)
+                                args.cible_haute, mode,
+                                empreinte["fin_manche_pioche_vide_test"])
     print((dossier / "rapport.txt").read_text(encoding="utf-8"), end="")
     return CODE_LIMITE_TEMPS if interrompu else CODE_TERMINE
 

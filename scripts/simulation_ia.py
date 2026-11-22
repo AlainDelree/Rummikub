@@ -24,6 +24,14 @@ Options :
     --max-tours N    Garde-fou anti-blocage : nombre max de tours dans une
                      même manche avant abandon (défaut 500).
     --seed N         Graine aléatoire, pour une simulation reproductible.
+    --fin-manche-pioche-vide-test
+                     Réglage de TEST (issue #256, désactivé par défaut) :
+                     termine la manche dès que la pioche est vide après un
+                     coup, comme avant #255, au lieu d'attendre le blocage
+                     — raccourcit nettement les campagnes de mesure. Ne
+                     change jamais le jeu réel (jamais passé par l'UI/l'IA).
+                     Les résultats obtenus avec cette option ne remplacent
+                     pas une vérification finale avec la vraie règle.
     -v, --verbose    Journalise chaque tour (sinon, seules les anomalies et
                      les fins de manche sont journalisées).
 """
@@ -80,12 +88,16 @@ def construire_joueurs(nb_joueurs: int, niveaux: list[str] | None) -> list[dict]
 # Un tour d'IA (réplique la logique de Api.jeu_ia_jouer, sans pywebview)
 # --------------------------------------------------------------------------- #
 
-def jouer_un_tour(etat: dict, idx: int) -> tuple[list[str], dict]:
+def jouer_un_tour(etat: dict, idx: int,
+                  fin_manche_pioche_vide: bool = False) -> tuple[list[str], dict]:
     """Joue le tour de l'IA à l'index ``idx``.
 
     Retourne ``(anomalies, etat)``. En cas d'exception de l'IA ou de coup
     invalide, se replie sur une pioche de secours (comme côté UI) pour que la
     simulation puisse continuer et journalise l'anomalie.
+
+    ``fin_manche_pioche_vide`` (issue #256) : réglage de TEST transmis tel
+    quel à ``jouer_tour``/``piocher``/``passer_tour`` — voir le module.
     """
     anomalies: list[str] = []
     nom = etat["joueurs"][idx]["nom"]
@@ -98,11 +110,13 @@ def jouer_un_tour(etat: dict, idx: int) -> tuple[list[str], dict]:
             "Exception de l'IA %s au tour %d", nom, etat["tour_numero"])
         anomalies.append(f"tour {etat['tour_numero']} : exception IA ({nom})")
         annuler_tour(etat)
-        return anomalies, piocher(etat)["etat"]
+        return anomalies, piocher(
+            etat, fin_manche_pioche_vide=fin_manche_pioche_vide)["etat"]
 
     action = res_ia.get("action")
     if action == "jouer":
-        res = jouer_tour(etat, res_ia["ids_tuiles"], res_ia["nouveau_plateau"])
+        res = jouer_tour(etat, res_ia["ids_tuiles"], res_ia["nouveau_plateau"],
+                         fin_manche_pioche_vide=fin_manche_pioche_vide)
         if not res["ok"]:
             logger.warning(
                 "Coup invalide proposé par %s au tour %d : %s",
@@ -111,11 +125,11 @@ def jouer_un_tour(etat: dict, idx: int) -> tuple[list[str], dict]:
                 f"tour {etat['tour_numero']} : coup invalide ({nom}) "
                 f"— {res['erreur']}")
             annuler_tour(etat)
-            res = piocher(etat)
+            res = piocher(etat, fin_manche_pioche_vide=fin_manche_pioche_vide)
     elif action == "piocher":
-        res = piocher(etat)
+        res = piocher(etat, fin_manche_pioche_vide=fin_manche_pioche_vide)
     elif action == "passer":
-        res = passer_tour(etat)
+        res = passer_tour(etat, fin_manche_pioche_vide=fin_manche_pioche_vide)
     else:
         logger.warning(
             "Action IA inconnue %r proposée par %s au tour %d",
@@ -124,7 +138,7 @@ def jouer_un_tour(etat: dict, idx: int) -> tuple[list[str], dict]:
             f"tour {etat['tour_numero']} : action inconnue ({action!r}) "
             f"de {nom}")
         annuler_tour(etat)
-        res = piocher(etat)
+        res = piocher(etat, fin_manche_pioche_vide=fin_manche_pioche_vide)
 
     return anomalies, res["etat"]
 
@@ -134,11 +148,16 @@ def jouer_un_tour(etat: dict, idx: int) -> tuple[list[str], dict]:
 # --------------------------------------------------------------------------- #
 
 def simuler(nb_joueurs: int, niveaux: list[str] | None, nb_manches: int,
-            max_tours: int, seed: int | None = None) -> dict:
+            max_tours: int, seed: int | None = None,
+            fin_manche_pioche_vide: bool = False) -> dict:
     """Joue ``nb_manches`` manches complètes IA vs IA.
 
     Retourne un résumé : nombre de manches/tours joués, anomalies
     rencontrées, durée et scores cumulés finaux.
+
+    ``fin_manche_pioche_vide`` (issue #256) : réglage de TEST, désactivé par
+    défaut — voir l'en-tête du module. Jamais actif sans ``--fin-manche-
+    pioche-vide-test``.
     """
     if seed is not None:
         random.seed(seed)
@@ -183,7 +202,7 @@ def simuler(nb_joueurs: int, niveaux: list[str] | None, nb_manches: int,
                     "Manche %d, tour %d : au tour de %s (%d tuile(s))",
                     numero_manche, etat["tour_numero"], etat["joueurs"][idx]["nom"],
                     len(etat["joueurs"][idx]["chevalet"]))
-            anomalies, etat = jouer_un_tour(etat, idx)
+            anomalies, etat = jouer_un_tour(etat, idx, fin_manche_pioche_vide)
             anomalies_total.extend(anomalies)
             backup_debut_tour(etat)
 
@@ -193,10 +212,16 @@ def simuler(nb_joueurs: int, niveaux: list[str] | None, nb_manches: int,
         manches_jouees += 1
         gi = etat["gagnant_manche_index"]
         scores = {j["nom"]: j["score_manche"] for j in etat["joueurs"]}
-        # Distinction chevalet vidé / manche bloquée (issue #255, point 6) :
-        # ``etat["manche_bloquee"]`` est posé par le moteur lui-même
-        # (``moteur/partie._terminer_tour``), jamais recalculé ici.
-        fin_manche = "manche_bloquee" if etat.get("manche_bloquee") else "chevalet_vide"
+        # Distinction chevalet vidé / manche bloquée (issue #255, point 6) /
+        # fin à la pioche vide (réglage de test, issue #256) : tous posés par
+        # le moteur lui-même (``moteur/partie._terminer_tour``), jamais
+        # recalculés ici.
+        if etat.get("manche_terminee_pioche_vide_test"):
+            fin_manche = "pioche_vide_test"
+        elif etat.get("manche_bloquee"):
+            fin_manche = "manche_bloquee"
+        else:
+            fin_manche = "chevalet_vide"
         manches.append({
             "numero": numero_manche,
             "tours": tours_manche,
@@ -231,10 +256,13 @@ def simuler(nb_joueurs: int, niveaux: list[str] | None, nb_manches: int,
         "gagnant_match": gagnant_match,
         "manches": manches,
         "bloquee": bloquee,
-        # Distinction chevalet vidé / manche bloquée (issue #255, point 6).
+        "fin_manche_pioche_vide": fin_manche_pioche_vide,
+        # Distinction chevalet vidé / manche bloquée (issue #255, point 6) /
+        # fin à la pioche vide (réglage de test, issue #256).
         "fins": {
             "chevalet_vide": sum(1 for m in manches if m["fin"] == "chevalet_vide"),
             "manche_bloquee": sum(1 for m in manches if m["fin"] == "manche_bloquee"),
+            "pioche_vide_test": sum(1 for m in manches if m["fin"] == "pioche_vide_test"),
         },
     }
 
@@ -276,6 +304,13 @@ def main(argv: list[str]) -> int:
                         help="Garde-fou anti-blocage par manche (défaut 500).")
     parser.add_argument("--seed", type=int, default=None,
                         help="Graine aléatoire (reproductibilité).")
+    parser.add_argument("--fin-manche-pioche-vide-test", action="store_true",
+                        help="Réglage de TEST (issue #256, désactivé par "
+                             "défaut) : termine la manche dès que la "
+                             "pioche est vide après un coup, comme avant "
+                             "#255, au lieu d'attendre le blocage — pour "
+                             "des campagnes de mesure plus rapides. Ne "
+                             "change jamais le jeu réel.")
     parser.add_argument("-v", "--verbose", action="store_true",
                         help="Journalise chaque tour.")
     args = parser.parse_args(argv[1:])
@@ -299,11 +334,17 @@ def main(argv: list[str]) -> int:
     )
 
     resume = simuler(args.joueurs, niveaux, args.manches, args.max_tours,
-                     args.seed)
+                     args.seed, args.fin_manche_pioche_vide_test)
 
     print("-" * 60)
     for ligne in entete_dependances():
         print(ligne)
+    if args.fin_manche_pioche_vide_test:
+        print("Règle de fin de manche : fin à la pioche vide (TEST, #256) "
+             "— ne remplace pas une vérification finale avec la vraie "
+             "règle.")
+    else:
+        print("Règle de fin de manche : réelle (blocage, #255).")
     print("-" * 60)
     print(f"RÉSUMÉ : 1 match de {resume['manches_jouees']}/"
           f"{resume['manches_demandees']} manche(s) jouée(s), "
@@ -318,7 +359,8 @@ def main(argv: list[str]) -> int:
         fins = resume["fins"]
         print(f"Fins de manche : {fins['chevalet_vide']} par chevalet vidé, "
               f"{fins['manche_bloquee']} par blocage (tous passés, pioche "
-              f"épuisée).")
+              f"épuisée), {fins['pioche_vide_test']} par pioche vide "
+              f"(réglage de test #256).")
     print(f"Scores cumulés finaux : {resume['scores_finaux']}")
     if resume["gagnant_match"] is not None:
         print(f"Vainqueur du match (score cumulé le plus élevé) : "

@@ -652,3 +652,74 @@ comparer entre AVEC et SANS pour juger l'effet réel. Le point 7 (#254)
 n'est mesurable que sur une campagne à plusieurs manches (`--manches N`,
 N > 1) : aucune commande appariée de ce type n'existait avant #254 ; à
 ajouter par Alain si une mesure spécifique de ce point est souhaitée.
+
+## 10. Réglage de TEST « fin de manche à la pioche vide » (issue #256)
+
+**Motivation** : depuis la vraie règle de fin de manche (#255, blocage —
+voir §5 ci-dessus et CONTEXTE.md §3bis), une manche entre deux niveaux
+bridés (p. ex. Intermédiaire contre Intermédiaire) peut durer très
+longtemps avant de se bloquer réellement (plateau/chevalets qui grossissent,
+coût du solveur par tour en forte hausse) — mesuré à plus de 300 s pour 3
+donnes sans coupure (4/6 manches encore indécises à la coupure de 100
+tours), contre 35 minutes pour 100 donnes d'Avancé contre Expert. Ceci
+rendait les campagnes de calibration par paliers (`scripts/
+calibrer_echelle.py`) beaucoup trop lentes. Le réglage de test rétablit,
+sur demande explicite seulement, l'ancienne fin immédiate « pioche vide »
+(avant #255) — jamais la vraie règle du jeu, qui reste le blocage.
+
+**Implémentation** (`moteur/partie.py`, paramètre nommé
+`fin_manche_pioche_vide`, mot-clé uniquement, défaut `False` partout) :
+`jouer_tour`/`piocher`/`passer_tour` le transmettent tel quel à
+`_terminer_tour`, qui termine la manche dès que la pioche est vide APRÈS
+le coup (`fin_pioche_vide_test = fin_manche_pioche_vide and pioche_vide
+and not chevalet_vide` — l'exception absolue du chevalet vidé reste
+prioritaire, inchangée). Le décompte des points réutilise TEL QUEL
+`calculer_scores_manche` : comme pour une manche bloquée, aucun chevalet
+n'est vide, donc le gagnant est celui dont les tuiles restantes valent le
+moins de points. `etat["manche_terminee_pioche_vide_test"]` n'est posé
+(`True`) QUE si cette voie a déclenché la fin — absent dans tous les
+autres cas, y compris quand le réglage est actif mais n'a pas déclenché
+la fin (`nouvelle_manche` l'efface aussi entre deux manches) : l'état
+d'une partie par défaut reste identique à celui de #255, et comme aucun
+appelant du jeu/de l'IA/de l'UI ne passe jamais ce paramètre, il n'apparaît
+jamais dans une partie sauvegardée (`persistance/stockage.py` sérialise
+l'état tel quel).
+
+**Options en ligne de commande** (toutes désactivées par défaut) :
+`--fin-manche-pioche-vide-test` sur `scripts/simulation_ia.py` et
+`scripts/comparer_niveaux_ia.py` ; `--fin-manche-pioche-vide-test` sur
+`scripts/calibrer_echelle.py` (CONTEXTE.md §9/§16), où il fait partie des
+paramètres enregistrés dans `reglages.json` de la série : reprendre ou
+prolonger un dossier existant avec l'AUTRE règle est refusé avec un
+message clair, exactement comme pour la graine/`--max-tours`/budget du
+solveur/cible ; un dossier écrit avant #256 (sans la clé) est traité comme
+la règle RÉELLE. Chaque rapport (`afficher_rapport`/`generer_rapport`)
+affiche en tête la règle utilisée (« réelle (blocage, #255) » ou « fin à
+la pioche vide (TEST, #256) »), et distingue dans la répartition des fins
+de manche un troisième compteur `pioche_vide_test`, jamais mélangé à
+`chevalet_vide`/`manche_bloquee`.
+
+**Avertissement** : un réglage qui raccourcit les manches change la
+distribution des positions mesurées (parties tronquées plus tôt, chevalets
+différents) — les résultats obtenus avec ce réglage (taux de victoire,
+compteurs de la gestion du joker, temps par tour) servent à ACCÉLÉRER une
+calibration, jamais à la remplacer : toute conclusion visant le jeu réel
+doit être revérifiée sans ce réglage avant d'être retenue.
+
+**Mesure** (issue #256, agent, premier plan, limite de temps ferme,
+Python du projet, Intermédiaire contre Intermédiaire, 3 donnes, graine 0) :
+
+```
+timeout 300 python scripts/comparer_niveaux_ia.py --niveau-a Intermédiaire \
+    --niveau-b Intermédiaire --donnes 3 --seed 0 --fin-manche-pioche-vide-test
+```
+
+→ 218,1 s pour 6 manches décidées (3 donnes x 2 miroir) — net par rapport à
+la vraie règle (> 300 s pour la MÊME commande sans l'option, 4/6 manches
+encore indécises à la coupure de 100 tours, voir le constat du §1), mais
+**au-delà** de l'ordre de grandeur attendu par l'issue (1 à 2 minutes) :
+fins de manche 4/6 par chevalet vidé, 2/6 par pioche vide (réglage de
+test), 0/6 par blocage réel ; durée moyenne d'une manche décidée 81,0
+tours ; temps de calcul par tour (Intermédiaire) moyenne 448,3 ms, maximum
+3028,9 ms sur 486 tours. Écart signalé tel quel, sans chercher à le
+corriger dans cette issue (hors périmètre, voir le rapport de clôture).

@@ -158,7 +158,12 @@ tests/                      pytest : test_moteur.py + test_ia.py + test_descript
   valeur du réglage ; gagnant : +total) ; pour une manche bloquée, le
   gagnant est celui dont les tuiles restantes valent le moins (même
   barème), `etat["manche_bloquee"]` est posé à `True` — et l'**ajoute aux
-  `score_cumul`**.
+  `score_cumul`**. **Réglage de TEST** (issue #256, désactivé par défaut,
+  jamais utilisé par le jeu/l'IA/l'interface, réservé aux scripts de
+  mesure — voir §9) : `fin_manche_pioche_vide` rétablit, si activé,
+  l'ancienne fin immédiate « pioche vide » (avant #255) pour borner la
+  durée des campagnes de calibration ; même décompte que la manche
+  bloquée.
 - **Avec une seule manche** (défaut), les points restants ne départagent que
   les parties bloquées : le gagnant est celui qui vide son chevalet (plus
   haut `score_cumul` = plus haut `score_manche`). **Avec au moins deux
@@ -1022,6 +1027,21 @@ répond à ce risque.
   complet. **#190** (solveur rendu progressif, mêmes paramètres) : voir
   CHANGELOG-190 pour les chiffres avant/après (taux de victoire, parties
   bloquées, replis d'Expert sur Avancé, temps par tour).
+
+**Réglage de mesure `--fin-manche-pioche-vide-test`** (issue #256,
+désactivé par défaut, disponible sur `simulation_ia.py`,
+`comparer_niveaux_ia.py` et `calibrer_echelle.py`) : depuis la vraie règle
+de blocage (#255), une manche Intermédiaire/Intermédiaire peut dépasser
+300 s sans se décider (plus de pioche pour borner la durée) — à n'utiliser
+QUE pour accélérer une campagne de calibration (`calibrer_echelle.py`,
+§16), jamais pour une mesure destinée à juger le jeu réel : les résultats
+obtenus avec cette option NE REMPLACENT PAS une vérification finale avec
+la vraie règle. Dans `calibrer_echelle.py`, le réglage fait partie des
+paramètres de la série (`reglages.json`) : reprendre un dossier existant
+avec l'autre règle est refusé, comme pour la graine/max_tours/budget/cible.
+Détail (fonctionnement moteur, rapport, mesure chiffrée) :
+`docs/contexte/ia_anti_don_joker.md` §10.
+
 ## 10. Journal de parties et bilan par niveau d'IA (issue #185)
 
 - **Journal** (`persistance/journal.py`) : optionnel, activé par la clé

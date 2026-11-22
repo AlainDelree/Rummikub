@@ -476,6 +476,99 @@ def test_reprise_partie_sauvegardee_avec_pioche_vide_continue_sans_erreur():
     assert etat["manche_bloquee"] is True
 
 
+# --------------------------------------------------------------------------- #
+# Réglage de TEST « fin de manche à la pioche vide » (issue #256, désactivé
+# par défaut — réservé aux scripts de mesure, voir docs/contexte/
+# ia_anti_don_joker.md §10). Ne touche jamais le comportement par défaut.
+# --------------------------------------------------------------------------- #
+
+def test_fin_manche_pioche_vide_test_desactivee_par_defaut_garde_la_regle_255():
+    """Sans le réglage de test (défaut, comme tout appelant existant), la
+    pioche vide après un coup ne termine PAS la manche : seul le blocage
+    (#255) le fait — comportement strictement inchangé."""
+    etat = _partie(1, nb_joueurs=2)
+    _vider_pioche_et_garnir(etat, [[t(1, "noir")], [t(2, "noir")]])
+    res = piocher(etat)   # pioche déjà vide, aucune tuile tirée
+    assert res["tuiles_piochees"] == []
+    assert etat["manche_terminee"] is False
+    assert "manche_terminee_pioche_vide_test" not in etat
+
+
+def test_fin_manche_pioche_vide_test_active_termine_des_que_la_pioche_est_vide():
+    """Réglage de test activé (``fin_manche_pioche_vide=True``) : la manche
+    se termine dès que la pioche est vide après le coup d'un joueur, SANS
+    attendre le blocage — comme avant #255. Le gagnant est celui dont les
+    tuiles restantes valent le moins de points (même décompte que la manche
+    bloquée, #255)."""
+    etat = _partie(1, nb_joueurs=2)
+    etat["pioche"] = [t(1, "bleu").as_dict()]   # une seule tuile restante
+    etat["joueurs"][0]["chevalet"] = [t(1, "noir").as_dict()]
+    etat["joueurs"][1]["chevalet"] = [t(13, "rouge").as_dict(),
+                                      t(13, "bleu").as_dict()]
+    etat["index_joueur_actuel"] = 0
+
+    res = piocher(etat, fin_manche_pioche_vide=True)   # vide la pioche
+    assert res["tuiles_piochees"] != []
+    assert etat["pioche"] == []
+    assert etat["manche_terminee"] is True
+    assert etat["manche_bloquee"] is False   # pas un vrai blocage
+    assert etat["manche_terminee_pioche_vide_test"] is True
+    # Joueur 0 : 1 pt de pénalité ; joueur 1 : 26 pts → joueur 0 gagne.
+    assert etat["gagnant_manche_index"] == 0
+    assert etat["joueurs"][0]["score_manche"] == 26
+    assert etat["joueurs"][1]["score_manche"] == -26
+
+
+def test_fin_manche_pioche_vide_test_via_passer_tour():
+    """Le réglage de test s'applique aussi via ``passer_tour`` (joueur sans
+    coup possible, pioche déjà vide) — pas seulement via ``piocher``."""
+    etat = _partie(1, nb_joueurs=2)
+    _vider_pioche_et_garnir(
+        etat, [[t(1, "noir")], [t(13, "rouge"), t(13, "bleu")]])
+    res = passer_tour(etat, fin_manche_pioche_vide=True)
+    assert res["ok"] is True
+    assert etat["manche_terminee"] is True
+    assert etat["manche_bloquee"] is False
+    assert etat["manche_terminee_pioche_vide_test"] is True
+    assert etat["gagnant_manche_index"] == 0
+
+
+def test_fin_manche_pioche_vide_test_ne_s_applique_pas_a_un_chevalet_vide():
+    """Un coup qui vide le chevalet reste une victoire normale (chevalet
+    vide), même avec le réglage de test activé et la pioche vide en même
+    temps — l'exception du chevalet vide prime toujours."""
+    etat = _partie(1, nb_joueurs=2)
+    etat["pioche"] = []
+    etat["joueurs"][0]["mise_initiale_faite"] = True
+    etat["joueurs"][0]["chevalet"] = [t(5, "rouge").as_dict(),
+                                      t(6, "rouge").as_dict(),
+                                      t(7, "rouge").as_dict()]
+    etat["joueurs"][1]["chevalet"] = [t(1, "noir").as_dict()]
+    etat["index_joueur_actuel"] = 0
+    nouveau_plateau = [[t(5, "rouge").as_dict(), t(6, "rouge").as_dict(),
+                        t(7, "rouge").as_dict()]]
+    res = jouer_tour(etat, ["rouge_5_a", "rouge_6_a", "rouge_7_a"],
+                     nouveau_plateau, fin_manche_pioche_vide=True)
+    assert res["ok"] is True
+    assert etat["manche_terminee"] is True
+    assert etat["manche_bloquee"] is False
+    assert "manche_terminee_pioche_vide_test" not in etat
+    assert etat["gagnant_manche_index"] == 0
+
+
+def test_nouvelle_manche_efface_le_drapeau_de_test():
+    """Le drapeau ``manche_terminee_pioche_vide_test`` ne doit jamais
+    persister d'une manche à l'autre (``nouvelle_manche`` l'efface, comme
+    ``manche_bloquee``)."""
+    etat = _partie(2, nb_joueurs=2)
+    _vider_pioche_et_garnir(
+        etat, [[t(1, "noir")], [t(13, "rouge"), t(13, "bleu")]])
+    passer_tour(etat, fin_manche_pioche_vide=True)
+    assert etat.get("manche_terminee_pioche_vide_test") is True
+    etat = nouvelle_manche(etat)
+    assert "manche_terminee_pioche_vide_test" not in etat
+
+
 def test_partie_deja_terminee_non_modifiee_par_la_reprise():
     """Une partie déjà terminée n'est pas modifiée par la normalisation de
     reprise (#255, point 7)."""

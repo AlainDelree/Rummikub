@@ -31,6 +31,12 @@ def calculer_scores_manche(joueurs: list[dict], valeur_joker: int) -> list[dict]
     chevalet vide, donc un gagnant unique par construction) ; ce choix n'est
     pas tiré des règles officielles du Rummikub, qui ne détaillent pas ce
     cas, mais c'est le plus simple cohérent avec le reste du barème.
+
+    Réutilisée TELLE QUELLE (aucun code séparé) par le réglage de test « fin
+    de manche à la pioche vide » (issue #256, ``moteur/partie._terminer_tour``,
+    ``fin_manche_pioche_vide``) : une manche ainsi terminée n'a non plus
+    aucun chevalet vide, donc tombe dans le même cas que la manche bloquée
+    ci-dessus.
     """
     gagnant_index = None
     for i, joueur in enumerate(joueurs):

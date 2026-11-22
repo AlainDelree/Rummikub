@@ -54,6 +54,15 @@ Options :
                         Compare, pour un MÊME niveau, une campagne avec et
                         sans la règle (y compris A et B au même niveau).
     --sans-don-joker-b  Comme --sans-don-joker-a, pour le camp B.
+    --fin-manche-pioche-vide-test
+                        Réglage de TEST (issue #256, désactivé par défaut) :
+                        termine chaque manche dès que la pioche est vide
+                        après un coup, comme avant #255, au lieu d'attendre
+                        le blocage — raccourcit nettement les campagnes de
+                        mesure. Ne change jamais le jeu réel (jamais passé
+                        par l'UI/l'IA). Les résultats obtenus avec cette
+                        option ne remplacent pas une vérification finale
+                        avec la vraie règle.
     -v, --verbose       Journalise chaque partie jouée.
 """
 
@@ -203,8 +212,13 @@ def jouer_un_tour(etat: dict, idx: int, temps_par_niveau: dict,
                   manche_numero: int = 1,
                   budget_temps: float = None,
                   dons_joker_configs: list = None,
-                  stats_don_joker: dict = None) -> tuple[dict, bool, bool]:
+                  stats_don_joker: dict = None,
+                  fin_manche_pioche_vide: bool = False) -> tuple[dict, bool, bool]:
     """Joue le tour de l'IA à l'index ``idx``.
+
+    ``fin_manche_pioche_vide`` (issue #256) : réglage de TEST transmis tel
+    quel à ``jouer_tour``/``piocher``/``passer_tour`` — voir l'en-tête du
+    module. Désactivé par défaut, sans effet sur le jeu réel.
 
     ``budget_temps`` (issue #228, point 5) : budget de temps du solveur par
     coup transmis à ``jouer_niveau_bride`` — ``None`` (défaut) laisse le
@@ -347,7 +361,9 @@ def jouer_un_tour(etat: dict, idx: int, temps_par_niveau: dict,
         temps_par_niveau.setdefault(niveau, []).append(time.monotonic() - debut)
         logger.exception("Exception de l'IA %s au tour %d", niveau, etat["tour_numero"])
         annuler_tour(etat)
-        return _issue(piocher(etat)["etat"], True, False, "pioche")
+        return _issue(piocher(
+            etat, fin_manche_pioche_vide=fin_manche_pioche_vide)["etat"],
+            True, False, "pioche")
     temps_par_niveau.setdefault(niveau, []).append(time.monotonic() - debut)
 
     if niveau == "Expert" and res_ia.get("action") == "jouer":
@@ -394,7 +410,8 @@ def jouer_un_tour(etat: dict, idx: int, temps_par_niveau: dict,
 
     action = res_ia.get("action")
     if action == "jouer":
-        res = jouer_tour(etat, res_ia["ids_tuiles"], res_ia["nouveau_plateau"])
+        res = jouer_tour(etat, res_ia["ids_tuiles"], res_ia["nouveau_plateau"],
+                         fin_manche_pioche_vide=fin_manche_pioche_vide)
         if res["ok"]:
             points_poses = res["etat"]["historique"][-1]["points"]
             return _issue(res["etat"], False, False, "pose",
@@ -408,16 +425,24 @@ def jouer_un_tour(etat: dict, idx: int, temps_par_niveau: dict,
             logger.warning("Coup invalide (%s) au tour %d : %s",
                            niveau, etat["tour_numero"], res["erreur"])
         annuler_tour(etat)
-        return _issue(piocher(etat)["etat"], True, tuiles_disparues, "pioche")
+        return _issue(piocher(
+            etat, fin_manche_pioche_vide=fin_manche_pioche_vide)["etat"],
+            True, tuiles_disparues, "pioche")
     if action == "piocher":
-        return _issue(piocher(etat)["etat"], False, False, "pioche")
+        return _issue(piocher(
+            etat, fin_manche_pioche_vide=fin_manche_pioche_vide)["etat"],
+            False, False, "pioche")
     if action == "passer":
-        return _issue(passer_tour(etat)["etat"], False, False, "passe")
+        return _issue(passer_tour(
+            etat, fin_manche_pioche_vide=fin_manche_pioche_vide)["etat"],
+            False, False, "passe")
 
     logger.warning("Action IA inconnue %r (%s) au tour %d",
                    action, niveau, etat["tour_numero"])
     annuler_tour(etat)
-    return _issue(piocher(etat)["etat"], True, False, "pioche")
+    return _issue(piocher(
+        etat, fin_manche_pioche_vide=fin_manche_pioche_vide)["etat"],
+        True, False, "pioche")
 
 
 # --------------------------------------------------------------------------- #
@@ -433,12 +458,18 @@ def _jouer_une_manche(etat: dict, max_tours: int, temps_par_niveau: dict,
                       manche_numero: int = 1,
                       budget_temps: float = None,
                       dons_joker_configs: list = None,
-                      stats_don_joker: dict = None) -> dict:
+                      stats_don_joker: dict = None,
+                      fin_manche_pioche_vide: bool = False) -> dict:
     """Joue la manche courante de ``etat`` jusqu'à sa fin naturelle (chevalet
     vidé, ou manche BLOQUÉE — vraie règle #255 : pioche vide ET tous les
     joueurs ont passé un tour complet sans jouer) ou jusqu'au garde-fou
     ``max_tours``. Retourne les statistiques de CETTE manche ; ``etat`` est
-    muté en place."""
+    muté en place.
+
+    ``fin_manche_pioche_vide`` (issue #256) : réglage de TEST, désactivé par
+    défaut — voir l'en-tête du module. Si actif, la manche peut aussi se
+    terminer dès que la pioche est vide après un coup (``etat["manche_
+    terminee_pioche_vide_test"]``, posé par le moteur)."""
     tours = 0
     coups_invalides = 0
     coups_tuiles_disparues = 0
@@ -455,7 +486,7 @@ def _jouer_une_manche(etat: dict, max_tours: int, temps_par_niveau: dict,
             etat, idx, temps_par_niveau, replis_expert, preferer_simple,
             perturbations_expert, eval_configs,
             aucun_coup_expert, trace_ctx, manche_numero, budget_temps,
-            dons_joker_configs, stats_don_joker)
+            dons_joker_configs, stats_don_joker, fin_manche_pioche_vide)
         if invalide:
             coups_invalides += 1
         if tuiles_disparues:
@@ -467,16 +498,20 @@ def _jouer_une_manche(etat: dict, max_tours: int, temps_par_niveau: dict,
                         tours, "; ".join(anomalies))
         backup_debut_tour(etat)
 
-    # Manche bloquée (issue #255) : le moteur a déjà tranché
-    # (``etat["manche_bloquee"]``, posé par ``_terminer_tour``) — jamais
-    # recalculé ici, sauf arrêt par le garde-fou (partie abandonnée, ni
-    # chevalet vidé ni manche bloquée au sens du moteur).
+    # Manche bloquée (issue #255) / fin à la pioche vide (réglage de test,
+    # issue #256) : le moteur a déjà tranché (``etat["manche_bloquee"]``/
+    # ``etat["manche_terminee_pioche_vide_test"]``, posés par
+    # ``_terminer_tour``) — jamais recalculés ici, sauf arrêt par le
+    # garde-fou (partie abandonnée, ni l'un ni l'autre au sens du moteur).
     manche_bloquee = not arretee_garde_fou and bool(etat.get("manche_bloquee"))
+    manche_pioche_vide_test = (not arretee_garde_fou
+                               and bool(etat.get("manche_terminee_pioche_vide_test")))
 
     return {
         "tours": tours,
         "arretee_garde_fou": arretee_garde_fou,
         "manche_bloquee": manche_bloquee,
+        "manche_pioche_vide_test": manche_pioche_vide_test,
         "gagnant_manche_index": etat["gagnant_manche_index"],
         "scores_manche": [j["score_manche"] for j in etat["joueurs"]],
         "tuiles_restantes": [len(j["chevalet"]) for j in etat["joueurs"]],
@@ -494,7 +529,8 @@ def jouer_match(config_joueurs: list[dict], nb_manches: int, max_tours: int,
                 trace_ctx: dict = None,
                 budget_temps: float = None,
                 dons_joker_configs: list = None,
-                stats_don_joker: dict = None) -> dict:
+                stats_don_joker: dict = None,
+                fin_manche_pioche_vide: bool = False) -> dict:
     """Joue un MATCH complet à 2 joueurs de ``nb_manches`` manches (issue
     #203). Les manches s'enchaînent via ``nouvelle_manche`` (score cumulé
     conservé, nouvelle donne et mise initiale remise à zéro à chaque manche).
@@ -524,7 +560,8 @@ def jouer_match(config_joueurs: list[dict], nb_manches: int, max_tours: int,
                                 perturbations_expert, eval_configs,
                                 aucun_coup_expert,
                                 trace_ctx, numero, budget_temps,
-                                dons_joker_configs, stats_don_joker)
+                                dons_joker_configs, stats_don_joker,
+                                fin_manche_pioche_vide)
         coups_invalides += res["coups_invalides"]
         coups_tuiles_disparues += res["coups_tuiles_disparues"]
         anomalies_conservation += res["anomalies_conservation"]
@@ -566,7 +603,8 @@ def comparer(niveau_a: str, niveau_b: str, nb_donnes: int, seed: int,
             donnes_fin: int = None,
             mode_fichier: str = "w",
             don_joker_a: bool | None = None,
-            don_joker_b: bool | None = None) -> dict:
+            don_joker_b: bool | None = None,
+            fin_manche_pioche_vide: bool = False) -> dict:
     """``budget_temps`` (issue #228, point 5) : budget de temps du solveur par
     coup, transmis à TOUS les niveaux joués — ``None`` (défaut) laisse le jeu
     décider (1,5 s). ``donnes_debut``/``donnes_fin`` (issue #228, point 5,
@@ -631,7 +669,14 @@ def comparer(niveau_a: str, niveau_b: str, nb_donnes: int, seed: int,
     que laisser un joker libre, le nombre de jokers de main gardés, et les
     échanges facultatifs différés (et parmi eux ceux qui ont forcé une
     pioche) — mesure indépendante du réglage, utile même quand la règle est
-    désactivée (campagne « avant » de référence)."""
+    désactivée (campagne « avant » de référence).
+
+    ``fin_manche_pioche_vide`` (issue #256) : réglage de TEST, désactivé par
+    défaut (``False``) — voir l'en-tête du module. Transmis tel quel à
+    ``jouer_match``/``_jouer_une_manche``/``jouer_un_tour``. Les manches
+    ainsi terminées sont comptées séparément dans ``fins["pioche_vide_
+    test"]``, jamais mélangées à ``fins["chevalet_vide"]``/``["manche_
+    bloquee"]``."""
     cfg_eval = {"A": evaluation_main.depuis_preset(eval_a, nb_manches),
                 "B": evaluation_main.depuis_preset(eval_b, nb_manches)}
     # aléa de jeu (graines de simulation), sans enjeu de sécurité
@@ -654,7 +699,8 @@ def comparer(niveau_a: str, niveau_b: str, nb_donnes: int, seed: int,
     penalites_perdant: list[int] = []
     tuiles_perdant: list[int] = []
     tours_decidees: list[int] = []
-    fins = {"chevalet_vide": 0, "manche_bloquee": 0, "garde_fou": 0}
+    fins = {"chevalet_vide": 0, "manche_bloquee": 0, "garde_fou": 0,
+           "pioche_vide_test": 0}
     temps_par_niveau: dict[str, list[float]] = {}
     coups_invalides_total = 0
     coups_tuiles_disparues_total = 0
@@ -710,7 +756,8 @@ def comparer(niveau_a: str, niveau_b: str, nb_donnes: int, seed: int,
                                    aucun_coup_expert=aucun_coup_expert,
                                    trace_ctx=trace_ctx, budget_temps=budget_temps,
                                    dons_joker_configs=dons_joker_configs,
-                                   stats_don_joker=stats_don_joker)
+                                   stats_don_joker=stats_don_joker,
+                                   fin_manche_pioche_vide=fin_manche_pioche_vide)
             coups_invalides_total += resultat["coups_invalides"]
             coups_tuiles_disparues_total += resultat["coups_tuiles_disparues"]
             anomalies_conservation_total += resultat["anomalies_conservation"]
@@ -737,7 +784,12 @@ def comparer(niveau_a: str, niveau_b: str, nb_donnes: int, seed: int,
                 gi = m["gagnant_manche_index"]
                 perdant_idx = 1 - gi
                 tours_decidees.append(m["tours"])
-                fins["manche_bloquee" if m["manche_bloquee"] else "chevalet_vide"] += 1
+                if m.get("manche_pioche_vide_test"):
+                    fins["pioche_vide_test"] += 1
+                elif m["manche_bloquee"]:
+                    fins["manche_bloquee"] += 1
+                else:
+                    fins["chevalet_vide"] += 1
                 penalites_perdant.append(-m["scores_manche"][perdant_idx])
                 tuiles_perdant.append(m["tuiles_restantes"][perdant_idx])
 
@@ -807,6 +859,9 @@ def comparer(niveau_a: str, niveau_b: str, nb_donnes: int, seed: int,
         "nb_donnes_jouees": len(graines_jouees),
         "nb_parties": 2 * len(graines_jouees),
         "sans_exact": sans_exact,
+        # Réglage de test #256 : jamais utilisé par le jeu, visible en tête
+        # de rapport (afficher_rapport).
+        "fin_manche_pioche_vide": fin_manche_pioche_vide,
         # Gestion du joker (#253, REMPLACE #252), PAR CAMP (voir docstring).
         "don_joker_a": don_joker_a,
         "don_joker_b": don_joker_b,
@@ -859,6 +914,12 @@ def afficher_rapport(resume: dict) -> None:
     print("=" * 70)
     for ligne in entete_dependances(sans_exact=resume.get("sans_exact", False)):
         print(ligne)
+    if resume.get("fin_manche_pioche_vide"):
+        print("Règle de fin de manche : fin à la pioche vide (TEST, #256) "
+             "— ne remplace pas une vérification finale avec la vraie "
+             "règle.")
+    else:
+        print("Règle de fin de manche : réelle (blocage, #255).")
     if replis_deps_absentes and tours_expert:
         # Avertissement visible (#223, point 2) : si le solveur exact s'est
         # révélé indisponible PENDANT la campagne (et pas seulement signalé
@@ -902,7 +963,9 @@ def afficher_rapport(resume: dict) -> None:
     print(f"  RÉSULTATS PAR MANCHE ({n_manches} manche(s) jouée(s)) :")
     print(f"  Fins de manche : {fins['chevalet_vide']} par chevalet vidé, "
          f"{fins['manche_bloquee']} par blocage (tous passés, pioche épuisée), "
-         f"{fins['garde_fou']} match(s) arrêté(s) par le garde-fou (max tours).")
+         f"{fins.get('pioche_vide_test', 0)} par pioche vide (réglage de "
+         f"test #256), {fins['garde_fou']} match(s) arrêté(s) par le "
+         f"garde-fou (max tours).")
     print(f"  Durée moyenne d'une manche décidée : "
          f"{moyenne(resume['tours_decidees']):.1f} tour(s).")
     print(f"  Perdant de manche : en moyenne "
@@ -1078,6 +1141,13 @@ def main(argv: list[str]) -> int:
                              "Expert --sans-don-joker-b).")
     parser.add_argument("--sans-don-joker-b", action="store_true",
                         help="Comme --sans-don-joker-a, pour le camp B.")
+    parser.add_argument("--fin-manche-pioche-vide-test", action="store_true",
+                        help="Réglage de TEST (issue #256, désactivé par "
+                             "défaut) : termine chaque manche dès que la "
+                             "pioche est vide après un coup, comme avant "
+                             "#255, au lieu d'attendre le blocage — pour "
+                             "des campagnes de mesure plus rapides. Ne "
+                             "change jamais le jeu réel.")
     parser.add_argument("-v", "--verbose", action="store_true",
                         help="Journalise chaque partie jouée.")
     args = parser.parse_args(argv[1:])
@@ -1125,7 +1195,8 @@ def main(argv: list[str]) -> int:
                       export_trace=args.export_trace,
                       budget_temps=args.budget_solveur_expert,
                       don_joker_a=(False if args.sans_don_joker_a else None),
-                      don_joker_b=(False if args.sans_don_joker_b else None))
+                      don_joker_b=(False if args.sans_don_joker_b else None),
+                      fin_manche_pioche_vide=args.fin_manche_pioche_vide_test)
     duree = time.monotonic() - debut
 
     afficher_rapport(resume)

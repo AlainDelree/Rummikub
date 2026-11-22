@@ -177,10 +177,14 @@ def _points_tuiles_posees(plateau: list[list[Tuile]], ids_posees: set) -> int:
 
 def jouer_tour(etat: dict,
                ids_tuiles_posees: list[str],
-               nouveau_plateau: list[list[dict]]) -> dict:
+               nouveau_plateau: list[list[dict]],
+               *, fin_manche_pioche_vide: bool = False) -> dict:
     """
     ids_tuiles_posees : ids des tuiles du chevalet jouées.
     nouveau_plateau : plateau proposé (dict-sérialisé).
+
+    ``fin_manche_pioche_vide`` (issue #256) : voir ``_terminer_tour``. Jamais
+    passé par le jeu/l'IA/l'interface — réservé aux scripts de mesure.
     """
     # 1. Convertir le plateau proposé.
     plateau = plateau_depuis_dict(nouveau_plateau)
@@ -237,12 +241,13 @@ def jouer_tour(etat: dict,
     etat["passes_consecutives"] = 0
 
     # 9. Terminer le tour.
-    _terminer_tour(etat)
+    _terminer_tour(etat, fin_manche_pioche_vide=fin_manche_pioche_vide)
 
     return {"ok": True, "etat": etat}
 
 
-def piocher(etat: dict, nb: int = 1) -> dict:
+def piocher(etat: dict, nb: int = 1,
+           *, fin_manche_pioche_vide: bool = False) -> dict:
     """
     Pioche nb tuiles (ou moins si pioche vide), les ajoute au chevalet.
     Appelle _terminer_tour.
@@ -253,6 +258,9 @@ def piocher(etat: dict, nb: int = 1) -> dict:
     ``passer_tour``. Une vraie pioche (au moins une tuile tirée) ne change
     pas ce compteur : la pioche n'étant pas vide, le blocage ne peut de
     toute façon pas se déclencher ce tour-là.
+
+    ``fin_manche_pioche_vide`` (issue #256) : voir ``_terminer_tour``. Jamais
+    passé par le jeu/l'IA/l'interface — réservé aux scripts de mesure.
     """
     joueur = etat["joueurs"][etat["index_joueur_actuel"]]
     piochees: list[dict] = []
@@ -268,24 +276,28 @@ def piocher(etat: dict, nb: int = 1) -> dict:
 
     _ajouter_historique(etat, etat["index_joueur_actuel"],
                         f"{joueur['nom']} a pioché {len(piochees)} tuile(s)", 0)
-    _terminer_tour(etat)
+    _terminer_tour(etat, fin_manche_pioche_vide=fin_manche_pioche_vide)
 
     return {"ok": True, "tuiles_piochees": piochees, "etat": etat}
 
 
-def passer_tour(etat: dict) -> dict:
+def passer_tour(etat: dict, *, fin_manche_pioche_vide: bool = False) -> dict:
     """Passe le tour (aucun coup possible, pioche vide — règle #255).
     Incrémente le compteur de passes consécutives, puis appelle
-    _terminer_tour."""
+    _terminer_tour.
+
+    ``fin_manche_pioche_vide`` (issue #256) : voir ``_terminer_tour``. Jamais
+    passé par le jeu/l'IA/l'interface — réservé aux scripts de mesure.
+    """
     etat["passes_consecutives"] = etat.get("passes_consecutives", 0) + 1
     _ajouter_historique(etat, etat["index_joueur_actuel"],
                         f"{etat['joueurs'][etat['index_joueur_actuel']]['nom']} "
                         f"a passé son tour", 0)
-    _terminer_tour(etat)
+    _terminer_tour(etat, fin_manche_pioche_vide=fin_manche_pioche_vide)
     return {"ok": True, "etat": etat}
 
 
-def _terminer_tour(etat: dict) -> None:
+def _terminer_tour(etat: dict, *, fin_manche_pioche_vide: bool = False) -> None:
     """
     Vérifie fin de manche : chevalet vide (inchangé), ou manche BLOQUÉE
     (issue #255, vraie règle du Rummikub — remplace l'ancienne approximation
@@ -296,6 +308,21 @@ def _terminer_tour(etat: dict) -> None:
     déclencher le blocage : on continue alors à piocher normalement.
     Si fin : calculer_scores_manche, marquer manche_terminee.
     Sinon : passer au joueur suivant, incrémenter tour_numero.
+
+    ``fin_manche_pioche_vide`` (issue #256, réglage de TEST, désactivé par
+    défaut — jamais utilisé par le jeu, l'IA ou l'interface, seulement par
+    les scripts de mesure qui le passent explicitement) : quand actif, la
+    manche se termine aussi dès que la pioche est vide après CE tour, sans
+    attendre le blocage (ancienne approximation d'avant #255) — rétabli
+    uniquement pour bornes la durée des campagnes de calibration. Le
+    décompte des points réutilise alors exactement ``calculer_scores_manche``
+    (aucun chevalet vide : le moins pénalisé gagne, comme pour une manche
+    bloquée). ``etat["manche_terminee_pioche_vide_test"]`` n'est posé
+    (``True``) QUE si cette voie a déclenché la fin — absent sinon, y
+    compris quand ``fin_manche_pioche_vide`` est actif mais n'a pas
+    déclenché la fin : l'état d'une partie par défaut reste ainsi
+    BYTE-POUR-BYTE identique à celui de #255, jamais enregistré dans les
+    parties sauvegardées (l'UI ne passe jamais ce paramètre).
     """
     joueur = etat["joueurs"][etat["index_joueur_actuel"]]
     chevalet_vide = len(joueur["chevalet"]) == 0
@@ -303,12 +330,16 @@ def _terminer_tour(etat: dict) -> None:
     nb_joueurs = len(etat["joueurs"])
     manche_bloquee = (pioche_vide
                       and etat.get("passes_consecutives", 0) >= nb_joueurs)
+    fin_pioche_vide_test = (fin_manche_pioche_vide and pioche_vide
+                            and not chevalet_vide)
 
-    if chevalet_vide or manche_bloquee:
+    if chevalet_vide or manche_bloquee or fin_pioche_vide_test:
         calculer_scores_manche(etat["joueurs"],
                                etat["config"]["valeur_joker_penalite"])
         etat["manche_terminee"] = True
         etat["manche_bloquee"] = manche_bloquee
+        if fin_pioche_vide_test:
+            etat["manche_terminee_pioche_vide_test"] = True
         etat["gagnant_manche_index"] = trouver_gagnant_manche(etat["joueurs"])
         if est_fin_partie(etat):
             # Dernière manche : le match est terminé. Le vainqueur du MATCH est
@@ -370,6 +401,8 @@ def nouvelle_manche(etat: dict) -> dict:
     etat["dernier_coup_ia"] = None
     etat["manche_terminee"] = False
     etat["manche_bloquee"] = False
+    # Réglage de test #256 : jamais persistant d'une manche à l'autre.
+    etat.pop("manche_terminee_pioche_vide_test", None)
     etat["passes_consecutives"] = 0
     etat["gagnant_manche_index"] = None
     etat["manche_numero"] = etat.get("manche_numero", 1) + 1

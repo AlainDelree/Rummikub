@@ -84,3 +84,24 @@ def test_rapport_entete_dependances():
     assert sys.executable in sortie
 
 
+# --------------------------------------------------------------------------- #
+# Règle de fin de manche affichée en tête (issue #256)
+# --------------------------------------------------------------------------- #
+
+def test_rapport_indique_la_regle_reelle_par_defaut(capsys):
+    resume = _resume_minimal()
+    M.afficher_rapport(resume)
+    sortie = capsys.readouterr().out
+    assert "Règle de fin de manche : réelle (blocage, #255)." in sortie
+
+
+def test_rapport_indique_la_regle_de_test_quand_active(capsys):
+    resume = _resume_minimal(fin_manche_pioche_vide=True,
+                             fins={"chevalet_vide": 0, "manche_bloquee": 0,
+                                   "garde_fou": 0, "pioche_vide_test": 3})
+    M.afficher_rapport(resume)
+    sortie = capsys.readouterr().out
+    assert "fin à la pioche vide (TEST, #256)" in sortie
+    assert "3 par pioche vide (réglage de test #256)" in sortie
+
+

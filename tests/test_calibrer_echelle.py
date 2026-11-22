@@ -286,6 +286,72 @@ def test_prolongation_de_donnes_est_autorisee(tmp_path):
 
 
 # --------------------------------------------------------------------------- #
+# Réglage de TEST « fin de manche à la pioche vide » (issue #256, désactivé
+# par défaut) : fait partie des paramètres enregistrés avec le dossier,
+# comme la graine/max_tours/budget/cible.
+# --------------------------------------------------------------------------- #
+
+def test_refuse_la_reprise_avec_une_autre_regle_de_fin_de_manche(tmp_path, capsys):
+    dossier = tmp_path / "calib"
+    code1 = _main_worker([
+        "--dossier", str(dossier), "--paire", "Débutant:Facile",
+        "--donnes", "1", "--seed", "0", "--max-tours", str(_MAX_TOURS_RAPIDE),
+        "--budget-solveur", str(_BUDGET_RAPIDE),
+    ])
+    assert code1 == M.CODE_TERMINE
+
+    code2 = _main_worker([
+        "--dossier", str(dossier), "--paire", "Débutant:Facile",
+        "--donnes", "1", "--seed", "0", "--max-tours", str(_MAX_TOURS_RAPIDE),
+        "--budget-solveur", str(_BUDGET_RAPIDE),
+        "--fin-manche-pioche-vide-test",
+    ])
+    assert code2 == 1
+    erreur = capsys.readouterr().err
+    assert "règle de fin de manche" in erreur
+
+
+def test_dossier_sans_le_parametre_est_considere_comme_regle_reelle(tmp_path):
+    """Un ``reglages.json`` écrit AVANT #256 (sans la clé) est traité comme
+    la règle RÉELLE : une reprise SANS l'option réussit, le rapport
+    l'affiche comme telle."""
+    dossier = tmp_path / "calib"
+    dossier.mkdir()
+    taches = M.construire_taches("paires", paires=[("Débutant", "Facile")],
+                                 resolus=M.bridages_resolus([]))
+    empreinte = M.construire_empreinte("paires", taches, 1, 0,
+                                       _MAX_TOURS_RAPIDE, _BUDGET_RAPIDE,
+                                       M.CIBLE_BASSE_DEFAUT, M.CIBLE_HAUTE_DEFAUT)
+    del empreinte["fin_manche_pioche_vide_test"]
+    (dossier / "reglages.json").write_text(
+        json.dumps(empreinte, ensure_ascii=False), encoding="utf-8")
+
+    code = _main_worker([
+        "--dossier", str(dossier), "--paire", "Débutant:Facile",
+        "--donnes", "1", "--seed", "0", "--max-tours", str(_MAX_TOURS_RAPIDE),
+        "--budget-solveur", str(_BUDGET_RAPIDE),
+    ])
+    assert code == M.CODE_TERMINE
+    rapport = (dossier / "rapport.txt").read_text(encoding="utf-8")
+    assert "réelle (blocage, #255)" in rapport
+
+
+def test_rapport_indique_la_regle_de_test_quand_active(tmp_path):
+    dossier = tmp_path / "calib"
+    code = _main_worker([
+        "--dossier", str(dossier), "--paire", "Débutant:Facile",
+        "--donnes", "1", "--seed", "0", "--max-tours", str(_MAX_TOURS_RAPIDE),
+        "--budget-solveur", str(_BUDGET_RAPIDE),
+        "--fin-manche-pioche-vide-test",
+    ])
+    assert code == M.CODE_TERMINE
+    rapport = (dossier / "rapport.txt").read_text(encoding="utf-8")
+    assert "fin à la pioche vide (TEST, #256)" in rapport
+    reglages = json.loads((dossier / "reglages.json").read_text(encoding="utf-8"))
+    assert reglages["fin_manche_pioche_vide_test"] is True
+
+
+# --------------------------------------------------------------------------- #
 # Campagne complète (rapide) : rapport lisible, statut
 # --------------------------------------------------------------------------- #
 
