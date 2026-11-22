@@ -162,6 +162,46 @@ def test_perturbation_respecte_la_borne(pmax):
         assert valider_plateau(plateau)["valide"]
 
 
+def test_coup_sans_rearrangement_calcule_seulement_si_necessaire(monkeypatch):
+    """Issue #257 : ``_coup_sans_rearrangement`` (une résolution complète du
+    solveur exact) ne doit être calculé QUE s'il sert vraiment en repli —
+    jamais par avance. Avant #257, il était systématiquement calculé AVANT
+    même de savoir si le coup complet tiendrait dans la borne, gaspillant une
+    résolution à chaque tour dans le cas le plus fréquent (voir
+    docs/contexte/ia_anti_don_joker.md et le profil de l'issue : sur un gros
+    plateau, cette résolution coûte jusqu'à plusieurs secondes)."""
+    etat = _etat_joker_recuperable()
+    appels = []
+    original = ia._coup_sans_rearrangement
+
+    def _espion(etat_, idx_):
+        appels.append((etat_, idx_))
+        return original(etat_, idx_)
+
+    monkeypatch.setattr(ia, "_coup_sans_rearrangement", _espion)
+
+    # Cas fréquent : le coup complet déplace 1 tuile (voir
+    # test_perturbation_max_illimitee_recupere_le_joker), qui tient dans une
+    # borne de 5 — le coup sans réarrangement n'est alors JAMAIS calculé.
+    coup = _coup_selon_perturbation(etat, 1, perturbation_max=5,
+                                    budget_temps=None, on_repli=None)
+    assert coup["action"] == "jouer"
+    assert appels == [], (
+        "le coup sans réarrangement a été calculé alors que le coup complet "
+        "tenait déjà dans la borne de perturbation (résolution gaspillée)")
+
+    # Cas de repli : si la perturbation mesurée dépasse la borne, le coup
+    # sans réarrangement DOIT être calculé (une seule fois) pour y retomber.
+    monkeypatch.setattr(ia, "mesurer_perturbation", lambda *a, **k: (999, 999))
+    coup_repli = _coup_selon_perturbation(etat, 1, perturbation_max=5,
+                                          budget_temps=None, on_repli=None)
+    assert len(appels) == 1, (
+        "le coup sans réarrangement aurait dû être calculé exactement une "
+        "fois, en repli, puisque la perturbation mesurée dépasse la borne")
+    assert coup_repli["action"] == "jouer"
+    assert set(coup_repli["ids_tuiles"]) == {"rouge_7_a"}
+
+
 # --------------------------------------------------------------------------- #
 # Paramètre : taux d'oubli
 # --------------------------------------------------------------------------- #

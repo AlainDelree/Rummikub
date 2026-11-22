@@ -1026,20 +1026,29 @@ def _coup_selon_perturbation(etat, idx, perturbation_max, budget_temps, on_repli
                                    eval_config=eval_config,
                                    on_aucun=on_aucun)
 
-    sans_rearr = _coup_sans_rearrangement(etat, idx)
     if perturbation_max <= 0:
-        return sans_rearr
+        return _coup_sans_rearrangement(etat, idx)
 
+    # ``sans_rearr`` (issue #257) : calculé seulement s'il sert vraiment (l'un
+    # des deux ``return`` ci-dessous qui le lit), jamais par avance — évite une
+    # résolution complète du solveur exact (coûteuse sur un gros plateau)
+    # systématiquement gaspillée dans le cas le plus fréquent où ``complet``
+    # est déjà utilisable tel quel. Pure réorganisation de l'ordre des appels
+    # (aucun des deux ne mute ``etat`` ni ne consomme le module ``random``
+    # global, voir docs/contexte/ia_anti_don_joker.md) : le coup FINALEMENT
+    # choisi est strictement identique à avant, à graine égale.
     complet = jouer_niveau_expert(etat, idx, budget_temps=budget_temps,
                                   on_repli=on_repli,
                                   preferer_simple=preferer_simple,
                                   eval_config=eval_config)
     if not (isinstance(complet, dict) and complet.get("action") == "jouer"):
+        sans_rearr = _coup_sans_rearrangement(etat, idx)
         return sans_rearr if sans_rearr is not None else complet
     deplacees, _combos = mesurer_perturbation(etat.get("plateau", []),
                                               complet["nouveau_plateau"])
     if deplacees <= perturbation_max:
         return complet
+    sans_rearr = _coup_sans_rearrangement(etat, idx)
     return sans_rearr if sans_rearr is not None else _piocher_ou_passer(etat)
 
 

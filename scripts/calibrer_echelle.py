@@ -87,7 +87,7 @@ from rummikub.config import NIVEAUX  # noqa: E402
 from rummikub.moteur import ia as _ia  # noqa: E402
 from rummikub.moteur import niveaux as _niveaux  # noqa: E402
 
-from comparer_niveaux_ia import comparer, intervalle_confiance_95  # noqa: E402
+from comparer_niveaux_ia import comparer, intervalle_confiance_95, moyenne  # noqa: E402
 from _limite_temps_ferme import (  # noqa: E402
     CODE_LIMITE_TEMPS, CODE_TERMINE, lancer_avec_limite_ferme,
 )
@@ -359,6 +359,20 @@ def fichier_tache(dossier: Path, label: str) -> Path:
     return dossier / f"resultats_{label}.jsonl"
 
 
+def fichier_stats_tache(dossier: Path, label: str) -> Path:
+    """Fichier à part (issue #257) : une ligne JSON par donne JOUÉE (pas par
+    match comme ``fichier_tache``) avec les statistiques de manche/temps déjà
+    calculées par ``comparer()`` mais jusqu'ici jetées par la calibration
+    (``fins``, ``tours_decidees``, ``temps_par_niveau``) — pour que le rapport
+    affiche la durée des manches, la répartition des fins et le temps de
+    calcul par tour sans campagne de mesure séparée. Toujours en phase avec
+    ``fichier_tache`` (même nombre de donnes complètes, voir
+    :func:`_tronquer_si_necessaire`) ; absent ou en retard sur un dossier créé
+    avant #257 — le rapport l'indique alors sans erreur (voir
+    :func:`_ligne_stats_jeu`)."""
+    return dossier / f"stats_{label}.jsonl"
+
+
 def _lire_enregistrements(chemin: Path) -> list[dict]:
     """Lecture PURE (jamais de ré-écriture) — tolère une dernière ligne mal
     terminée par une coupure brutale (ignorée, comme le reste du fichier)."""
@@ -410,6 +424,69 @@ def _tronquer_si_necessaire(chemin: Path) -> int:
     return stats["donnes_completes"]
 
 
+def _tronquer_stats_si_necessaire(chemin: Path, nb_complet: int) -> None:
+    """Garde ``fichier_stats_tache`` EN PHASE avec ``fichier_tache`` (issue
+    #257) : au plus une ligne par donne complète, jamais une donne au-delà de
+    ``nb_complet`` (déjà déterminé sur le fichier principal). Un dossier créé
+    avant #257 n'a simplement pas ce fichier : rien à tronquer, les nouvelles
+    donnes jouées à partir de maintenant l'alimenteront normalement."""
+    enregistrements = _lire_enregistrements(chemin)
+    if not enregistrements:
+        return
+    valides = [r for r in enregistrements if r["donne"] <= nb_complet]
+    if len(valides) != len(enregistrements):
+        _ecrire_jsonl_atomique(chemin, valides)
+
+
+def _agreger_stats_jeu(enregistrements: list[dict]) -> dict:
+    """Cumule les statistiques de jeu (issue #257) de toutes les donnes
+    ``enregistrements`` (une ligne par donne, voir :func:`fichier_stats_
+    tache`) : répartition des fins de manche, durées de manche (tours), temps
+    de calcul par tour par niveau — exactement les mêmes grandeurs
+    qu'affiche déjà ``comparer_niveaux_ia.py`` (voir ``afficher_rapport``),
+    simplement cumulées sur plusieurs appels à ``comparer()`` (un par
+    donne) au lieu d'un seul."""
+    fins: dict[str, int] = {}
+    tours_decidees: list[int] = []
+    temps_par_niveau: dict[str, list[float]] = {}
+    for rec in enregistrements:
+        for cle, val in rec.get("fins", {}).items():
+            fins[cle] = fins.get(cle, 0) + val
+        tours_decidees.extend(rec.get("tours_decidees", []))
+        for niveau, temps in rec.get("temps_par_niveau", {}).items():
+            temps_par_niveau.setdefault(niveau, []).extend(temps)
+    return {"fins": fins, "tours_decidees": tours_decidees,
+           "temps_par_niveau": temps_par_niveau}
+
+
+def _lire_stats_jeu(chemin: Path) -> list[dict]:
+    """Lecture PURE (voir :func:`_lire_enregistrements`, même tolérance à une
+    dernière ligne tronquée par une coupure brutale)."""
+    return _lire_enregistrements(chemin)
+
+
+def _ligne_stats_jeu(dossier: Path, label: str, indentation: str) -> str | None:
+    """Ligne supplémentaire (issue #257), affichée sous le résultat d'une
+    tâche : durée moyenne des manches, répartition des fins, temps de calcul
+    par tour par niveau. ``None`` si aucune statistique n'est disponible (p.
+    ex. dossier créé avant #257, ou aucune donne encore jouée)."""
+    enregistrements = _lire_stats_jeu(fichier_stats_tache(dossier, label))
+    if not enregistrements:
+        return None
+    agg = _agreger_stats_jeu(enregistrements)
+    if not agg["tours_decidees"]:
+        return None
+    total_fins = sum(agg["fins"].values()) or 1
+    fins_txt = ", ".join(
+        f"{cle} {100 * n / total_fins:.0f} %"
+        for cle, n in sorted(agg["fins"].items()) if n)
+    temps_txt = ", ".join(
+        f"{niveau} moy {moyenne(temps) * 1000:.0f} ms max {max(temps) * 1000:.0f} ms"
+        for niveau, temps in sorted(agg["temps_par_niveau"].items()))
+    return (f"{indentation}manches : {moyenne(agg['tours_decidees']):.1f} "
+           f"tour(s) en moyenne ; fins : {fins_txt} ; temps/tour : {temps_txt}")
+
+
 # --------------------------------------------------------------------------- #
 # Jeu d'une tâche (réutilise directement comparer(), aucune logique dupliquée)
 # --------------------------------------------------------------------------- #
@@ -427,19 +504,32 @@ def jouer_tache(tache: Tache, dossier: Path, donnes_visees: int, seed: int,
     Renvoie ``True`` si interrompu par ``deadline`` avant ``donnes_visees``.
 
     ``fin_manche_pioche_vide_test`` (issue #256) : réglage de TEST, désactivé
-    par défaut — transmis tel quel à ``comparer()``."""
+    par défaut — transmis tel quel à ``comparer()``.
+
+    Écrit aussi (issue #257), une ligne par donne, ``fichier_stats_tache`` :
+    les statistiques de manche/temps que ``comparer()`` calcule déjà mais que
+    la calibration jetait jusqu'ici (voir :func:`_ligne_stats_jeu`)."""
     _niveaux.BRIDAGES[tache.niveau_a] = tache.bridage_a
     _niveaux.BRIDAGES[tache.niveau_b] = tache.bridage_b
     chemin = fichier_tache(dossier, tache.label)
+    chemin_stats = fichier_stats_tache(dossier, tache.label)
     nb_complet = _tronquer_si_necessaire(chemin)
+    _tronquer_stats_si_necessaire(chemin_stats, nb_complet)
     for i in range(nb_complet, donnes_visees):
         if deadline is not None and time.monotonic() >= deadline:
             return True
-        comparer(tache.niveau_a, tache.niveau_b, donnes_visees, seed, max_tours,
-                nb_manches=1, preferer_simple=True, export_resultats=str(chemin),
-                budget_temps=budget_solveur, donnes_debut=i, donnes_fin=i + 1,
-                mode_fichier="a",
-                fin_manche_pioche_vide=fin_manche_pioche_vide_test)
+        resultat = comparer(
+            tache.niveau_a, tache.niveau_b, donnes_visees, seed, max_tours,
+            nb_manches=1, preferer_simple=True, export_resultats=str(chemin),
+            budget_temps=budget_solveur, donnes_debut=i, donnes_fin=i + 1,
+            mode_fichier="a",
+            fin_manche_pioche_vide=fin_manche_pioche_vide_test)
+        with chemin_stats.open("a", encoding="utf-8") as f:
+            f.write(json.dumps({
+                "donne": i + 1, "fins": resultat["fins"],
+                "tours_decidees": resultat["tours_decidees"],
+                "temps_par_niveau": resultat["temps_par_niveau"],
+            }, ensure_ascii=False) + "\n")
         if on_donne is not None:
             on_donne()
     return False
@@ -613,10 +703,16 @@ def generer_rapport(dossier: Path, taches: list[Tache], donnes_visees: int, seed
             lignes.append(_ligne_resultat(t, stats, taux, marge, elo, verdict,
                                           donnes_visees, prefixe=f"  {rang:>2d}. ",
                                           mode=mode))
+            ligne_stats = _ligne_stats_jeu(dossier, t.label, indentation="       ")
+            if ligne_stats is not None:
+                lignes.append(ligne_stats)
     else:
         for t, stats, taux, marge, elo, verdict in resultats:
             lignes.append(_ligne_resultat(t, stats, taux, marge, elo, verdict,
                                           donnes_visees, prefixe="  ", mode=mode))
+            ligne_stats = _ligne_stats_jeu(dossier, t.label, indentation="      ")
+            if ligne_stats is not None:
+                lignes.append(ligne_stats)
 
     if mode == "paires":
         aretes = {(t.niveau_a, t.niveau_b): elo

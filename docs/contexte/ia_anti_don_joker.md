@@ -723,3 +723,81 @@ test), 0/6 par blocage réel ; durée moyenne d'une manche décidée 81,0
 tours ; temps de calcul par tour (Intermédiaire) moyenne 448,3 ms, maximum
 3028,9 ms sur 486 tours. Écart signalé tel quel, sans chercher à le
 corriger dans cette issue (hors périmètre, voir le rapport de clôture).
+
+## 11. Diagnostic de lenteur Intermédiaire contre Avancé 6/0.04 (issue #257)
+
+**Cause** : AUCUN bug ni emballement d'une fonction — la lenteur (jusqu'à un
+facteur 10 entre les deux parties en miroir d'une même donne) vient du MÊME
+phénomène que le §10 ci-dessus (manche BLOQUÉE, règle réelle de #255), mais
+touchant aussi le duel Intermédiaire/Avancé (pas seulement Intermédiaire
+contre Intermédiaire) : sur certaines donnes/graines, UNE des deux parties
+en miroir ne se termine pas par un chevalet vidé mais par un blocage
+(~140 tours plutôt que ~55-70), avec un plateau qui grossit tour après tour
+(jusqu'à une centaine de tuiles, une vingtaine de combinaisons) tant que la
+pioche se vide sans qu'aucun joueur ne sorte. Chaque décision d'IA, bridée
+ou non, résout TOUJOURS le modèle exact complet (HiGHS) au moins une fois
+pour mesurer la perturbation (voir §3 de ce fichier et `_coup_selon_
+perturbation`, `moteur/ia.py`) — et ce modèle lexicographique (`moteur/
+solveur_exact._resoudre_modele`) fait jusqu'à 3 résolutions HiGHS
+successives par décision (tuiles posées, puis simplicité du plateau, puis
+points/jokers). Sur un plateau de ~90 tuiles, une seule de ces résolutions
+peut coûter 1 à 2,5 s (mesuré, profil cProfile d'une partie de 139 tours,
+seed 3, Linux) ; répété sur ~140 tours, cela suffit à expliquer un facteur
+10 avec la partie miroir (qui finit en ~55 tours par chevalet vidé, plateau
+resté petit). Mesuré sur la partie la plus lente (profil détaillé) :
+141 appels à `resoudre_exact` (~1/tour), 407 appels réels `highspy.Highs.
+run()` (~2,93/tour, confirmant les 3 passes lexicographiques), 84,2 s des
+93,9 s totaux (89,6 %) passés DANS `Highs.run()`, aucun dépassement du
+budget de 4 s. `cProfile` seul est TROMPEUR ici (attribution incohérente
+d'une partie du temps à des fonctions triviales de `highspy`, due à son
+mécanisme de callback — `enableCallbacks`, 141 appels) : le chronométrage
+direct de `resoudre_exact` (mesure externe, wall-clock) est la source
+fiable pour ce diagnostic, pas la seule sortie de `cProfile`.
+
+**Correction appliquée (accélération pure, #257, point 4)** :
+`_coup_selon_perturbation` (`moteur/ia.py`) calculait SYSTÉMATIQUEMENT le
+coup sans réarrangement (`_coup_sans_rearrangement`, une résolution de
+plus) AVANT même de savoir si le coup complet tiendrait dans la borne de
+perturbation — gaspillé dans le cas (fréquent) où le coup complet convient
+déjà. Rendu LAZY : calculé seulement dans les deux branches de repli qui
+s'en servent réellement. Aucun changement de décision (vérifié : 40 matchs
+identiques ligne à ligne, `comparer_niveaux_ia.py`, Intermédiaire contre
+Avancé, 20 donnes, seed 0, niveaux du jeu — voir le rapport de clôture de
+#257). Gain marginal (< 1 % du temps mesuré sur la partie la plus lente,
+`_coup_sans_rearrangement` ne coûtant qu'environ 1 ms contre ~700 ms pour
+une résolution HiGHS complète) : NE corrige PAS le facteur 10 lui-même,
+dont la cause (le modèle exact lexicographique sur un gros plateau bloqué)
+est intrinsèque au solveur et n'a pas de correction sûre identifiée sans
+changer les décisions de l'IA (voir pistes NON appliquées ci-dessous).
+
+**Pistes NON appliquées (changeraient potentiellement les décisions de
+l'IA — laissées à la décision d'Alain)** : activer le multi-thread HiGHS
+(`threads`/`parallel`, actuellement forcés à 1/`"off"` dans `_nouveau_highs`)
+pourrait accélérer la preuve d'optimalité SANS changer le résultat si
+l'objectif lexicographique élimine déjà toute égalité réelle — mais rien ne
+garantit l'absence d'égalités résiduelles, et un branch-and-bound parallèle
+pourrait alors choisir une solution optimale DIFFÉRENTE parmi plusieurs
+équivalentes ; non vérifié, donc non appliqué. Autoriser un écart
+d'optimalité (`mip_rel_gap`/`mip_abs_gap`, actuellement 0,0) accélérerait
+nettement mais changerait potentiellement le coup choisi (pas juste sa
+vitesse) — explicitement exclu par les contraintes de l'issue.
+
+**Rapport de calibration plus parlant (#257, point 5)** : `calibrer_
+echelle.py` affiche désormais, sous chaque résultat de tâche, une ligne
+« manches : » (durée moyenne en tours, répartition des fins, temps de
+calcul par tour par niveau) — voir CONTEXTE.md (entrée `calibrer_echelle.py`)
+pour le détail du fichier `stats_<label>.jsonl` qui l'alimente.
+
+**Mesure avant/après (Linux, agent, commande de référence de l'issue,
+seed 31)** : 162,7 s AVANT et APRÈS la correction du point 4 (jeu identique
+rejoué, même seed, mêmes 2 manches en miroir — l'une par chevalet vidé à 55
+tours, l'autre par blocage à 150 tours, temps/tour Avancé jusqu'à 6,0 s,
+Intermédiaire jusqu'à 4,1 s au plus coûteux) : écart non mesurable sur
+cette partie, cohérent avec le gain marginal attendu (voir ci-dessus).
+Variance run-à-run observée au-delà de ce qu'explique le seul correctif :
+d'autres essais sur la MÊME graine 31 ont donné 197,8 s puis 216,8 s
+(avant toute correction) — la décision du solveur exact dépend du temps
+réel écoulé quand le budget (4 s) est consommé en cours de résolution, ce
+qui peut faire diverger deux parties par ailleurs identiques (seed, coups)
+dès qu'une résolution approche cette limite. Observation annexe, pas
+corrigée par #257 (hors périmètre : changerait la force de l'IA).

@@ -3099,7 +3099,13 @@ dépôt.**
     « trop fort »), écart en Elo (formule habituelle, `400·log10(p/(1-p))`,
     corrigée de continuité pour éviter un écart infini à 0 %/100 %) ; en mode
     paires, distance Elo CUMULÉE de chaque niveau à Expert (arête directe
-    préférée si mesurée, sinon chaîne des paires adjacentes).
+    préférée si mesurée, sinon chaîne des paires adjacentes). Depuis #257,
+    chaque ligne de résultat est suivie d'une ligne « manches : » (durée
+    moyenne en tours, répartition des fins, temps de calcul par tour par
+    niveau) lue depuis `stats_<label>.jsonl` (un fichier à part par tâche,
+    une ligne par donne, en phase avec `resultats_<label>.jsonl` — voir
+    `docs/contexte/ia_anti_don_joker.md` §11) ; absent sur un dossier créé
+    avant #257, sans erreur (ligne simplement omise).
   - **Parallélisme** (`--processus 1` ou `2`) : chaque paire/candidat est une
     tâche indépendante, écrite dans son propre fichier JSON Lines
     (`resultats_<label>.jsonl`) — à 2 processus, un `ProcessPoolExecutor` joue

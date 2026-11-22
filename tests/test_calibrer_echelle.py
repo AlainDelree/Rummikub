@@ -387,6 +387,132 @@ def test_statut_lit_sans_rejouer(tmp_path, capsys):
 
 
 # --------------------------------------------------------------------------- #
+# Rapport plus parlant : durée des manches, fins, temps par tour (issue #257)
+# --------------------------------------------------------------------------- #
+
+def _comparer_factice_pour(appels: list):
+    """Remplace ``comparer()`` par une version instantanée (issue #257) :
+    même contrat (écrit 2 lignes miroir dans ``export_resultats``, renvoie
+    un résumé avec ``fins``/``tours_decidees``/``temps_par_niveau``) mais
+    sans jouer aucune vraie partie — Débutant/Facile bridés peuvent produire
+    des manches très longues (voir docs/contexte/ia_anti_don_joker.md et le
+    rapport de l'issue #257), inadaptées à un test rapide."""
+    def _comparer(niveau_a, niveau_b, nb_donnes, seed, max_tours, **kwargs):
+        appels.append(kwargs)
+        donne_num = kwargs["donnes_debut"] + 1
+        chemin = kwargs["export_resultats"]
+        with open(chemin, kwargs.get("mode_fichier", "w"),
+                 encoding="utf-8") as f:
+            for ordre, (score_a, score_b) in ((["A", "B"], (5, -5)),
+                                              (["B", "A"], (-5, 5))):
+                f.write(json.dumps({
+                    "donne": donne_num, "ordre": ordre, "niveau_a": niveau_a,
+                    "niveau_b": niveau_b, "vainqueur_camp": "A",
+                    "arretee_garde_fou": False,
+                    "score_a": score_a, "score_b": score_b,
+                }, ensure_ascii=False) + "\n")
+        return {"fins": {"chevalet_vide": 2, "manche_bloquee": 0,
+                         "garde_fou": 0, "pioche_vide_test": 0},
+               "tours_decidees": [10 + donne_num, 12 + donne_num],
+               "temps_par_niveau": {niveau_a: [0.010 * donne_num],
+                                    niveau_b: [0.020 * donne_num]}}
+    return _comparer
+
+
+def test_jouer_tache_ecrit_une_ligne_de_stats_par_donne(tmp_path, monkeypatch):
+    dossier = tmp_path / "calib"
+    dossier.mkdir()
+    tache = M.Tache(label="Debutant_vs_Facile", niveau_a="Débutant",
+                    bridage_a=_niveaux.BRIDAGES["Débutant"],
+                    niveau_b="Facile", bridage_b=_niveaux.BRIDAGES["Facile"])
+    appels = []
+    monkeypatch.setattr(M, "comparer", _comparer_factice_pour(appels))
+
+    interrompu = M.jouer_tache(tache, dossier, donnes_visees=2, seed=0,
+                               max_tours=10, budget_solveur=0.02, deadline=None)
+    assert interrompu is False
+    assert len(appels) == 2  # une donne à la fois (#228 point 5)
+
+    chemin_stats = M.fichier_stats_tache(dossier, tache.label)
+    lignes = chemin_stats.read_text(encoding="utf-8").strip().splitlines()
+    assert len(lignes) == 2  # 2 donnes jouées = 2 lignes de stats
+    rec1, rec2 = json.loads(lignes[0]), json.loads(lignes[1])
+    assert (rec1["donne"], rec2["donne"]) == (1, 2)
+    assert rec1["tours_decidees"] == [11, 13]
+    assert rec1["temps_par_niveau"] == {"Débutant": [0.01], "Facile": [0.02]}
+    assert rec2["tours_decidees"] == [12, 14]
+
+
+def test_rapport_affiche_duree_manches_fins_et_temps_par_tour(tmp_path, monkeypatch):
+    dossier = tmp_path / "calib"
+    dossier.mkdir()
+    tache = M.Tache(label="Debutant_vs_Facile", niveau_a="Débutant",
+                    bridage_a=_niveaux.BRIDAGES["Débutant"],
+                    niveau_b="Facile", bridage_b=_niveaux.BRIDAGES["Facile"])
+    monkeypatch.setattr(M, "comparer", _comparer_factice_pour([]))
+    M.jouer_tache(tache, dossier, donnes_visees=2, seed=0,
+                 max_tours=10, budget_solveur=0.02, deadline=None)
+
+    rapport = M.generer_rapport(dossier, [tache], donnes_visees=2, seed=0,
+                                cible_basse=0.6, cible_haute=0.7, mode="paires",
+                                duree_s=1.0, interrompu=False)
+    assert "manches :" in rapport
+    assert "tour(s) en moyenne" in rapport
+    assert "fins :" in rapport
+    assert "chevalet_vide 100 %" in rapport
+    assert "temps/tour :" in rapport
+    assert "Débutant" in rapport and "Facile" in rapport
+
+
+def test_agreger_stats_jeu_cumule_plusieurs_donnes():
+    enregistrements = [
+        {"donne": 1, "fins": {"chevalet_vide": 2, "manche_bloquee": 0},
+         "tours_decidees": [10, 12],
+         "temps_par_niveau": {"Débutant": [0.01, 0.02], "Facile": [0.03]}},
+        {"donne": 2, "fins": {"chevalet_vide": 1, "manche_bloquee": 1},
+         "tours_decidees": [20, 25],
+         "temps_par_niveau": {"Débutant": [0.04], "Facile": [0.05, 0.06]}},
+    ]
+    agg = M._agreger_stats_jeu(enregistrements)
+    assert agg["fins"] == {"chevalet_vide": 3, "manche_bloquee": 1}
+    assert agg["tours_decidees"] == [10, 12, 20, 25]
+    assert agg["temps_par_niveau"] == {
+        "Débutant": [0.01, 0.02, 0.04], "Facile": [0.03, 0.05, 0.06]}
+
+
+def test_tronquer_stats_si_necessaire_retire_une_donne_en_trop(tmp_path):
+    dossier = tmp_path / "calib"
+    dossier.mkdir()
+    chemin_stats = M.fichier_stats_tache(dossier, "Debutant_vs_Facile")
+    enregs = [
+        {"donne": 1, "fins": {"chevalet_vide": 2}, "tours_decidees": [10, 12],
+         "temps_par_niveau": {}},
+        {"donne": 2, "fins": {"chevalet_vide": 2}, "tours_decidees": [8, 9],
+         "temps_par_niveau": {}},
+    ]
+    chemin_stats.write_text(
+        "\n".join(json.dumps(r, ensure_ascii=False) for r in enregs) + "\n",
+        encoding="utf-8")
+
+    # La donne 2 n'est pas (encore) complète côté fichier principal
+    # (nb_complet=1) : la ligne de stats correspondante doit être retirée
+    # pour rester EN PHASE (sinon la moyenne compterait une donne jamais
+    # confirmée complète).
+    M._tronquer_stats_si_necessaire(chemin_stats, nb_complet=1)
+    lignes = chemin_stats.read_text(encoding="utf-8").strip().splitlines()
+    assert len(lignes) == 1
+    assert json.loads(lignes[0])["donne"] == 1
+
+
+def test_ligne_stats_jeu_absente_si_aucun_fichier(tmp_path):
+    """Dossier créé avant #257 (ou donne pas encore jouée) : pas de fichier
+    de stats — le rapport ne doit pas planter, juste ne rien ajouter."""
+    dossier = tmp_path / "calib"
+    dossier.mkdir()
+    assert M._ligne_stats_jeu(dossier, "Debutant_vs_Facile", "  ") is None
+
+
+# --------------------------------------------------------------------------- #
 # Options incompatibles / invalides détectées par le CLI
 # --------------------------------------------------------------------------- #
 
