@@ -2,13 +2,27 @@ from pathlib import Path
 import os
 import sys
 
+
+def _calculer_racine_data_gelee(plateforme: str, environ: dict, home: Path) -> Path:
+    """Dossier des données utilisateur en mode gelé (PyInstaller) uniquement.
+
+    Un paquet installé (``C:\\Program Files\\Rummikub`` sous Windows,
+    ``/opt/rummikub`` sous Linux — paquet .deb, issue #258) est en lecture
+    seule pour l'utilisateur : les données (config.json, parties.db, journaux)
+    doivent aller dans un dossier accessible en écriture.
+    - Windows : ``%APPDATA%\\Rummikub`` (comportement historique, inchangé).
+    - Linux : dossier de données XDG de l'utilisateur — ``$XDG_DATA_HOME/
+      rummikub`` si la variable est définie, sinon ``~/.local/share/rummikub``.
+    """
+    if plateforme == "win32":
+        return Path(environ.get("APPDATA", str(home))) / "Rummikub"
+    xdg_data_home = environ.get("XDG_DATA_HOME") or str(home / ".local" / "share")
+    return Path(xdg_data_home) / "rummikub"
+
+
 if getattr(sys, "frozen", False):
     RACINE_PROJET = Path(sys._MEIPASS)
-    # Application gelée (PyInstaller) : installée dans un dossier en lecture
-    # seule (ex. C:\Program Files\Rummikub), donc les données utilisateur
-    # (SQLite, config.json) doivent aller dans un dossier accessible en
-    # écriture — %APPDATA%\Rummikub, sinon PermissionError [WinError 5].
-    RACINE_DATA = Path(os.environ.get("APPDATA", Path.home())) / "Rummikub"
+    RACINE_DATA = _calculer_racine_data_gelee(sys.platform, os.environ, Path.home())
     FICHIER_CFG = RACINE_DATA / "config.json"
 else:
     RACINE_PROJET = Path(__file__).resolve().parent.parent.parent

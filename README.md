@@ -25,6 +25,27 @@ dernière version depuis la page
 [Releases](https://github.com/AlainDelree/Rummikub/releases) du dépôt, puis
 de l'exécuter.
 
+**Sous Ubuntu (et dérivés, dernière LTS recommandée)**, installer le paquet
+`.deb` :
+
+```
+sudo apt install ./rummikub_<version>_amd64.deb
+```
+
+(ou double-cliquer sur le fichier `.deb` pour l'ouvrir dans le centre de
+logiciels d'Ubuntu et cliquer sur « Installer », mot de passe demandé au
+besoin). Une icône **Rummikub** apparaît ensuite dans le menu des
+applications ; un clic suffit pour lancer le jeu, sans terminal. apt
+installe automatiquement les quelques bibliothèques système nécessaires
+(moteur web WebKitGTK). Voir `docs/contexte/paquet_linux.md` pour le détail
+des dépendances et `scripts/construire_deb.py` pour reconstruire le paquet
+soi-même (`python3 scripts/construire_deb.py`, produit
+`dist/rummikub_<version>_amd64.deb`).
+
+**Désinstaller** : `sudo apt remove rummikub` retire le jeu et son lanceur ;
+les parties et réglages du joueur, dans son dossier personnel (voir
+« Données personnelles » ci-dessous), ne sont jamais supprimés.
+
 **Depuis les sources** (Windows ou Linux), avec Python 3.12 installé :
 
 ```
@@ -44,6 +65,9 @@ Le dépôt est organisé ainsi :
 - `scripts/` — outils de mesure et d'analyse (IA, solveurs, parties).
 - `installeur/` — script Inno Setup de l'installeur Windows.
 - `build/` — script de reconstruction complète du binaire Windows.
+- `scripts/construire_deb.py` — construit le paquet `.deb` Ubuntu/Linux.
+- `assets/rummikub.desktop`, `assets/icons_deb/` — lanceur et icônes du
+  paquet Linux.
 
 Installer les dépendances (versions épinglées dans `requirements.txt`) puis
 lancer le jeu :
@@ -65,12 +89,27 @@ Le script `build/rebuild_rummikub.bat` reconstruit l'exécutable avec
 PyInstaller puis l'installeur avec Inno Setup. Voir `CONTEXTE.md` pour le
 détail des étapes.
 
+## Construire le paquet Linux (.deb)
+
+```
+python3 scripts/construire_deb.py
+```
+
+Compile avec PyInstaller si nécessaire (`--force-pyinstaller` pour forcer
+une recompilation), puis assemble `dist/rummikub_<version>_amd64.deb`. Voir
+`docs/contexte/paquet_linux.md` pour le détail (dépendances système,
+emplacements, limites connues).
+
 ## Données personnelles
 
-Les réglages et les parties du joueur restent sur sa machine : `config.json`
-(à la racine du dépôt en développement, dans `%APPDATA%\Rummikub` pour le jeu
-installé sous Windows), `data/parties.db` et `data/logs_parties/`. Ces fichiers ne sont
-pas versionnés dans le dépôt.
+Les réglages et les parties du joueur restent sur sa machine :
+`config.json`, `data/parties.db` et `data/logs_parties/` :
+- en développement, à la racine du dépôt (`config.json`) et dans `data/` ;
+- jeu installé sous Windows : `%APPDATA%\Rummikub` ;
+- jeu installé sous Linux (paquet `.deb`) : `$XDG_DATA_HOME/rummikub` si
+  cette variable est définie, sinon `~/.local/share/rummikub`.
+
+Ces fichiers ne sont pas versionnés dans le dépôt.
 
 ## Documentation technique
 

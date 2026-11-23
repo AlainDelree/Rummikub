@@ -17,6 +17,9 @@
 - **Portable Linux ET Windows** : aucun séparateur de chemin codé en dur,
   tout passe par `pathlib.Path` (côté app) ou `os.path` (côté `.spec`).
 - Dépendances (`requirements.txt`) : `pywebview`, `pyinstaller`, `pytest`.
+- **Paquet .deb Ubuntu LTS** (`scripts/construire_deb.py`, issue #258) : voir
+  `docs/contexte/paquet_linux.md` (construction, dépendances système,
+  chemins de données utilisateur en mode gelé Linux).
 
 ## 2. Architecture générale
 
@@ -30,7 +33,10 @@ data/parties.db             Base SQLite (créée à la volée).
 
 src/rummikub/
   config.py                 Constantes globales + chemins frozen/dev (RACINE_PROJET
-                            via sys._MEIPASS si gelé, sinon parents). COULEURS,
+                            via sys._MEIPASS si gelé, sinon parents). RACINE_DATA en
+                            mode gelé : %APPDATA%\Rummikub (Windows, inchangé) ou
+                            $XDG_DATA_HOME/rummikub ~ ~/.local/share/rummikub (Linux,
+                            issue #258) — voir docs/contexte/paquet_linux.md. COULEURS,
                             VALEUR_MIN/MAX, NB_JOKERS(2), NB_TUILES_DEPART(14),
                             MISE_INITIALE_MIN(30), NIVEAUX (6 libellés IA, §16), AVATARS.
   reglages.py               charger()/sauvegarder(data) de config.json (fusion DEFAUTS).

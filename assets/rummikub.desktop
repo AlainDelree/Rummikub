@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=Rummikub
+Comment=Jouer au Rummikub seul contre l'ordinateur
+Comment[fr]=Jouer au Rummikub seul contre l'ordinateur
+Exec=/opt/rummikub/Rummikub
+Icon=rummikub
+Terminal=false
+Categories=Game;BoardGame;
+StartupWMClass=Rummikub
