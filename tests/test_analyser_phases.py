@@ -26,7 +26,8 @@ def _ligne_tour(chevalet_avant, ouvert_avant, **kwargs):
 
 def test_prologue_quel_que_soit_le_chevalet_si_pas_encore_ouvert():
     # Même avec un petit chevalet, pas encore ouvert => prologue (le seuil
-    # de fin de partie ne s'applique qu'APRÈS l'ouverture, §13/#226).
+    # de fin de partie ne s'applique qu'APRÈS l'ouverture,
+    # docs/contexte/pistes_amelioration_ia.md §13/#226).
     ligne = _ligne_tour(chevalet_avant=3, ouvert_avant=False)
     assert AP.phase_du_tour(ligne, seuil=5) == "prologue"
     assert AP.phase_du_tour(ligne, seuil=6) == "prologue"

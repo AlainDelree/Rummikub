@@ -488,7 +488,8 @@ def _etat_echange_en_reserve(niveau="Expert"):
     c'est l'« autre coup » que l'IA joue normalement pendant l'attente.
     ``bleu_9`` isolé (inutilisable) évite que jouer rouge_6+noir_3 ne vide
     le chevalet (ce qui déclencherait l'exception absolue du coup gagnant
-    avant même d'atteindre la gestion du joker, §13)."""
+    avant même d'atteindre la gestion du joker, docs/contexte/
+    ia_anti_don_joker.md §3)."""
     return _bot(niveau,
                plateau=[[
                    _t("rouge_4_a", 4, "rouge"), _t("rouge_5_a", 5, "rouge"),

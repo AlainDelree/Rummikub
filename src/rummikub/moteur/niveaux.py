@@ -193,7 +193,8 @@ CLE_ATTENTE_ECHANGE_DIFFERE = "tours_attente_echange_differe"
 
 # Débarras du joker inutile en fin de MATCH multi-manches (#254, point 7).
 # Un joker de main jugé NON utile (``moteur/ia._appliquer_joker_utile``) est
-# normalement gardé en main (voir §4) — SAUF en fin de match à plusieurs
+# normalement gardé en main (voir docs/contexte/ia_anti_don_joker.md §4) —
+# SAUF en fin de match à plusieurs
 # manches (``etat["config"]["nb_manches"] > 1``), où le conserver jusqu'à la
 # fin de la DERNIÈRE manche perdue coûterait sa pénalité
 # (``valeur_joker_penalite``, défaut 30, voir ``moteur/score.

@@ -629,7 +629,8 @@ def formater_rapport(resultat: dict, agr: dict) -> str:
     w("")
     w("PORTÉE — à ne pas sur-interpréter : les deux solveurs n'optimisent")
     w("qu'UN tour. Ce match ne mesure PAS les stratégies sur plusieurs tours")
-    w("(réserve, joker gardé, rétention — CONTEXTE.md §13), ni la force d'un")
+    w("(réserve, joker gardé, rétention — docs/contexte/")
+    w("pistes_amelioration_ia.md §13), ni la force d'un")
     w("humain : seulement si, à jeu « un tour » égal, nos critères de")
     w("départage (simplicité #199, économie de jokers) tiennent la route.")
     w("=" * 72)
@@ -659,7 +660,8 @@ def _interpreter(agr: dict) -> list[str]:
         lignes.append(
             "Conséquence : nos critères de départage (simplicité, économie de "
             "jokers) ne nous désavantagent pas de façon mesurable ; le progrès "
-            "est à chercher dans le jeu sur plusieurs tours (CONTEXTE.md §13).")
+            "est à chercher dans le jeu sur plusieurs tours (docs/contexte/"
+            "pistes_amelioration_ia.md §13).")
     elif tn["taux"] < tb["taux"]:
         lignes.append(
             "Notre solveur perd NETTEMENT (IC 95 % disjoints) : nos critères de "

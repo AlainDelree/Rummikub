@@ -1143,7 +1143,8 @@ def jokers_libres_sur_plateau(plateau):
     deux voies exigent de JOUER une tuile (la tuile de remplacement, ou la
     tuile d'extension), donc ne rendent pas le joker libre au nouveau sens
     — même si l'IA elle-même peut s'en servir pour RÉCUPÉRER un joker lors
-    de son propre coup (§8) ; elles ne comptent plus comme un « cadeau »
+    de son propre coup (docs/contexte/joker_tactiques.md §8) ; elles ne
+    comptent plus comme un « cadeau »
     (nuance d'Alain, #253, qui corrige la définition trop large de #252 :
     cf. docs/contexte/ia_anti_don_joker.md, exemple chiffré).
 
@@ -1467,7 +1468,8 @@ def _appliquer_echange_differe(etat, idx, coup, bridage, budget_temps,
       l'alternative est prise (le joker reste alors « en réserve » sur le
       tapis, ce qui ne coûte rien puisque personne d'autre ne peut le
       prendre) ; si aucune alternative n'existe, le point 4 pioche SANS
-      compteur ni limite (comportement générique inchangé, voir §5) — ce
+      compteur ni limite (comportement générique inchangé, voir
+      docs/contexte/ia_anti_don_joker.md §5) — ce
       n'est PAS une réouverture du délai de CE point 6 (son propre compteur
       reste remis à 0 par ce tour), seulement l'application normale, à
       n'importe quel coup, de la protection générique contre un joker
@@ -1694,7 +1696,8 @@ def jouer_niveau_bride(etat, idx, nom_niveau, budget_temps=None, rng=None,
     1. calcule le meilleur coup que le niveau « voit » (borné par
        ``perturbation_max``) ;
     2. un coup qui VIDE la main gagne la partie : renvoyé tel quel, jamais
-       oublié, ni dégradé, ni soumis à la gestion du joker ci-dessous (§13) ;
+       oublié, ni dégradé, ni soumis à la gestion du joker ci-dessous
+       (docs/contexte/ia_anti_don_joker.md §3) ;
     2bis. gestion du joker (issue #253, Intermédiaire/Avancé/Expert, voir
        ``niveaux.Bridage.eviter_don_joker`` et docs/contexte/
        ia_anti_don_joker.md — REMPLACE la règle d'attente de #252), DANS CET
@@ -1745,7 +1748,8 @@ def jouer_niveau_bride(etat, idx, nom_niveau, budget_temps=None, rng=None,
         return coup if isinstance(coup, dict) else _piocher_ou_passer(etat)
 
     # Un coup qui vide la main gagne : jamais oublié, ni soumis à la gestion
-    # du joker (§13, exception absolue de #252/#253).
+    # du joker (docs/contexte/ia_anti_don_joker.md §3, exception absolue de
+    # #252/#253).
     vide_la_main = (taille_main - len(coup.get("ids_tuiles") or [])) <= 0
     if vide_la_main:
         return coup

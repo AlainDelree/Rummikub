@@ -96,7 +96,8 @@ MESSAGE_INSTALLATION = (
     "environnement de développement (Python 3.11+) :\n"
     "    python -m venv .venv-solveur-exact\n"
     "    .venv-solveur-exact/bin/pip install 'rummikub-solver[highs]'\n"
-    "puis lancer les scripts/tests avec ce Python. Voir CONTEXTE.md §14."
+    "puis lancer les scripts/tests avec ce Python. Voir "
+    "docs/contexte/solveur_verification_exacte.md §14."
 )
 
 

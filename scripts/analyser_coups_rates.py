@@ -722,7 +722,8 @@ def main(argv=None) -> int:
                              "plus ni décision « inconclusive » ni coup manqué à cause du "
                              "gel de combinaisons. Désactivé par défaut ; si la "
                              "bibliothèque est absente, le signale clairement et s'arrête "
-                             "(voir scripts/solveur_exact.py et CONTEXTE.md §14).")
+                             "(voir scripts/solveur_exact.py et "
+                             "docs/contexte/solveur_verification_exacte.md §14).")
     args = parser.parse_args(argv)
 
     # Juge de l'analyse (issue #213, suite de #204) :
@@ -764,7 +765,8 @@ def main(argv=None) -> int:
         else:
             print("highspy/numpy absents : le juge se replie sur la recherche "
                   "arborescente (moteur/solveur.py) — borne basse, voir "
-                  "CONTEXTE.md §14.\n", file=sys.stderr)
+                  "docs/contexte/solveur_verification_exacte.md §14.\n",
+                  file=sys.stderr)
 
     if args.budget < 10.0:
         print(f"AVERTISSEMENT : --budget {args.budget} s est inférieur au budget "
