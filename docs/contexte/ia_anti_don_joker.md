@@ -639,19 +639,42 @@ restent chacun couverts par un test unitaire DÉDIÉ (§4 à §8bis) qui les
 exerce directement, indépendamment de cette mesure globale. Le match étant
 à UNE SEULE manche par défaut, le point 7 (débarras en fin de match) ne
 peut se déclencher dans CETTE campagne (`nb_manches=1`) — il est propre
-aux campagnes à plusieurs manches (voir CONTEXTE.md §19 pour les commandes
-appariées, inchangées par #254).
+aux campagnes à plusieurs manches (voir « Campagnes appariées » ci-dessous
+pour les commandes, inchangées par #254).
 
-### Campagnes appariées (à lancer par Alain — voir CONTEXTE.md §19)
+### Campagnes appariées à lancer par Alain (premier plan, limite de temps ferme)
 
-Voir CONTEXTE.md §19 pour les commandes complètes (≥ 300 donnes, premier
-plan, limite de temps ferme) : Expert avec/sans la règle, et Intermédiaire
-contre Avancé avec/sans la règle des deux côtés. Chaque rapport affiche,
-par camp, le taux de victoire (IC 95 %) et les compteurs de ce §9 — à
-comparer entre AVEC et SANS pour juger l'effet réel. Le point 7 (#254)
-n'est mesurable que sur une campagne à plusieurs manches (`--manches N`,
-N > 1) : aucune commande appariée de ce type n'existait avant #254 ; à
-ajouter par Alain si une mesure spécifique de ce point est souhaitée.
+Comparer avec/sans la règle à seed et donnes identiques :
+
+```
+# Expert avec la règle vs Expert sans la règle (≥ 300 donnes, miroir) :
+timeout 3600 python scripts/comparer_niveaux_ia.py --niveau-a Expert --niveau-b Expert \
+    --sans-don-joker-b --donnes 300 --seed 42 2>&1 | tee /tmp/duel_253_expert_$(hostname).txt
+
+# Intermédiaire vs Avancé, règle activée des DEUX côtés (≥ 300 donnes) :
+timeout 3600 python scripts/comparer_niveaux_ia.py --niveau-a Intermédiaire --niveau-b Avancé \
+    --donnes 300 --seed 42 2>&1 | tee /tmp/duel_253_intermediaire_vs_avance_avec_$(hostname).txt
+
+# Même duel, règle DÉSACTIVÉE des deux côtés — pour comparaison :
+timeout 3600 python scripts/comparer_niveaux_ia.py --niveau-a Intermédiaire --niveau-b Avancé \
+    --sans-don-joker-a --sans-don-joker-b --donnes 300 --seed 42 \
+    2>&1 | tee /tmp/duel_253_intermediaire_vs_avance_sans_$(hostname).txt
+```
+
+Chaque rapport affiche, par camp : le taux de victoire (avec marge d'erreur
+IC 95 %), les compteurs de ce §9 (jokers libres laissés, pioches forcées,
+jokers de main gardés, échanges différés), et la répartition du nombre de
+tuiles en main du perdant en fin de manche — à comparer entre la version
+AVEC et SANS la règle. Seul le point 6 (échange différé) profite à l'IA
+elle-même quel que soit l'adversaire : c'est le seul sous-point que ces
+duels IA-contre-IA mesurent vraiment sur le taux de victoire (les points
+3/4/5 ne sont validés que par les compteurs et les tests fixes — un essai
+de 20 donnes fait par l'agent montre déjà 0,0 % de jokers libres laissés
+contre 0,2 % sans aucune règle, et un surcoût de calcul d'environ 17 % en
+moyenne, maximum inchangé). Le point 7 (#254) n'est mesurable que sur une
+campagne à plusieurs manches (`--manches N`, N > 1) : aucune commande
+appariée de ce type n'existait avant #254 ; à ajouter par Alain si une
+mesure spécifique de ce point est souhaitée.
 
 ## 10. Réglage de TEST « fin de manche à la pioche vide » (issue #256)
 
