@@ -12,18 +12,30 @@ _WEB = Path(__file__).parent / "web"
 def _handler_fermeture_actualise():
     """À la fermeture de Rummikub, si Actualise a déposé un flag de mise à
     jour, retire le flag et lance le bat de mise à jour. Ne doit JAMAIS
-    empêcher la fermeture de la fenêtre. Le chemin ``bat`` est validé avant
-    lancement (SEC-003, voir rummikub.actualise.valider_chemin_actualise) et
-    lancé SANS shell : un chemin absent, de mauvaise extension ou hors de la
-    racine Actualise autorisée est ignoré, sans lancer quoi que ce soit."""
+    empêcher la fermeture de la fenêtre. La suppression du flag est
+    tolérante : un échec (ex. droits refusés sur le dossier d'installation)
+    est journalisé et n'empêche ni la fermeture ni la tentative de lancer le
+    bat. Le chemin ``bat`` est validé avant lancement (SEC-003, voir
+    rummikub.actualise.valider_chemin_actualise) et lancé SANS shell : un
+    chemin absent, de mauvaise extension ou hors de la racine Actualise
+    autorisée est ignoré, sans lancer quoi que ce soit."""
     _flag = Path(sys.executable).parent / "actualise_update.flag"
-    if not _flag.exists():
-        return
+    try:
+        if not _flag.exists():
+            return
+    except OSError:
+        return  # dossier/flag inaccessible : ne jamais empêcher la fermeture
     try:
         _data = json.loads(_flag.read_text(encoding="utf-8"))
     except Exception:
         return  # drapeau illisible : ne jamais bloquer la fermeture
-    _flag.unlink(missing_ok=True)
+    try:
+        _flag.unlink(missing_ok=True)
+    except OSError as exc:
+        # Dossier d'installation non modifiable (droits non-admin) : ne
+        # jamais empêcher la fermeture ni la tentative de lancer le bat.
+        print(f"[Rummikub] Suppression du flag de mise a jour impossible : {exc}",
+              file=sys.stderr)
     from rummikub.actualise import valider_chemin_actualise
     _bat = valider_chemin_actualise(_data.get("bat"))
     if _bat is None:
@@ -31,7 +43,10 @@ def _handler_fermeture_actualise():
               "hors de la racine Actualise autorisee.", file=sys.stderr)
         return
     with contextlib.suppress(Exception):  # ne jamais empêcher la fermeture de Rummikub
-        subprocess.Popen([str(_bat)])
+        # aucun shell ; _bat validé ci-dessus par valider_chemin_actualise
+        # (existence, extension .bat/.exe, sous la racine Actualise
+        # autorisée) : seul argument du lancement
+        subprocess.Popen([str(_bat)])  # noqa: S603  # nosec B603
 
 
 class ApplicationRummikub:

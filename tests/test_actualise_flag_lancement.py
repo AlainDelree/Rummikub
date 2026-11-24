@@ -178,6 +178,31 @@ def test_application_bat_valide_lance_sans_shell(
     assert not flag.exists()  # le flag est retiré même après un lancement
 
 
+def test_application_echec_suppression_flag_tolere_et_lance_tout_de_meme(
+        dossier_install, racine_actualise, monkeypatch, capsys):
+    """Simule un dossier d'installation non modifiable (droits non-admin,
+    issue #265) : ``Path.unlink`` lève une erreur de droits, sans dépendre
+    des permissions réelles du système de fichiers (fonctionne sous Linux
+    comme sous Windows). La fermeture ne doit ni lever ni empêcher la
+    tentative de lancer le bat de mise à jour."""
+    bat = _preparer_exe(racine_actualise, "updater_rummikub.bat")
+    flag = _ecrire_flag(dossier_install, {"bat": str(bat)})
+    popen = _PopenAppels()
+    monkeypatch.setattr(_application_module.subprocess, "Popen", popen)
+
+    def _unlink_refuse(self, missing_ok=False):
+        raise PermissionError("droits refuses (simule)")
+
+    monkeypatch.setattr(Path, "unlink", _unlink_refuse)
+    _application_module._handler_fermeture_actualise()  # ne doit pas lever
+    assert len(popen.appels) == 1
+    args, kwargs = popen.appels[0]
+    assert args == [str(bat.resolve())]
+    assert kwargs.get("shell", False) is False
+    assert flag.exists()  # suppression échouée : le flag reste en place
+    assert "Suppression du flag" in capsys.readouterr().err
+
+
 def test_application_bat_hors_racine_ne_lance_rien(
         dossier_install, racine_actualise, tmp_path, monkeypatch):
     racine_actualise.mkdir(parents=True, exist_ok=True)

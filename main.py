@@ -42,7 +42,11 @@ def _lancer_actualise_ui_si_flag():
               file=sys.stderr)
         return
     with contextlib.suppress(Exception):  # ne jamais bloquer le démarrage de Rummikub
-        subprocess.Popen([
+        # aucun shell ; _actualise_ui/_bat validés ci-dessus par
+        # valider_chemin_actualise (existence, extension .bat/.exe, sous la
+        # racine Actualise autorisée) ; _flag et sys.executable sont des
+        # chemins internes à Rummikub, non saisis par l'utilisateur
+        subprocess.Popen([  # noqa: S603  # nosec B603
             str(_actualise_ui),
             "--bat", str(_bat),
             "--flag", str(_flag),

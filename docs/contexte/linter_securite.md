@@ -27,10 +27,11 @@ Codes bandit/ruff déjà traités comme faux positifs jugés dans Rummikub :
 - `S311` (↔ `B311`) : aléa de jeu (mélange du sac, tirage de l'oubli des
   niveaux, nom aléatoire d'IA, graines de simulation) — sans enjeu crypto.
 
-Un `subprocess` dont un argument provient d'un fichier externe (même validé,
-ex. `valider_chemin_actualise`/SEC-003 dans `main.py`/`ui/application.py`)
-n'est **pas** traité comme faux positif acquis : à juger au cas par cas,
-laissé signalé plutôt que supprimé.
+Un `subprocess` dont un argument provient d'un fichier externe validé par
+`valider_chemin_actualise`/SEC-003 (`main.py`, `ui/application.py`, les trois
+lancements d'Actualise) est traité comme faux positif acquis et justifié en
+ligne (existence, extension `.bat`/`.exe`, racine Actualise autorisée) :
+cas jugé, pas laissé signalé.
 
 `S101` (assert) et `S108` (chemin `/tmp` en dur) dans `tests/` : convention
 pytest standard, hors périmètre de ce nettoyage (laissés tels quels).
