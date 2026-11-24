@@ -10,32 +10,17 @@
 > `--sans-don-joker-a`/`-b` de `scripts/comparer_niveaux_ia.py` (noms
 > conservés de #252, gouvernent maintenant l'ensemble ci-dessous).
 
-## 1. Constat qui a motivé #253
+## 1. Constat qui a motivé #253 (pointeur)
 
-La mesure faite sous #252 (16 donnes, Avancé contre Expert, graine 42) a
-montré que sa définition de « joker offert » était trop large : elle
-comptait tout joker échangeable contre une tuile non encore vue, y compris
-un joker au milieu d'une suite de 3 ou 4 tuiles, que personne ne peut
-prendre sans poser une tuile ou recomposer le tapis. Sur 44 jokers
-« offerts » relevés sans la règle (hors dernier coup), 40 étaient des
-jokers de la MAIN posés par l'IA elle-même (plus de la moitié à
-l'ouverture) — pas des jokers laissés accessibles sur le tapis. La règle de
-#252 (pioche deux tours au plus) faisait donc perdre des tours (environ 9 %)
-pour un résultat presque nul : les jokers restants étaient tous des coups
-joués de force après l'attente.
-
-Avec la définition d'Alain (§2 ci-dessous), ce problème ne se présente
-quasiment pas : une campagne de mesure de 20 donnes (Expert contre Expert,
-graine 42, **sans** aucune des règles ci-dessous) montre 1 coup sur 524
-(0,2 %) qui laisse un NOUVEAU joker libre — proche de l'observation
-d'Alain (« zéro cas sur 868 coups, même sans règle »). Le vrai problème que
-#253 corrige est ailleurs : l'IA pose un joker de SA main sans que cela lui
-serve, parce que le solveur compte le joker comme une tuile posée comme une
-autre (l'économie de jokers n'étant qu'un tout dernier critère de
-départage, voir §8bis de CONTEXTE.md). #254 corrige sept points où le code
-ou le texte de #253 s'écartait encore des règles voulues par Alain (voir
-§4 à §9bis ci-dessous) — aucune valeur de perturbation ni d'oubli n'est
-modifiée.
+La règle de #252 détectait le joker « offert » de façon trop large (y
+compris des jokers de la main posés par l'IA elle-même, pas seulement des
+jokers laissés accessibles sur le tapis), ce qui lui faisait perdre des
+tours pour un résultat presque nul. #253 l'a remplacée par les définitions
+précises du §2 ci-dessous ; l'économie de jokers reste un tout dernier
+critère de départage du solveur (voir solveur_expert.md §8bis). #254 a
+ensuite corrigé sept écarts restants entre le code et les règles voulues
+par Alain (§4 à §9bis). Chiffres de mesure et récit complet : CHANGELOG.md,
+issues #252, #253, #254.
 
 ## 2. Définitions : joker LIBRE, joker EN RÉSERVE
 
@@ -45,7 +30,7 @@ recomposer le tapis** — c'est-à-dire que le simple RETRAIT du joker, SANS
 AUCUNE AUTRE MODIFICATION, laisse déjà les combinaisons restantes valides.
 Trois voies, codées dans `jokers_libres_sur_plateau(plateau)`
 (`moteur/ia.py`), toutes réutilisant une détection déjà codée pour l'IA
-elle-même (§8 de CONTEXTE.md), SANS qu'aucune ne consomme de tuile du
+elle-même (joker_tactiques.md §8), SANS qu'aucune ne consomme de tuile du
 chevalet — condition commune aux trois :
 
 1. **bout de suite** (`_jokers_libres_par_bout_suite`) : joker à une
@@ -79,16 +64,10 @@ même en plusieurs étapes, qui y conduirait — l'un est un sous-cas qui
 EXCLUT l'autre : un joker déjà libre n'est par construction jamais en
 réserve. Voir §7 pour le test complet (`_joker_en_reserve`, #254 point 1).
 
-**Changements par rapport à #252** : l'ancienne notion de « joker offert »
-incluait aussi l'échange direct (`_jokers_recuperables`) et le détachement
-par extension (`_jokers_detachables_par_extension`) via un chevalet
-HYPOTHÉTIQUE de tuiles non encore vues — ces deux voies exigent de JOUER
-une tuile (la tuile de remplacement ou la tuile d'extension), donc ne
-rendent PAS le joker libre au sens ci-dessus (nuance centrale d'Alain). Le
-chevalet hypothétique et sa construction (`_exemplaires_vus`,
-`_chevalet_hypothetique_inconnu`) sont donc **supprimés** : la définition
-de « libre » ne dépend plus d'aucune tuile de main ou de pioche, seulement
-du plateau.
+**Changement par rapport à #252** : l'ancienne notion de « joker offert »
+reposait sur un chevalet HYPOTHÉTIQUE de tuiles non encore vues, désormais
+supprimé — « libre » ne dépend plus que du plateau, jamais d'une main ou
+de la pioche.
 
 ## 3. Arbre de décision complet (`jouer_niveau_bride`, `moteur/ia.py`)
 
@@ -256,7 +235,7 @@ termine seulement de piocher (`moteur/partie.piocher` ne tire alors plus
 aucune tuile) ; un joueur qui ne peut pas jouer PASSE (`passer_tour`), et
 la manche ne se termine que par un chevalet vidé ou par un **blocage**
 (pioche vide ET tous les joueurs ont passé un tour complet de suite sans
-qu'aucun coup ne soit joué entre-temps, voir CONTEXTE.md §3bis). **Ce
+qu'aucun coup ne soit joué entre-temps, voir moteur_regles.md §3bis). **Ce
 chemin de code (pioche vide au début d'une décision de l'IA) est donc
 désormais un cas FRÉQUENT en jeu réel** (en fin de manche, surtout à
 plusieurs joueurs), pas seulement un filet de robustesse pour les tests
@@ -525,7 +504,7 @@ serait indisponible) et `moteur/score.calculer_scores_manche` (la
 pénalité d'un joker en main, `valeur_joker_penalite`, défaut 30, est
 soustraite du `score_manche` du perdant, qui s'ACCUMULE ensuite dans
 `score_cumul` au fil des manches, `moteur/partie.nouvelle_manche` — voir
-§3bis de CONTEXTE.md pour le détail des manches).
+moteur_regles.md §3bis pour le détail des manches).
 
 **Conséquence** : à une seule manche, perdre avec ou sans joker en main ne
 change RIEN (le score cumulé ne va pas au-delà de cette manche) — la règle
@@ -592,55 +571,13 @@ vide le chevalet) qui rendent NOUVEAU libre un joker, sur le total de ces
 coups (taux) ; le nombre de tours de pioche dus à un joker libre sans
 alternative ; le nombre de jokers de main gardés plutôt que joués
 (désormais compté joker par joker, §4) ; le nombre d'échanges facultatifs
-différés, et parmi eux ceux ayant forcé une pioche ; et, NOUVEAU (#254,
-point 7), le nombre de jokers inutiles posés pour s'en débarrasser en fin
-de match.
+différés, et parmi eux ceux ayant forcé une pioche ; et le nombre de
+jokers inutiles posés pour s'en débarrasser en fin de match (§8bis).
 
-Essai de 20 donnes, premier plan, graine 42, Expert contre Expert, limite
-de temps ferme (`timeout 900`, bien au-delà du temps réel observé) :
-
-```
-# AVANT (règle désactivée des deux côtés — référence, INCHANGÉ depuis #253,
-# cette campagne ne mesure aucune des 7 corrections de #254 puisque la
-# règle entière est coupée) :
-python scripts/comparer_niveaux_ia.py --niveau-a Expert --niveau-b Expert \
-    --donnes 20 --seed 42 --sans-don-joker-a --sans-don-joker-b
-# → 1/524 coup(s) (0,2 %) laissent un joker libre ; 0 pioche forcée ;
-#   0 joker de main gardé ; 0 échange différé ; 0 débarras fin de match.
-#   Temps de calcul Expert : moyenne 74,7 ms, max 1259,8 ms (2610 tours).
-
-# APRÈS (règle activée des deux côtés, #254 appliqué) :
-python scripts/comparer_niveaux_ia.py --niveau-a Expert --niveau-b Expert \
-    --donnes 20 --seed 42
-# → 0/531 coup(s) (0,0 %) laissent un joker libre ; 2 pioches forcées ;
-#   5 jokers de main gardés ; 1 échange différé (ayant forcé 1 pioche) ;
-#   0 débarras de fin de match (nb_manches=1, condition 1 du point 7
-#   jamais remplie — voir ci-dessous).
-#   Temps de calcul Expert : moyenne 78,2 ms, max 1386,9 ms (2642 tours).
-```
-
-Effet mesuré : les compteurs sont IDENTIQUES à ceux déjà publiés par #253
-(même graine, mêmes donnes) — attendu, puisqu'aucune des 7 corrections de
-#254 ne change le comportement pour les coups effectivement rencontrés
-sur CETTE campagne précise à une seule manche et sans situation de pioche
-vide ni de double-joker non utile : le point 1 (test complet de réserve)
-ne change rien tant qu'aucune recombinaison « groupe de 4 déjà complet »
-ne coexiste avec l'échange rencontré ; le point 2 (soumission au §5) ne
-change rien tant que l'échange forcé ne laisse pas réellement de nouveau
-joker libre ; le point 3 (compteur pendant une pioche) ne change rien tant
-que le délai n'est pas atteint par cette voie ; le point 4 (jokers
-évalués séparément) ne change rien tant que l'IA n'a pas deux jokers en
-main simultanément ; le point 5 (pioche vide) ne se déclenche jamais en
-jeu réel tour par tour (voir §5 — vrai SEULEMENT pour cette campagne,
-jouée avant #255 ; depuis #255, la pioche vide persiste sur plusieurs
-tours réels, voir la mise à jour de §5) ; le point 7 (fin de match) exige
-`nb_manches > 1`, absent de cette campagne à 1 manche. Ces 7 points
-restent chacun couverts par un test unitaire DÉDIÉ (§4 à §8bis) qui les
-exerce directement, indépendamment de cette mesure globale. Le match étant
-à UNE SEULE manche par défaut, le point 7 (débarras en fin de match) ne
-peut se déclencher dans CETTE campagne (`nb_manches=1`) — il est propre
-aux campagnes à plusieurs manches (voir « Campagnes appariées » ci-dessous
-pour les commandes, inchangées par #254).
+Chaque point est couvert par un test unitaire DÉDIÉ (§4 à §8bis),
+indépendamment de toute mesure globale. Chiffres de la campagne de
+référence (20 donnes, Expert contre Expert, avec/sans la règle) :
+CHANGELOG.md, issues #253 et #254.
 
 ### Campagnes appariées à lancer par Alain (premier plan, limite de temps ferme)
 
@@ -668,18 +605,17 @@ tuiles en main du perdant en fin de manche — à comparer entre la version
 AVEC et SANS la règle. Seul le point 6 (échange différé) profite à l'IA
 elle-même quel que soit l'adversaire : c'est le seul sous-point que ces
 duels IA-contre-IA mesurent vraiment sur le taux de victoire (les points
-3/4/5 ne sont validés que par les compteurs et les tests fixes — un essai
-de 20 donnes fait par l'agent montre déjà 0,0 % de jokers libres laissés
-contre 0,2 % sans aucune règle, et un surcoût de calcul d'environ 17 % en
-moyenne, maximum inchangé). Le point 7 (#254) n'est mesurable que sur une
-campagne à plusieurs manches (`--manches N`, N > 1) : aucune commande
+3/4/5 ne sont validés que par les compteurs et les tests fixes — voir
+CHANGELOG.md, issue #254, pour les chiffres). Le point 7 (#254) n'est
+mesurable que sur une campagne à plusieurs manches (`--manches N`, N > 1) :
+aucune commande
 appariée de ce type n'existait avant #254 ; à ajouter par Alain si une
 mesure spécifique de ce point est souhaitée.
 
 ## 10. Réglage de TEST « fin de manche à la pioche vide » (issue #256)
 
 **Motivation** : depuis la vraie règle de fin de manche (#255, blocage —
-voir §5 ci-dessus et CONTEXTE.md §3bis), une manche entre deux niveaux
+voir §5 ci-dessus et moteur_regles.md §3bis), une manche entre deux niveaux
 bridés (p. ex. Intermédiaire contre Intermédiaire) peut durer très
 longtemps avant de se bloquer réellement (plateau/chevalets qui grossissent,
 coût du solveur par tour en forte hausse) — mesuré à plus de 300 s pour 3
@@ -711,7 +647,8 @@ l'état tel quel).
 **Options en ligne de commande** (toutes désactivées par défaut) :
 `--fin-manche-pioche-vide-test` sur `scripts/simulation_ia.py` et
 `scripts/comparer_niveaux_ia.py` ; `--fin-manche-pioche-vide-test` sur
-`scripts/calibrer_echelle.py` (CONTEXTE.md §9/§16), où il fait partie des
+`scripts/calibrer_echelle.py` (scripts_simulation.md §9 /
+niveaux_ia_calibrage.md §16), où il fait partie des
 paramètres enregistrés dans `reglages.json` de la série : reprendre ou
 prolonger un dossier existant avec l'AUTRE règle est refusé avec un
 message clair, exactement comme pour la graine/`--max-tours`/budget du
@@ -729,98 +666,18 @@ compteurs de la gestion du joker, temps par tour) servent à ACCÉLÉRER une
 calibration, jamais à la remplacer : toute conclusion visant le jeu réel
 doit être revérifiée sans ce réglage avant d'être retenue.
 
-**Mesure** (issue #256, agent, premier plan, limite de temps ferme,
-Python du projet, Intermédiaire contre Intermédiaire, 3 donnes, graine 0) :
+**Mesure** : gain net mesuré par rapport à la vraie règle, mais au-delà de
+l'ordre de grandeur attendu par l'issue — écart signalé tel quel, non
+corrigé (hors périmètre). Chiffres : CHANGELOG.md, issue #256.
 
-```
-timeout 300 python scripts/comparer_niveaux_ia.py --niveau-a Intermédiaire \
-    --niveau-b Intermédiaire --donnes 3 --seed 0 --fin-manche-pioche-vide-test
-```
+## 11. Diagnostic de lenteur Intermédiaire contre Avancé (issue #257)
 
-→ 218,1 s pour 6 manches décidées (3 donnes x 2 miroir) — net par rapport à
-la vraie règle (> 300 s pour la MÊME commande sans l'option, 4/6 manches
-encore indécises à la coupure de 100 tours, voir le constat du §1), mais
-**au-delà** de l'ordre de grandeur attendu par l'issue (1 à 2 minutes) :
-fins de manche 4/6 par chevalet vidé, 2/6 par pioche vide (réglage de
-test), 0/6 par blocage réel ; durée moyenne d'une manche décidée 81,0
-tours ; temps de calcul par tour (Intermédiaire) moyenne 448,3 ms, maximum
-3028,9 ms sur 486 tours. Écart signalé tel quel, sans chercher à le
-corriger dans cette issue (hors périmètre, voir le rapport de clôture).
-
-## 11. Diagnostic de lenteur Intermédiaire contre Avancé 6/0.04 (issue #257)
-
-**Cause** : AUCUN bug ni emballement d'une fonction — la lenteur (jusqu'à un
-facteur 10 entre les deux parties en miroir d'une même donne) vient du MÊME
-phénomène que le §10 ci-dessus (manche BLOQUÉE, règle réelle de #255), mais
-touchant aussi le duel Intermédiaire/Avancé (pas seulement Intermédiaire
-contre Intermédiaire) : sur certaines donnes/graines, UNE des deux parties
-en miroir ne se termine pas par un chevalet vidé mais par un blocage
-(~140 tours plutôt que ~55-70), avec un plateau qui grossit tour après tour
-(jusqu'à une centaine de tuiles, une vingtaine de combinaisons) tant que la
-pioche se vide sans qu'aucun joueur ne sorte. Chaque décision d'IA, bridée
-ou non, résout TOUJOURS le modèle exact complet (HiGHS) au moins une fois
-pour mesurer la perturbation (voir §3 de ce fichier et `_coup_selon_
-perturbation`, `moteur/ia.py`) — et ce modèle lexicographique (`moteur/
-solveur_exact._resoudre_modele`) fait jusqu'à 3 résolutions HiGHS
-successives par décision (tuiles posées, puis simplicité du plateau, puis
-points/jokers). Sur un plateau de ~90 tuiles, une seule de ces résolutions
-peut coûter 1 à 2,5 s (mesuré, profil cProfile d'une partie de 139 tours,
-seed 3, Linux) ; répété sur ~140 tours, cela suffit à expliquer un facteur
-10 avec la partie miroir (qui finit en ~55 tours par chevalet vidé, plateau
-resté petit). Mesuré sur la partie la plus lente (profil détaillé) :
-141 appels à `resoudre_exact` (~1/tour), 407 appels réels `highspy.Highs.
-run()` (~2,93/tour, confirmant les 3 passes lexicographiques), 84,2 s des
-93,9 s totaux (89,6 %) passés DANS `Highs.run()`, aucun dépassement du
-budget de 4 s. `cProfile` seul est TROMPEUR ici (attribution incohérente
-d'une partie du temps à des fonctions triviales de `highspy`, due à son
-mécanisme de callback — `enableCallbacks`, 141 appels) : le chronométrage
-direct de `resoudre_exact` (mesure externe, wall-clock) est la source
-fiable pour ce diagnostic, pas la seule sortie de `cProfile`.
-
-**Correction appliquée (accélération pure, #257, point 4)** :
-`_coup_selon_perturbation` (`moteur/ia.py`) calculait SYSTÉMATIQUEMENT le
-coup sans réarrangement (`_coup_sans_rearrangement`, une résolution de
-plus) AVANT même de savoir si le coup complet tiendrait dans la borne de
-perturbation — gaspillé dans le cas (fréquent) où le coup complet convient
-déjà. Rendu LAZY : calculé seulement dans les deux branches de repli qui
-s'en servent réellement. Aucun changement de décision (vérifié : 40 matchs
-identiques ligne à ligne, `comparer_niveaux_ia.py`, Intermédiaire contre
-Avancé, 20 donnes, seed 0, niveaux du jeu — voir le rapport de clôture de
-#257). Gain marginal (< 1 % du temps mesuré sur la partie la plus lente,
-`_coup_sans_rearrangement` ne coûtant qu'environ 1 ms contre ~700 ms pour
-une résolution HiGHS complète) : NE corrige PAS le facteur 10 lui-même,
-dont la cause (le modèle exact lexicographique sur un gros plateau bloqué)
-est intrinsèque au solveur et n'a pas de correction sûre identifiée sans
-changer les décisions de l'IA (voir pistes NON appliquées ci-dessous).
-
-**Pistes NON appliquées (changeraient potentiellement les décisions de
-l'IA — laissées à la décision d'Alain)** : activer le multi-thread HiGHS
-(`threads`/`parallel`, actuellement forcés à 1/`"off"` dans `_nouveau_highs`)
-pourrait accélérer la preuve d'optimalité SANS changer le résultat si
-l'objectif lexicographique élimine déjà toute égalité réelle — mais rien ne
-garantit l'absence d'égalités résiduelles, et un branch-and-bound parallèle
-pourrait alors choisir une solution optimale DIFFÉRENTE parmi plusieurs
-équivalentes ; non vérifié, donc non appliqué. Autoriser un écart
-d'optimalité (`mip_rel_gap`/`mip_abs_gap`, actuellement 0,0) accélérerait
-nettement mais changerait potentiellement le coup choisi (pas juste sa
-vitesse) — explicitement exclu par les contraintes de l'issue.
-
-**Rapport de calibration plus parlant (#257, point 5)** : `calibrer_
-echelle.py` affiche désormais, sous chaque résultat de tâche, une ligne
-« manches : » (durée moyenne en tours, répartition des fins, temps de
-calcul par tour par niveau) — voir CONTEXTE.md (entrée `calibrer_echelle.py`)
-pour le détail du fichier `stats_<label>.jsonl` qui l'alimente.
-
-**Mesure avant/après (Linux, agent, commande de référence de l'issue,
-seed 31)** : 162,7 s AVANT et APRÈS la correction du point 4 (jeu identique
-rejoué, même seed, mêmes 2 manches en miroir — l'une par chevalet vidé à 55
-tours, l'autre par blocage à 150 tours, temps/tour Avancé jusqu'à 6,0 s,
-Intermédiaire jusqu'à 4,1 s au plus coûteux) : écart non mesurable sur
-cette partie, cohérent avec le gain marginal attendu (voir ci-dessus).
-Variance run-à-run observée au-delà de ce qu'explique le seul correctif :
-d'autres essais sur la MÊME graine 31 ont donné 197,8 s puis 216,8 s
-(avant toute correction) — la décision du solveur exact dépend du temps
-réel écoulé quand le budget (4 s) est consommé en cours de résolution, ce
-qui peut faire diverger deux parties par ailleurs identiques (seed, coups)
-dès qu'une résolution approche cette limite. Observation annexe, pas
-corrigée par #257 (hors périmètre : changerait la force de l'IA).
+Un facteur 10 observé entre deux parties en miroir d'une même donne vient
+d'une manche **bloquée** plutôt que terminée par chevalet vidé (plateau
+qui grossit, donc modèle exact lexicographique coûteux à chaque tour sur
+un gros plateau — mécanisme déjà décrit en solveur_expert.md §8ter ;
+limites de volume de calcul du solveur : solveur_verification_exacte.md
+§18). Une micro-optimisation sans effet sur les décisions a été appliquée
+(gain marginal, ne corrige pas le facteur lui-même, qui est intrinsèque au
+solveur). Diagnostic complet, profilage et pistes non retenues (laissées à
+la décision d'Alain) : CHANGELOG.md, issue #257.

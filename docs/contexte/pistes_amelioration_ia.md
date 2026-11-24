@@ -291,7 +291,8 @@ une au fur et à mesure que de futures issues les testent/implémentent.
   petits fichiers de trace fabriqués à la main, dont un cas où le seuil N
   change explicitement la classification d'un même tour (chevalet de 6
   tuiles, déjà ouvert : développement à N=5, fin à N=6) — aucune campagne
-  longue rejouée par l'agent de cette issue, conformément à CONTEXTE.md §7.
+  longue rejouée par l'agent de cette issue, conformément à l'usage habituel
+  pour les campagnes de simulation (scripts_simulation.md).
   Un essai de 2 donnes (4 matchs) Expert contre Champion du Monde, au
   premier plan, a validé la chaîne complète trace → analyse sur du vrai
   jeu avant de remettre les commandes de campagne à Alain.
@@ -337,67 +338,50 @@ n'ont presque rien donné.
   publié n'a été trouvé sur la stratégie multi-tours de la partie
   complète.
 
-**2. Tableau des hypothèses**
-- **H1. Se retenir au début : ne pas tout poser, laisser les autres
-  ouvrir la table.** 3 solides + 1 faible. Règlement officiel
-  (Lemada/Hertzano) ; Matthijs Delvers, ex-champion du monde néerlandais
-  (« ne pas poser chaque tuile tout de suite ») ; Rixt van Perlo,
-  championne des Pays-Bas (garde longtemps toutes ses tuiles puis les pose
-  d'un coup, ce qu'elle dit être habituel). Une page d'apprentissage en
-  ligne (oboe.com), vague et faible, déconseille de se précipiter pour
-  l'ouverture.
-- **H1 inverse. Poser le plus tôt possible.** 2 faibles : un blog
-  (mechanicsofmagic.com : cette stratégie semble préférée parce que le
-  tapis change) et un article japonais (roomie.jp) qui dit que réussir
-  tôt les 30 points pèse beaucoup sur le résultat (voir H8).
-- **H2. Garder la 4e tuile d'un groupe ou d'une suite et n'en poser que
-  trois pour avoir un coup au tour suivant au lieu de piocher.** 1 source
-  (règlement officiel, éditions Pressman et Piatnik). Variante de
-  l'édition Jumbo : ne poser qu'une tuile par tour pour ne pas avoir à
-  piocher aux tours suivants.
-- **H3. Garder le joker, idéalement jusqu'au dernier tour.** 3 sources +
-  1 faible. Règlement officiel (avec le risque de 30 points) ; Delvers
-  (une fois posé, le joker sert aussi aux adversaires, donc attendre si
-  possible jusqu'au dernier tour) ; regles-du-jeu.net (« garder un joker
-  pour le coup final est une tactique redoutable »), dont une autre page
-  du MÊME site conseille au contraire de s'en débarrasser vite
-  (contradiction interne) ; faible : tecnobits.com (réserver les jokers
-  pour vider un gros groupe ou bloquer l'adversaire).
-- **H4. Retenir les petits chiffres (par exemple les 3) pour empêcher les
-  adversaires de former 1-2-3.** 1 source, très bonne : Delvers.
-- **H5. Se demander à chaque coup si on aide l'adversaire.** 1 source :
-  Delvers.
-- **H6. Mémoire du tapis et de son chevalet, estimer ce que font les
-  autres, bluffer un peu.** 1 source : Rixt van Perlo.
-- **H7. Garder un équilibre : ne pas se débarrasser trop vite de toutes
-  ses tuiles hautes ou basses.** 1 faible : tecnobits.com.
-- **H8. Ouvrir vite (les 30 points tôt pèsent beaucoup).** 2 faibles :
-  roomie.jp et un extrait d'agrégateur sans source claire.
+**2. Tableau des hypothèses, avec statut actuel**
+
+| Hypothèse | Sources (fiabilité) | Statut |
+|---|---|---|
+| H1 — se retenir au début, ne pas tout poser | 3 solides + 1 faible (règlement officiel ; Delvers ; van Perlo) | Testée et retirée (`retenue_debut`, #229 → #235, effet net non significatif) |
+| H1 inverse — poser le plus tôt possible | 2 faibles | Comportement PAR DÉFAUT (jamais isolée en stratégie à part : le solveur maximise déjà les tuiles posées à chaque tour) |
+| H2 — garder la 4e tuile d'un groupe/d'une suite pour un coup garanti au tour suivant | 1 source (règlement officiel, Pressman/Piatnik) | Testée et retirée (`reserve_tuile`, #229 → #235) |
+| H3 — garder le joker, idéalement jusqu'au dernier tour | 3 sources + 1 faible (contradiction interne sur regles-du-jeu.net) | Testée et retirée (`garde_joker`, #225 → #235 ; jamais choisi sur 600 matchs Expert/Champion du Monde) |
+| H4 — retenir les petits chiffres (≤ 3) pour priver l'adversaire de 1-2-3 | 1 source solide (Delvers) | Testée et retirée (`petits_chiffres`, #230 → #235) |
+| H5 — se demander à chaque coup si on aide l'adversaire | 1 source (Delvers) | Jamais testée (proche des pistes 8/9 ci-dessus, non implémentées) |
+| H6 — mémoire du tapis, estimer les autres, bluffer | 1 source (van Perlo) | Testée (via la brique `inconnues.py`, #219, qui a nourri `chances_prochain_tour`, #231) et retirée (#235) |
+| H7 — garder un équilibre de valeurs en main | 1 faible (tecnobits.com) | Jamais testée |
+| H8 — ouvrir vite (les 30 points tôt pèsent beaucoup) | 2 faibles | Jamais testée ; cohérente avec le comportement par défaut |
 
 Tensions à noter : H1 (se retenir) s'oppose à H8 (ouvrir vite) et à
 l'hypothèse inverse de H1 ; regles-du-jeu.net se contredit lui-même sur
-H3. Ces conseils sont des habitudes de joueurs humains, jamais mesurées.
+H3. Ces conseils sont des habitudes de joueurs humains, jamais mesurées
+en elles-mêmes (seules les implémentations listées ci-dessus l'ont été).
 
-**3. Liste des sources (avec adresses)**
+**3. Liste des sources (avec adresses, une ligne par source)**
 - Règlement officiel (anglais) :
-  `https://rummikub.com/wp-content/uploads/2019/12/2600-English.pdf` ;
-  recopié par `https://rulespal.com/rummikub/rulebook` et
+  `https://rummikub.com/wp-content/uploads/2019/12/2600-English.pdf`.
+- Règlement, recopié par `rulespal.com` :
+  `https://rulespal.com/rummikub/rulebook`.
+- Règlement, recopié par `rulespal.com` (variante 6 joueurs) :
   `https://rulespal.com/rummikub-six-player/rulebook`.
 - Manuel de l'édition Jumbo :
-  `https://www.libble.eu/jumbo-rummikub/online-manual-365914/` ; version
-  allemande de Piatnik :
+  `https://www.libble.eu/jumbo-rummikub/online-manual-365914/`.
+- Manuel de l'édition Piatnik (allemand) :
   `https://www.piatnik.com/uploads/media/default/0001/03/4fcb17146c9070cfcdab35537f9134a3043281e3.pdf`.
 - Matthijs Delvers, ex-champion du monde (Rodi, Haarlem, 10 septembre
   2026) :
   `https://www.rodi.nl/haarlem/nieuws/505808/rummikub-fans-opgelet-inschrijving-voor-het-nk-rummikub-in-haarlem-geopend`.
 - Rixt van Perlo, championne des Pays-Bas (Vice Pays-Bas, 2009) :
   `https://www.vice.com/nl/article/rummikub/`.
-- regles-du-jeu.net : `https://www.regles-du-jeu.net/?p=9594` et
+- regles-du-jeu.net (garder le joker) :
+  `https://www.regles-du-jeu.net/?p=9594`.
+- regles-du-jeu.net (s'en débarrasser vite — contredit la page ci-dessus) :
   `https://www.regles-du-jeu.net/rummikub-peut-on-commencer-ou-finir-avec-un-joker/`.
-- Blog : `https://mechanicsofmagic.com/?p=1749` ; Japonais :
-  `https://www.roomie.jp/2021/11/772619/` ; Espagnol (faible) :
-  `https://tecnobits.com/como-jugar-rummikub/` ; page d'apprentissage
-  (faible) : `https://oboe.com/learn/mastering-rummikub-strategy-1t9ka02`.
+- Blog (faible) : `https://mechanicsofmagic.com/?p=1749`.
+- Article japonais (faible) : `https://www.roomie.jp/2021/11/772619/`.
+- Espagnol (faible) : `https://tecnobits.com/como-jugar-rummikub/`.
+- Page d'apprentissage en ligne (faible) :
+  `https://oboe.com/learn/mastering-rummikub-strategy-1t9ka02`.
 - Résultats des championnats du monde (2018) :
   `https://www.pressreader.com/israel/jerusalem-post/20181025/281668255962433`.
 
@@ -414,144 +398,36 @@ H3. Ces conseils sont des habitudes de joueurs humains, jamais mesurées.
 - H8 et H1 pour l'ouverture : phase « prologue » ; piste « Ouverture ».
 - H6 : brique « Inconnues » (#219).
 
-**5. Protocole d'expérience prévu**
-Les traces de #226 (Expert contre Champion du Monde, Avancé contre
-Intermédiaire) diront d'abord dans quelle phase l'écart entre gagnant et
-perdant se creuse. Ensuite, une variante de Champion du Monde qui se
-retient au début (H1 et H2), puis une autre qui garde les petits chiffres
-(H4), chacune derrière un réglage propre à Champion du Monde, comparée à
-Expert en duels appariés (même graine, mêmes donnes). Méthode : ajouter
-les stratégies une à une (chaque version comparée à la précédente), puis,
-à la fin, comparer le Champion complet à lui-même privé d'une stratégie à
-la fois. On juge d'abord au mécanisme (combien de fois la stratégie change
-un coup, et le résultat des seules parties qui divergent), jamais au seul
-taux de victoire global.
-
 ### Archive : stratégies multi-tours de Champion du Monde (nov. 2026)
 
-**Contexte.** Entre #219 et #233, un sixième niveau « Champion du Monde », au-dessus
-d'Expert, a porté des versions COMPLÈTES de plusieurs stratégies multi-tours
-(Expert n'en gardant que des versions partielles, dosées). #235 a retiré ce
-niveau et tout le code propre à ces stratégies, faute d'effet mesuré (voir
-plus bas) — cette section archive ce qui a été essayé.
+Entre #219 et #233, un sixième niveau « Champion du Monde », au-dessus
+d'Expert, a porté des versions complètes de six stratégies multi-tours
+(`garde_joker` #225, `reserve_tuile`/`retenue_debut` #229,
+`petits_chiffres` #230, `chances_prochain_tour` #231, `placement_joker`
+#232/#233 — correspondance avec H1-H4/H6 ci-dessus). Mesure par ablation
+sur 12 configurations de 1 000 parties Expert contre Champion du Monde :
+taux de victoire de Champion du Monde entre 49,8 % et 52,1 % pour TOUTES
+les configurations (marge ±3,1 pt) — **aucun effet mesurable, à aucune
+échelle testée** (les stratégies changent bien des parties individuelles,
+jusqu'à 321 sur 1 000, mais gains et pertes se compensent). Le niveau et
+tout son code ont donc été retirés par #235 ; l'échelle compte de nouveau
+cinq niveaux, Expert restant le plus fort. La vérification de finition
+(`verif_finition`, #221, restée active pour Expert après #235) a été
+retirée à son tour par #236 : déclenchée 4 534 fois dans la campagne de
+#235 et sur 5 180 tours de fin de partie des campagnes #221/#226, **jamais
+un coup changé**.
 
-**a. Ce qui a été essayé** (une phrase par stratégie — l'idée, pas le détail
-d'implémentation) :
-- `verif_finition` (#221) — en fin de partie (chevalet ≤ 5 tuiles), vérifier
-  si un autre coup équivalent permettrait de finir au tour suivant plutôt que
-  le meilleur coup brut du solveur. Restée active pour Expert après #235
-  (qui n'avait retiré que la variante « garder un joker » ci-dessous) ;
-  **retirée à son tour par #236**, jamais un coup changé — voir le point g
-  ci-dessous pour le détail chiffré.
-- `garde_joker` (#225, Champion du Monde seul) — garder un joker en main en
-  fin de partie plutôt que le jouer tout de suite, pour le garder jusqu'au
-  coup qui vide le chevalet d'un coup.
-- `reserve_tuile` (#229, hypothèse H2) — après le coup du solveur, garder une
-  tuile qu'il aurait posée (p. ex. la 4e tuile d'un groupe) pour avoir un coup
-  garanti au tour suivant plutôt que de risquer une pioche.
-- `retenue_debut` (#229, hypothèse H1) — dans les tours qui suivent sa propre
-  ouverture, plafonner le nombre de tuiles posées par tour plutôt que de tout
-  poser d'un coup, pour ne pas dégarnir sa main trop vite.
-- `petits_chiffres` (#230, hypothèse H4) — garder en main les tuiles de
-  petite valeur (≤ 3) pour priver l'adversaire de combinaisons basses
-  (1-2-3…), peu coûteux en points en cas de défaite.
-- `chances_prochain_tour` (#231, anciennement « tuiles vivantes ») — à
-  nombre de tuiles posées égal, préférer le chevalet restant qui a
-  statistiquement le plus de chances de permettre de jouer au tour suivant
-  (probabilités de pioche, brique « Inconnues », #219).
-- `placement_joker` (#232, corrigée par #233) — à nombre de tuiles posées
-  égal, placer un joker à l'endroit où l'adversaire a le moins de chances de
-  le reprendre (le moins de types de tuile de remplacement encore inconnus).
+Intuition d'Alain, non vérifiée : ces stratégies pourraient être utiles
+appliquées seulement à certains moments du jeu (tapis pauvre, fin de
+manche serrée) — aucune règle de ce genre n'existe, et les mesures
+ci-dessus ne permettent pas de la deviner.
 
-Toutes dépendaient de la brique de lecture `moteur/inconnues.py` (#219 :
-probabilités de pioche calculées à partir des 106 tuiles, de sa propre main
-et des TAILLES — jamais le contenu — des mains adverses) et étaient pilotées
-par un registre générique (`niveaux.STRATEGIES`, #228), une option de
-campagne unique (`--strategies-champion` de `comparer_niveaux_ia.py`) et un
-outil de matrice (`scripts/matrice_strategies.py`) pour enchaîner des séries
-de mesure sans surveillance sur plusieurs jours.
-
-**b. Méthode de test.** Duels appariés (même graine, mêmes donnes, Expert
-contre Champion du Monde) ; mesure par ablation : chaque stratégie SEULE
-contre le témoin, puis Champion du Monde complet privé d'une stratégie à la
-fois (`scripts/matrice_strategies.py`, plan `ablation`) ; comparaison des
-seules parties dont le vainqueur diverge entre deux campagnes à la même
-graine (jamais le seul taux de victoire global, noyé dans les parties non
-concernées).
-
-**c. Résultats chiffrés.** 12 configurations de 1 000 parties, Expert contre
-Champion du Monde : taux de victoire de Champion du Monde entre 49,8 % et
-52,1 % pour TOUTES les configurations (marge ±3,1 pt) — aucun écart
-significatif, quelle que soit la combinaison de stratégies. Par stratégie
-seule contre le témoin, sur les seules parties dont le vainqueur diffère
-(effet net en points de score, test des signes) :
-
-| Stratégie | Parties divergentes | Effet net (points) | p |
-|---|---:|---:|---:|
-| reserve_tuile | 242 | +0,6 | 0,75 |
-| retenue_debut | 114 | −0,2 | 0,93 |
-| petits_chiffres | 20 | +0,2 | 0,82 |
-| chances_prochain_tour | 137 | +1,3 | 0,31 |
-| placement_joker | 30 | −0,2 | 0,86 |
-| Champion du Monde complet | 321 | +1,9 | 0,32 |
-
-**d. Conclusion.** Aucun effet mesurable : les stratégies changent bel et
-bien des parties (jusqu'à 321 sur la configuration la plus concernée), mais
-les gains et les pertes qu'elles provoquent se compensent — aucune ne penche
-significativement d'un côté ni de l'autre, à aucune échelle testée. Le
-niveau « Champion du Monde » et tout le code propre à ces stratégies ont
-donc été retirés (#235) ; l'échelle compte de nouveau cinq niveaux, Expert
-restant le niveau le plus fort.
-
-**e. Intuition d'Alain, non vérifiée.** Ces stratégies pourraient être utiles
-si l'on savait les appliquer au bon moment selon la main et le jeu en cours
-(par exemple seulement quand le tapis est pauvre, ou seulement en fin de
-manche serrée) — mais aucune règle de ce genre n'existe aujourd'hui, et rien
-dans les mesures ci-dessus ne permet de la deviner.
-
-**f. Retrouver le code archivé.** Tout le code retiré par #235 reste
-accessible au tag git `archive-strategies-champion` :
-
-```
-git show archive-strategies-champion:<chemin>
-git checkout archive-strategies-champion -- <chemin>
-```
-
-Fichiers SUPPRIMÉS (récupérables uniquement via ce tag) :
-`src/rummikub/moteur/sorties.py`, `src/rummikub/moteur/inconnues.py`,
-`scripts/matrice_strategies.py`, `scripts/lancer_matrice_windows.ps1`, et les
-tests dédiés (`tests/test_sorties.py`, `tests/test_inconnues.py`,
-`tests/test_ia_reserve_tuile.py`, `tests/test_ia_retenue_debut.py`,
-`tests/test_ia_petits_chiffres.py`, `tests/test_ia_chances_prochain_tour.py`,
-`tests/test_ia_placement_joker.py`, `tests/test_registre_strategies.py`,
-`tests/test_matrice_strategies.py`, `tests/test_option_strategies_champion.py`).
-Fichiers encore présents mais NETTOYÉS (seuls les champs et fonctions propres
-à Champion du Monde en ont disparu — le tag donne la version complète
-d'AVANT nettoyage) : `src/rummikub/moteur/niveaux.py`,
-`src/rummikub/moteur/ia.py`, `src/rummikub/moteur/solveur_exact.py`.
-`src/rummikub/moteur/verification_finition.py` existait encore tel quel au
-commit visé par ce tag (seule la partie « garder un joker », #225, en avait
-été retirée) ; **il a depuis été supprimé à son tour par #236** — récupérable
-au MÊME tag, qui le contient dans son état antérieur à ce retrait.
-
-**g. Vérification de finition (#221), retirée par #236.** Contrairement aux
-stratégies ci-dessus (toutes évaluées et retirées ensemble par #235), la
-vérification de finition n'évaluait qu'UN coup alternatif en fin de partie
-(chevalet ≤ 5 tuiles) et était restée active pour Expert après #235. Mesures
-qui ont motivé son retrait : sur la série de tests des stratégies (#235, 12
-configurations de 1 000 parties), elle a été déclenchée 4 534 fois dans la
-configuration témoin **sans changer le coup une seule fois** ; dans les
-campagnes précédentes (#221, #226), 5 180 tours de fin de partie examinés,
-**aucun coup changé**, dont 881 tours sur 901 où aucun candidat ne permettait
-de finir au tour suivant. Coût : un ou deux appels supplémentaires au solveur
-exact sur environ un tour sur sept, pour aucun effet. Code retiré plutôt que
-désactivé (même décision que pour #235) : `moteur/verification_finition.py`
-supprimé, son appel dans `moteur/ia.py` et les champs dédiés de
-`moteur/niveaux.py` (`Bridage.verif_finition`,
-`SEUIL_FIN_PARTIE_VERIF_FINITION`) retirés, annotation `verif_finition` du
-journal de partie (`persistance/journal.py`, `ui/api.py`) retirée. Expert et
-Avancé sont de nouveau STRICTEMENT IDENTIQUES (même solveur exact complet,
-aucune étape additionnelle) — voir §16. Récupérable au tag
-`archive-strategies-champion` (le commit visé contient encore le module,
-avant ce retrait).
+Tout le code retiré (y compris les modules supprimés
+`moteur/inconnues.py`, `moteur/sorties.py`, `scripts/matrice_strategies.py`
+et `moteur/verification_finition.py`, et les parties nettoyées de
+`niveaux.py`/`ia.py`/`solveur_exact.py`) reste accessible au tag git
+**`archive-strategies-champion`** (`git show
+archive-strategies-champion:<chemin>`). Détail complet (liste de
+fichiers, méthode de test, tableau par stratégie) : CHANGELOG.md, issues
+#235 et #236.
 
