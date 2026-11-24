@@ -3,7 +3,8 @@
 d'IA bridé, mesurés sur le BON critère de force : les **tuiles restantes en
 main quand le niveau PERD** (issue #216, suite #213).
 
-Rappel du critère (voir ``scripts/profil_joueur.py`` et CONTEXTE.md §16) : plus
+Rappel du critère (voir ``scripts/profil_joueur.py`` et
+docs/contexte/niveaux_ia_calibrage.md §16) : plus
 ce nombre est BAS, plus le niveau finit près de la sortie, donc plus il est
 FORT. L'échelle de #213 est ordonnée mais mal étalée ; #216 recalibre Débutant,
 Facile et Intermédiaire pour des écarts réguliers, Alain (≈ 3,5 tuiles) visé

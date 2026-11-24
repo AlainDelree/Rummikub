@@ -19,7 +19,7 @@ Ne modifie ni ne rejoue AUCUNE partie : pure lecture/analyse d'un fichier de
 trace déjà produit. ``--seuil`` est répétable pour comparer plusieurs
 découpages en un seul passage sur le fichier (ex. ``--seuil 5 --seuil 6``).
 
-Question centrale (voir CONTEXTE.md §13) : à quelle phase se creuse l'écart
+Question centrale (voir docs/contexte/pistes_amelioration_ia.md §13) : à quelle phase se creuse l'écart
 entre le futur gagnant et le futur perdant d'une manche ? Trois « moments »
 sont comparés :
   (a) à la FIN du prologue (quand le SECOND joueur à ouvrir vient d'ouvrir) ;

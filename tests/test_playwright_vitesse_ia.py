@@ -3,7 +3,7 @@ trois réglages exposés aux joueurs (Lente/Normale-« Moyenne »/Rapide), pour
 l'animation du coup en direct ET pour son rejeu à la demande (issue #251).
 
 Chargé directement sur `jeu.html` (jamais la vraie application pywebview,
-voir CONTEXTE.md §7) : les constantes du script (`VITESSES_IA`,
+voir docs/contexte/tests_frontend.md §7) : les constantes du script (`VITESSES_IA`,
 `MULTIPLICATEURS_REJEU_IA`, `PAUSES_REJEU_IA`) sont lues directement via
 `page.evaluate`, sans passer par `init()`.
 

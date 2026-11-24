@@ -1,6 +1,6 @@
 """Vérification du front-end des manches multiples (issue #203) avec
 Playwright, chargé directement sur `jeu.html` (jamais la vraie application
-pywebview, inaccessible en test, voir CONTEXTE.md §7) : on injecte un état
+pywebview, inaccessible en test, voir docs/contexte/tests_frontend.md §7) : on injecte un état
 fictif dans la variable globale `etat` de jeu.js et on appelle directement les
 fonctions d'affichage concernées.
 

@@ -291,8 +291,9 @@ une au fur et à mesure que de futures issues les testent/implémentent.
   petits fichiers de trace fabriqués à la main, dont un cas où le seuil N
   change explicitement la classification d'un même tour (chevalet de 6
   tuiles, déjà ouvert : développement à N=5, fin à N=6) — aucune campagne
-  longue rejouée par l'agent de cette issue, conformément à l'usage habituel
-  pour les campagnes de simulation (scripts_simulation.md).
+  longue rejouée par l'agent de cette issue, même principe que
+  tests_frontend.md §7 (pas d'opération longue non surveillée lancée par
+  l'agent).
   Un essai de 2 donnes (4 matchs) Expert contre Champion du Monde, au
   premier plan, a validé la chaîne complète trace → analyse sur du vrai
   jeu avant de remettre les commandes de campagne à Alain.

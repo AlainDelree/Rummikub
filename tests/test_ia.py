@@ -610,7 +610,7 @@ def _etat_avec_joker_en_bout_de_suite(niveau):
     (cf. :func:`_jokers_detachables_par_extension`). Le joker étant en bout
     de suite, par le mécanisme de scission (#134/#181) il n'est PAS
     détachable : seule une tuile réelle peut être la tuile « libre » retirée
-    (cf. note CONTEXTE.md §8). Aucun coup ne doit donc être proposé ici."""
+    (cf. note docs/contexte/joker_tactiques.md §8). Aucun coup ne doit donc être proposé ici."""
     etat = _partie_2j(niveau)
     etat["index_joueur_actuel"] = 1
     bot = etat["joueurs"][1]
@@ -820,7 +820,7 @@ def test_expert_demantele_completement_une_courte_suite_avec_joker():
 
 def test_avance_ne_demantele_pas_une_courte_suite_avec_joker():
     """Non-régression : Avancé (tactiques locales) ne trouve PAS ce coup —
-    voir CONTEXTE.md §8, cas identifié mais non implémenté avant #186."""
+    voir docs/contexte/joker_tactiques.md §8, cas identifié mais non implémenté avant #186."""
     etat = _etat_demantelement_courte_suite("Avancé")
     coup = jouer_niveau_avance(etat, 1)
     assert coup["action"] != "jouer"

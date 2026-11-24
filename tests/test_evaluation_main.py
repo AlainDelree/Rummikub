@@ -11,7 +11,7 @@ Trois familles (point 6 de l'issue) :
   ``highspy``/``numpy`` sont absents (comme ``test_solveur_exact_maison.py``).
 * **Départage effectif** : sur une position fabriquée, l'évaluation choisit,
   à nombre de tuiles égal, le coup qui laisse la meilleure main (exemple
-  d'Alice, CONTEXTE.md §13).
+  d'Alice, docs/contexte/pistes_amelioration_ia.md §13).
 """
 
 import json
@@ -214,7 +214,7 @@ def test_eval_ne_change_pas_nb_tuiles_cas_reference():
 
 @besoin_exact
 def test_eval_depart_departage_exemple_alice():
-    """Exemple d'Alice (CONTEXTE.md §13, piste 2) : main
+    """Exemple d'Alice (docs/contexte/pistes_amelioration_ia.md §13, piste 2) : main
     ``1r 2r 2r 3r 3b 3n``. Sans évaluation, Expert peut poser le groupe
     ``3r 3b 3n`` (laisse le doublon ``2r``) ; avec évaluation, il préfère la
     suite ``1-2-3 rouge`` qui fait partir un ``2r`` (doublon) ET le ``1`` (bord).

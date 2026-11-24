@@ -26,7 +26,8 @@ le dossier de travail de l'agent ne contient aucun journal.
 Ce script NE MODIFIE NI le solveur d'Expert, NI le jeu, NI les niveaux d'IA :
 il interroge les deux solveurs en lecture pure. La bibliothèque étant une
 dépendance de développement seulement, le script se sépare proprement si elle
-est absente (voir ``scripts/solveur_exact.py`` et CONTEXTE.md §14).
+est absente (voir ``scripts/solveur_exact.py`` et
+docs/contexte/solveur_verification_exacte.md §14).
 
 Usage :
 

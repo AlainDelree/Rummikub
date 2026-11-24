@@ -1042,7 +1042,8 @@ def _multiset_dicts(combo):
 
 def mesurer_perturbation(plateau_avant, plateau_apres):
     """Mesure de perturbation du plateau entre deux états (listes de
-    combinaisons, chacune une liste de dicts tuile — voir CONTEXTE.md §4) :
+    combinaisons, chacune une liste de dicts tuile — voir
+    docs/contexte/moteur_regles.md §4) :
     ``(tuiles_deplacees, combos_modifiees)``. Deux tuiles de même aspect
     (même valeur et même couleur, ou deux jokers quelconques) sont
     interchangeables (voir docstring du module, #199) ; un coup qui ne fait

@@ -64,7 +64,7 @@ plus grand nombre possible de tuiles du chevalet, jokers compris.
   COURS d'exploration, la meilleure branche déjà trouvée à ce niveau est
   conservée (réarrangement valide, pas nécessairement optimal) plutôt que
   tout perdre. `BudgetDepasse` n'est donc levée, et `jouer_niveau_expert`
-  ne se replie sur le comportement d'Avancé (§8) pour ce tour, que si
+  ne se replie sur le comportement d'Avancé (joker_tactiques.md §8) pour ce tour, que si
   RIEN n'a été trouvé nulle part dans l'arbre avant expiration du budget
   (`BUDGET_TEMPS_EXPERT`, 1.5s par défaut, `moteur/ia.py`) — idem si le
   solveur conclut lui-même qu'aucun coup n'existe (filet de sécurité,

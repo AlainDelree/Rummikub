@@ -86,8 +86,8 @@ python -m pytest tests/ -q
 ## Construire l'installeur Windows
 
 Le script `build/rebuild_rummikub.bat` reconstruit l'exécutable avec
-PyInstaller puis l'installeur avec Inno Setup. Voir `CONTEXTE.md` pour le
-détail des étapes.
+PyInstaller puis l'installeur avec Inno Setup. Voir `CONTEXTE.md` (règles et
+index) et `docs/contexte/` pour le détail des étapes.
 
 ## Construire le paquet Linux (.deb)
 
@@ -113,5 +113,6 @@ Ces fichiers ne sont pas versionnés dans le dépôt.
 
 ## Documentation technique
 
-- `CONTEXTE.md` — architecture, règles du jeu, solveurs.
+- `CONTEXTE.md` — règles impératives, architecture résumée et index des
+  fichiers de domaine ; le détail vit dans `docs/contexte/`.
 - `CHANGELOG.md` — historique des modifications.

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Compare deux niveaux d'IA Rummikub sur un grand nombre de parties à 2
 joueurs, sans interface (uniquement le moteur Python, jamais pywebview — voir
-CONTEXTE.md §7).
+docs/contexte/tests_frontend.md §7).
 
 Chaque donne (distribution initiale des tuiles) est rejouée deux fois en
 miroir, en échangeant les places des deux niveaux, pour annuler l'effet du
@@ -616,7 +616,8 @@ def comparer(niveau_a: str, niveau_b: str, nb_donnes: int, seed: int,
     resultats``/``export_trace``, pour reprendre une campagne interrompue en
     AJOUTANT à des fichiers déjà partiellement écrits plutôt qu'en les
     écrasant — chaque ligne est immédiatement ``flush()``ée (écriture ligne
-    par ligne, tolérante à une coupure brutale, voir CONTEXTE.md §13).
+    par ligne, tolérante à une coupure brutale, voir
+    docs/contexte/pistes_amelioration_ia.md §13).
 
     ``nb_manches`` (#203) : nombre de manches par match — chaque donne est
     jouée en miroir (places échangées) sur un match complet, le vainqueur du
@@ -626,7 +627,8 @@ def comparer(niveau_a: str, niveau_b: str, nb_donnes: int, seed: int,
     ``preferer_simple`` (#199) : réglage transmis à chaque appel d'Expert —
     comparer deux campagnes identiques (même graine), l'une avec et l'autre
     sans, permet de mesurer l'effet du critère de simplicité sur la force
-    d'Expert (voir CONTEXTE.md §9 et §13).
+    d'Expert (voir docs/contexte/scripts_simulation.md §9 et
+    docs/contexte/pistes_amelioration_ia.md §13).
 
     ``eval_a``/``eval_b`` (#211) : preset d'évaluation de la main restante
     (``moteur/evaluation_main.depuis_preset``) appliqué au niveau Expert du

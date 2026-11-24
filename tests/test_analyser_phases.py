@@ -1,7 +1,7 @@
 """Tests de ``scripts/analyser_phases.py`` (issue #226) : définition des
 phases (cas aux bornes, où le seuil N change la classification), et analyse
 sur de petits fichiers de trace fabriqués à la main (pas de campagne longue
-rejouée dans ces tests — voir CONTEXTE.md §7, même principe)."""
+rejouée dans ces tests — voir docs/contexte/tests_frontend.md §7, même principe)."""
 
 import json
 import sys

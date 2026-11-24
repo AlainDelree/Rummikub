@@ -187,7 +187,7 @@ Les fonctions heuristiques historiques (`jouer_niveau_debutant/facile/
 intermediaire/avance`) **demeurent** dans `moteur/ia.py` : elles ne portent plus
 l'échelle (c'est le moteur bridé qui le fait, via `jouer_niveau_bride` et
 `NIVEAUX_IA`) mais restent le **repli** quand le modèle exact est indisponible et
-le support des tests de tactiques de joker (§8). Les parties sauvegardées avec
+le support des tests de tactiques de joker (joker_tactiques.md §8). Les parties sauvegardées avec
 les 5 anciens niveaux **restent valides** (un libellé inconnu retombe sur
 « Débutant », `niveaux.bridage_pour`).
 

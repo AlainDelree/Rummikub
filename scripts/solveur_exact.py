@@ -22,7 +22,7 @@ contrôles indépendants exigés par l'issue : chaque combinaison vérifiée par
 Dépendance de DÉVELOPPEMENT seulement
 -------------------------------------
 La bibliothèque N'EST PAS ajoutée à ``requirements.txt`` ni au build Windows
-(voir CONTEXTE.md §14). Ce module s'importe sans erreur même si elle est
+(voir docs/contexte/solveur_verification_exacte.md §14). Ce module s'importe sans erreur même si elle est
 absente : :data:`DISPONIBLE` vaut alors ``False`` et :func:`exiger_disponible`
 lève :class:`SolveurExactIndisponible` avec un message d'installation. Tous
 les tests/scripts qui en dépendent se sautent proprement (comme les tests

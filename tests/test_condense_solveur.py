@@ -5,7 +5,7 @@ Deux sources de coup coexistent ici, chacune pour ce qu'elle juge le mieux :
 - **Propriétés GÉNÉRALES** du condensé (``test_condense_coup_exact_proprietes``)
   sur tous les cas : reconstruites avec la BIBLIOTHÈQUE EXTERNE
   ``rummikub-solver`` (dépendance de DÉVELOPPEMENT, ``scripts/solveur_exact.py``
-  — voir CONTEXTE.md §14). Ces propriétés (même plateau final, cadre vide à la
+  — voir docs/contexte/solveur_verification_exacte.md §14). Ces propriétés (même plateau final, cadre vide à la
   fin, aucune tuile à deux endroits, bornes lâches) sont INSENSIBLES à la
   source : peu importe l'arrangement exact proposé, elles doivent tenir.
 

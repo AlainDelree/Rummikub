@@ -27,7 +27,8 @@ Avancé–Expert est donc ATTENDUE à ~50 % / égalité statistique : ce n'est P
 un échec de l'échelle. Le script le signale explicitement pour cette paire.
 
 **#220 retire le relevé des tuiles restantes en défaite** (miroir d'un niveau
-contre lui-même, option ``--donnes-profil``) : voir CONTEXTE.md §16 pour les
+contre lui-même, option ``--donnes-profil``) : voir
+docs/contexte/niveaux_ia_calibrage.md §16 pour les
 raisons (mesure non comparable à un humain, parties qui ne finissent plus dès
 que ``perturbation_max >= 1``, tout le temps imparti consommé sans que les
 duels ne soient jamais joués — #216/#217). Le seul critère de force retenu est

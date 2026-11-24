@@ -2,7 +2,8 @@
 manches » (issue #203, suite de #192), déplacé sur la carte principale de
 l'accueil par #205 (juste au-dessus de « Lancer la partie », plus rien dans
 les Réglages). Avec Playwright, chargé directement sur `accueil.html` (jamais
-la vraie application pywebview, inaccessible en test, voir CONTEXTE.md §7) :
+la vraie application pywebview, inaccessible en test, voir
+docs/contexte/tests_frontend.md §7) :
 on mocke `window.pywebview.api` et on pilote l'interface comme un joueur.
 
 Nécessite `pip install playwright` puis `playwright install chromium` (pas

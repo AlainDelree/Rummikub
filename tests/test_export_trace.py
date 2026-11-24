@@ -5,7 +5,7 @@ déroulement d'une partie, désactivée par défaut.
 Une partie courte (Débutant contre Débutant, rapide) est jouée via
 ``comparer_niveaux_ia.comparer`` pour vérifier que les lignes écrites sont
 cohérentes avec l'état réel du moteur (ne rejoue jamais une campagne
-longue — voir CONTEXTE.md §7, même principe appliqué ici)."""
+longue — voir docs/contexte/tests_frontend.md §7, même principe appliqué ici)."""
 
 import json
 import sys

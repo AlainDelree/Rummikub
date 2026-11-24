@@ -16,7 +16,7 @@ cours sont exclues, voir ``persistance/bilan.py``) :
   répartition de ces tours entre début/milieu/fin de partie.
 
 Script en ligne de commande, indépendant de toute interface (aucun import
-pywebview — voir CONTEXTE.md §7).
+pywebview — voir docs/contexte/tests_frontend.md §7).
 
 Usage :
 

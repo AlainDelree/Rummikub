@@ -820,7 +820,7 @@ UTILISER_SOLVEUR_EXACT = True
 # ``evaluation_main.DEFAUT`` fixe les critères activés PAR DÉFAUT et tous les
 # poids (réunis dans ``moteur/evaluation_main.py``). ``active=False`` par
 # défaut : Expert départage comme avant #211 tant que la simulation n'a pas
-# démontré de gain (voir CONTEXTE.md §13). Lu à l'appel.
+# démontré de gain (voir docs/contexte/pistes_amelioration_ia.md §13). Lu à l'appel.
 EVAL_MAIN_DEFAUT = evaluation_main.DEFAUT
 
 

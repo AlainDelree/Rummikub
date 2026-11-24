@@ -16,7 +16,7 @@ Portée (à ne PAS sur-interpréter)
 ---------------------------------
 Les deux solveurs n'optimisent qu'UN tour. Ce match ne mesure donc PAS la
 valeur d'une stratégie sur plusieurs tours (réserve, joker gardé, rétention —
-pistes de ``CONTEXTE.md`` §13) ; il mesure seulement si, à jeu « un tour »
+pistes de ``docs/contexte/pistes_amelioration_ia.md`` §13) ; il mesure seulement si, à jeu « un tour »
 équivalent, nos critères de départage tiennent la route. Il ne dit rien non
 plus sur la force absolue d'un humain.
 
@@ -53,7 +53,7 @@ Contrôles
 Dépendance de DÉVELOPPEMENT seulement
 -------------------------------------
 ``rummikub-solver`` n'est ni dans ``requirements.txt`` ni dans le build Windows
-(voir ``CONTEXTE.md`` §14). Ce script est un OUTIL D'ANALYSE. Il se saute
+(voir ``docs/contexte/solveur_verification_exacte.md`` §14). Ce script est un OUTIL D'ANALYSE. Il se saute
 proprement si la bibliothèque est absente (message d'installation, code 2).
 
 Usage

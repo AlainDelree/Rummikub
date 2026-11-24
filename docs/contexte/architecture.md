@@ -38,7 +38,7 @@ src/rummikub/
   persistance/stockage.py   SQLite : sauvegarder_partie, charger_parties(5 derniers),
                             charger_partie, marquer_terminee, supprimer_partie.
   persistance/journal.py   Journal JSON optionnel par partie (debug + bilan, voir §9).
-  persistance/bilan.py      Lecture des journaux + calcul du bilan par niveau d'IA (§9).
+  persistance/bilan.py      Lecture des journaux + calcul du bilan par niveau d'IA (coups_rates_bilan.md §10).
   persistance/coups_rates.py  Détection des coups ratés de l'IA via le solveur
                             d'Expert, à partir des journaux (§11).
   moteur/                   Logique de jeu pure (voir §3).
@@ -49,7 +49,7 @@ src/rummikub/
     ia.py                   5 niveaux d'IA sur un même moteur exact bridé
                             (voir §16, issue #213) + tactiques de
                             récupération de joker (voir §8, repli).
-    niveaux.py              Paramètres d'affaiblissement des niveaux (§16).
+    niveaux.py              Paramètres d'affaiblissement des niveaux (niveaux_ia_calibrage.md §16).
     solveur.py              Solveur de réarrangement global du plateau,
                             utilisé par Expert (voir §8bis, #186).
     description_coup.py     Résumé écrit + étapes du rejeu pas-à-pas d'un

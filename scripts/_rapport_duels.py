@@ -3,7 +3,7 @@
 
 Partagé par ``scripts/echelle_niveaux.py`` et ``scripts/calibrer_echelle.py``
 depuis que le seul critère de force retenu est le duel entre niveaux voisins
-(CONTEXTE.md §16) : en-tête machine/Python (pour comparer des tournois lancés
+(docs/contexte/niveaux_ia_calibrage.md §16) : en-tête machine/Python (pour comparer des tournois lancés
 sur des machines différentes) et verdict d'écart (« net » entre 60 et 75 %,
 comportement déjà en vigueur dans ``echelle_niveaux.py`` avant #220, borne
 haute resserrée de 80 à 75 % pour coller à la cible décidée par Alain)."""

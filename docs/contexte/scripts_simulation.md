@@ -16,7 +16,7 @@
   distribution de tuiles) est jouée deux fois en miroir (places échangées),
   pour annuler l'effet du
   tirage ; avec la même graine, la campagne est reproductible à l'identique.
-  Toujours via le moteur Python seul, jamais pywebview (§7). Usage :
+  Toujours via le moteur Python seul, jamais pywebview (tests_frontend.md §7). Usage :
 
   ```
   python scripts/comparer_niveaux_ia.py --niveau-a Avancé --niveau-b Expert

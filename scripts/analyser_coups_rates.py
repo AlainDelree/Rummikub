@@ -17,7 +17,7 @@ journal juste avant cette décision — et interroge le solveur d'Expert
 
 Logique de détection et de résumé : voir ``persistance/coups_rates.py`` (pur,
 testé indépendamment). Ce script est en ligne de commande, moteur Python
-seul (aucun import pywebview — voir CONTEXTE.md §7).
+seul (aucun import pywebview — voir docs/contexte/tests_frontend.md §7).
 
 ATTENTION — à lire avant d'interpréter le résultat :
   1. Le solveur gèle certaines combinaisons déjà posées sur le plateau pour

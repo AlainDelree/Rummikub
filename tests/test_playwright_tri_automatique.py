@@ -6,7 +6,7 @@ la case est cochée. Avec la case décochée, le comportement d'avant (retour en
 fin de chevalet) ne doit pas changer.
 
 Chargé directement sur `jeu.html` (jamais la vraie application pywebview,
-inaccessible en test, voir CONTEXTE.md §7) : les fonctions du script sont
+inaccessible en test, voir docs/contexte/tests_frontend.md §7) : les fonctions du script sont
 appelées directement via `page.evaluate`, comme dans
 `test_playwright_pas_a_pas.py`, sans passer par `init()` (qui dépend de
 `window.pywebview`, absent ici).

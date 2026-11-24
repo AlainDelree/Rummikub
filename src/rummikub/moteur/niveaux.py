@@ -18,7 +18,7 @@ même moteur (voir ``moteur/ia.jouer_niveau_bride``) :
   meilleur coup et **pioche** à la place (il se contente d'un tour « raté »).
   Le tirage est reproductible quand ``config.graine_ia`` est fixée (simulations).
 
-**Garde-fous d'incohérence** (voir CONTEXTE.md §13) :
+**Garde-fous d'incohérence** (voir docs/contexte/pistes_amelioration_ia.md §13) :
 
 * un coup qui **vide le chevalet gagne la partie** : il n'est JAMAIS oublié ni
   dégradé (aucun critère « pour plus tard » ne s'applique à un coup gagnant) ;
@@ -93,7 +93,8 @@ def taux_oubli_effectif(taux: float, taille_main: int) -> float:
 
     Égal à ``taux`` tant que la main compte au moins :data:`SEUIL_OUBLI`
     tuiles ; décroît linéairement en dessous et vaut 0 à une seule tuile
-    (jamais d'oubli incohérent en fin de partie — voir CONTEXTE.md §13). Un
+    (jamais d'oubli incohérent en fin de partie — voir
+    docs/contexte/pistes_amelioration_ia.md §13). Un
     coup qui vide la main est de toute façon traité à part (jamais oublié)."""
     if taux <= 0.0:
         return 0.0
@@ -138,7 +139,8 @@ def taux_oubli_effectif(taux: float, taille_main: int) -> float:
 # le plateau et quasiment TOUTES les donnes atteignent le garde-fou de tours
 # (comme la précaution déjà notée pour Intermédiaire pert=4, #216) ; le tournoi
 # de validation au budget de production, trop coûteux pour aboutir dans le temps
-# imparti de #217, est laissé à relancer par Alain (voir CONTEXTE.md §16,
+# imparti de #217, est laissé à relancer par Alain (voir
+# docs/contexte/niveaux_ia_calibrage.md §16,
 # ``scripts/calibrer_echelle.py`` depuis #240, qui remplace l'ancien
 # ``scripts/valider_bas_echelle.py``). Le réglage s'appuie donc sur la
 # garantie structurelle ci-dessus plutôt que sur une mesure non significative.

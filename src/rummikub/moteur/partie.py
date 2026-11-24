@@ -444,7 +444,7 @@ def est_fin_partie(etat: dict) -> bool:
     """Vrai quand la manche courante est terminée ET que c'est la dernière
     manche du match (issue #203) : un vrai compteur de manches
     (``manche_numero``) remplace l'ancienne comparaison fondée sur le numéro
-    de tour (§3bis). Avec ``nb_manches == 1`` (défaut), équivaut à
+    de tour (voir docs/contexte/moteur_regles.md §3bis). Avec ``nb_manches == 1`` (défaut), équivaut à
     ``manche_terminee`` — comportement d'une partie d'une seule manche."""
     if not etat.get("manche_terminee"):
         return False

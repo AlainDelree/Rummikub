@@ -5,7 +5,7 @@ placer »).
 
 Fonctions pures : elles ne modifient jamais l'état de la partie, et prennent
 en entrée/sortie les mêmes dicts JSON-sérialisables que le reste du moteur
-(voir CONTEXTE.md §4). Utilisées par `ui/api.py` pour construire, à chaque
+(voir docs/contexte/moteur_regles.md §4). Utilisées par `ui/api.py` pour construire, à chaque
 pose de l'IA, le résumé écrit (`decrire_coup_ia`) et les étapes du rejeu
 pas-à-pas (`etapes_coup_ia`) stockés dans `etat["dernier_coup_ia"]`.
 

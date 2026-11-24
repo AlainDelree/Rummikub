@@ -5,7 +5,8 @@ forcément : la main qu'ils laissent peut être plus ou moins facile à écouler
 tour suivant, et plus ou moins coûteuse si la manche se termine. Ce module
 chiffre cette qualité de la main **restante** (ce qui resterait au chevalet
 après le coup) par une pénalité — *plus elle est basse, meilleure est la main* —
-combinant trois idées d'Alain (CONTEXTE.md §13, pistes 2/5/6/7) :
+combinant trois idées d'Alain (docs/contexte/pistes_amelioration_ia.md §13,
+pistes 2/5/6/7) :
 
 1. **Doublons** : deux tuiles identiques (même valeur, même couleur) ne peuvent
    jamais entrer dans la même combinaison, donc se placent plus difficilement.
@@ -71,13 +72,14 @@ POIDS_DOUBLON = 3
 POIDS_BORD = 2
 
 #: Poids des points restants en match d'**une seule** manche (quasi nul : les
-#: points ne départagent qu'une partie bloquée — CONTEXTE.md §13, piste 5).
+#: points ne départagent qu'une partie bloquée — docs/contexte/
+#: pistes_amelioration_ia.md §13, piste 5).
 POIDS_POINTS_1_MANCHE = 0
 
 #: Poids des points restants à partir de **deux** manches (score cumulé — les
 #: points comptent vraiment, issue #203). Réglable ; la simulation de #211
 #: mesure à partir de quel poids attacher trop d'importance aux points fait
-#: perdre des parties (voir CONTEXTE.md §13).
+#: perdre des parties (voir docs/contexte/pistes_amelioration_ia.md §13).
 POIDS_POINTS_N_MANCHES = 1
 
 #: Pénalité par tuile isolée. Laissée à 0 : approximation documentée, non
@@ -160,7 +162,8 @@ class ConfigEvaluation:
 
 
 #: Réglage par défaut d'Expert (issue #211, point 4 : n'activer par défaut que
-#: les critères au gain démontré). Voir CONTEXTE.md §13 et le rapport de #211
+#: les critères au gain démontré). Voir docs/contexte/pistes_amelioration_ia.md
+#: §13 et le rapport de #211
 #: pour la justification chiffrée du choix ``active``.
 DEFAUT = ConfigEvaluation(active=False)
 

@@ -2,7 +2,8 @@
 ``rummikub-solver`` (``scripts/solveur_exact.py``, issue #204, suite de #201).
 
 La bibliothèque est une dépendance de DÉVELOPPEMENT seulement (absente de
-requirements.txt et du build Windows, voir CONTEXTE.md §14) : ces tests se
+requirements.txt et du build Windows, voir
+docs/contexte/solveur_verification_exacte.md §14) : ces tests se
 sautent proprement si elle n'est pas installée — comme les tests Playwright.
 Pour les exécuter :
 
