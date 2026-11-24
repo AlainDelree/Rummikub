@@ -143,6 +143,46 @@ def test_main_chemin_inexistant_ne_lance_rien(
     assert popen.appels == []
 
 
+def test_main_drapeau_permission_denied_ne_plante_pas_et_ne_lance_rien(
+        dossier_install, monkeypatch):
+    """Erreur de droits simulée sur le test d'existence du flag (issue #266) :
+    ``PermissionError`` n'est pas capturée par ``Path.exists()`` lui-même —
+    la fonction doit s'en protéger. Simulation indépendante des droits réels
+    du système, valable sous Linux comme sous Windows."""
+    _exists_original = Path.exists
+
+    def _exists_refuse(self, *args, **kwargs):
+        if self.name == "actualise_update.flag":
+            raise PermissionError("acces refuse (simulation)")
+        return _exists_original(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "exists", _exists_refuse)
+    popen = _PopenAppels()
+    monkeypatch.setattr(_main_module.subprocess, "Popen", popen)
+    _main_module._lancer_actualise_ui_si_flag()  # ne doit lever aucune exception
+    assert popen.appels == []
+
+
+def test_main_actualise_au_demarrage_permission_denied_ne_plante_pas(
+        monkeypatch):
+    """Même protection pour ``_lancer_actualise_au_demarrage`` : une erreur
+    de droits sur le test d'existence du chemin fixe d'Actualise ne doit
+    lever aucune exception ni lancer de sous-processus (issue #266)."""
+    _chemin_actualise = str(Path(r"C:\Actualise\Actualise.exe"))
+    _exists_original = Path.exists
+
+    def _exists_refuse(self, *args, **kwargs):
+        if str(self) == _chemin_actualise:
+            raise PermissionError("acces refuse (simulation)")
+        return _exists_original(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "exists", _exists_refuse)
+    popen = _PopenAppels()
+    monkeypatch.setattr(_main_module.subprocess, "Popen", popen)
+    _main_module._lancer_actualise_au_demarrage()  # ne doit lever aucune exception
+    assert popen.appels == []
+
+
 # --------------------------------------------------------------------------- #
 # application._handler_fermeture_actualise
 # --------------------------------------------------------------------------- #

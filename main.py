@@ -25,9 +25,14 @@ def _lancer_actualise_ui_si_flag():
     flag (``actualise_ui``, ``bat``) sont validés avant tout lancement
     (SEC-003, voir rummikub.actualise.valider_chemin_actualise) : un chemin
     absent, de mauvaise extension ou hors de la racine Actualise autorisée
-    est ignoré, sans lancer quoi que ce soit."""
+    est ignoré, sans lancer quoi que ce soit. Une erreur de droits sur le
+    test d'existence du flag (``PermissionError``, non capturée par
+    ``Path.exists()``) ne doit pas non plus bloquer le démarrage."""
     _flag = Path(sys.executable).parent / "actualise_update.flag"
-    if not _flag.exists():
+    try:
+        if not _flag.exists():
+            return
+    except OSError:
         return
     try:
         _data = json.loads(_flag.read_text(encoding="utf-8"))
@@ -58,9 +63,14 @@ def _lancer_actualise_au_demarrage():
     """Au démarrage de Rummikub, lance Actualise en arrière-plan s'il est
     installé (C:\\Actualise\\Actualise.exe), avec l'argument `--config
     rummikub`. Non-bloquant : ne doit JAMAIS empêcher ni retarder le
-    démarrage du jeu. Absence ou échec → simple log discret, aucune exception."""
+    démarrage du jeu. Absence ou échec → simple log discret, aucune exception.
+    Une erreur de droits sur le test d'existence (``PermissionError``, non
+    capturée par ``Path.exists()``) est traitée comme une absence."""
     _actualise = Path(r"C:\Actualise\Actualise.exe")
-    if not _actualise.exists():
+    try:
+        if not _actualise.exists():
+            return
+    except OSError:
         return
     try:
         # chemin et arguments fixes, aucune saisie utilisateur

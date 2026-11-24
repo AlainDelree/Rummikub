@@ -28,10 +28,12 @@ Codes bandit/ruff déjà traités comme faux positifs jugés dans Rummikub :
   niveaux, nom aléatoire d'IA, graines de simulation) — sans enjeu crypto.
 
 Un `subprocess` dont un argument provient d'un fichier externe validé par
-`valider_chemin_actualise`/SEC-003 (`main.py`, `ui/application.py`, les trois
-lancements d'Actualise) est traité comme faux positif acquis et justifié en
-ligne (existence, extension `.bat`/`.exe`, racine Actualise autorisée) :
-cas jugé, pas laissé signalé.
+`valider_chemin_actualise` (issue #234 : existence, extension `.bat`/`.exe`,
+racine Actualise autorisée) est traité comme faux positif acquis et justifié
+en ligne (`main.py`, `ui/application.py`, les trois lancements d'Actualise) :
+cas jugé, pas laissé signalé. La validation des chemins est la mesure qui
+justifie l'appel ; SEC-003 est la règle d'audit qui exige cette justification
+en ligne.
 
 `S101` (assert) et `S108` (chemin `/tmp` en dur) dans `tests/` : convention
 pytest standard, hors périmètre de ce nettoyage (laissés tels quels).
