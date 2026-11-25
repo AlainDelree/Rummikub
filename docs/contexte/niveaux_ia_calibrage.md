@@ -434,3 +434,17 @@ Temps par tour d'Avancé : mesuré dans les campagnes à environ 1 s en moyenne,
 jusqu'à environ 4 s au maximum sur les niveaux bas du solveur (voir le
 rapport de clôture de #267 pour la mesure relevée sur cette machine).
 
+### Règle de travail (issue #268) : les tests ne dépendent jamais des réglages calibrés
+
+Depuis #267, Débutant vaut `perturbation_max=1` (plus `0`) : il appelle donc
+le solveur exact à CHAQUE tour (≈ 1 s/tour), alors qu'avant il ne le faisait
+jamais. **Un test ne doit jamais supposer qu'un niveau est rapide ou lent à
+cause de SA calibration du moment** — modifier `niveaux.BRIDAGES` ne doit
+jamais allonger la suite. Pour un test qui n'a besoin que d'un joueur FAIBLE
+et RAPIDE (et non du comportement réel de Débutant), utiliser la fixture
+`niveau_debutant_rapide` (`tests/conftest.py`) qui installe, pour la durée du
+test seulement, l'ancien réglage rapide (perturbation 0, oubli 0,42,
+`eviter_don_joker` faux). Les tests qui vérifient le comportement RÉEL d'un
+niveau (`tests/test_niveaux.py`, et ceux qui testent vraiment Débutant ou
+Avancé) gardent les réglages réels de `niveaux.py`, sans cette fixture.
+

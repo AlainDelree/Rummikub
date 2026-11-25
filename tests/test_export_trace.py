@@ -5,7 +5,13 @@ déroulement d'une partie, désactivée par défaut.
 Une partie courte (Débutant contre Débutant, rapide) est jouée via
 ``comparer_niveaux_ia.comparer`` pour vérifier que les lignes écrites sont
 cohérentes avec l'état réel du moteur (ne rejoue jamais une campagne
-longue — voir docs/contexte/tests_frontend.md §7, même principe appliqué ici)."""
+longue — voir docs/contexte/tests_frontend.md §7, même principe appliqué ici).
+
+Seule la VITESSE de Débutant importe ici (adversaire faible, pas son réglage
+calibré réel) : la fixture ``niveau_debutant_rapide`` (``tests/conftest.py``,
+issue #268) installe l'ancien réglage rapide pour la durée du test — sans
+elle, le Débutant calibré par #267 appelle le solveur exact à chaque tour et
+une manche à ``max_tours=300`` peut prendre plus d'une minute."""
 
 import json
 import sys
@@ -25,7 +31,8 @@ def _lire_jsonl(chemin):
         return [json.loads(ligne) for ligne in f if ligne.strip()]
 
 
-def test_sans_export_trace_aucun_fichier_ni_changement(tmp_path):
+def test_sans_export_trace_aucun_fichier_ni_changement(
+        tmp_path, niveau_debutant_rapide):
     """Option désactivée par défaut : ``comparer`` fonctionne à l'identique
     sans jamais créer de fichier quand ``export_trace`` n'est pas fourni."""
     resume = M.comparer("Débutant", "Débutant", nb_donnes=1, seed=1,
@@ -34,7 +41,8 @@ def test_sans_export_trace_aucun_fichier_ni_changement(tmp_path):
     assert not list(tmp_path.iterdir())
 
 
-def test_trace_une_partie_courte_lignes_coherentes_et_resultat(tmp_path):
+def test_trace_une_partie_courte_lignes_coherentes_et_resultat(
+        tmp_path, niveau_debutant_rapide):
     chemin = tmp_path / "trace.jsonl"
     resume = M.comparer("Débutant", "Débutant", nb_donnes=1, seed=1,
                         max_tours=300, export_trace=str(chemin))
@@ -101,7 +109,8 @@ def _grouper_par_manche_et_joueur(tours):
     return groupes.items()
 
 
-def test_export_trace_independant_de_export_resultats(tmp_path):
+def test_export_trace_independant_de_export_resultats(
+        tmp_path, niveau_debutant_rapide):
     """Les deux exports peuvent être utilisés ensemble ou séparément, sans
     interférer (issue #226, point 1 : indépendance explicitement demandée)."""
     chemin_trace = tmp_path / "trace.jsonl"
