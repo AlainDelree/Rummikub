@@ -78,11 +78,12 @@ def test_echelle_a_cinq_niveaux():
 
 
 def test_bridages_monotones_du_plus_faible_au_plus_fort():
-    """Cohérence de l'échelle recalibrée (#213, recalibrage #216) : du niveau le
-    plus FAIBLE au plus FORT (ordre de ``config.NIVEAUX``), la perturbation
-    permise ne DÉCROÎT jamais (``None`` = ∞ = le solveur complet, le plus fort)
-    et le taux d'oubli ne CROÎT jamais. Autrement dit, un niveau plus fort est
-    TOUJOURS au moins aussi peu bridé que le niveau juste en dessous."""
+    """Cohérence de l'échelle calibrée par duels (#267, méthode #240) : du
+    niveau le plus FAIBLE au plus FORT (ordre de ``config.NIVEAUX``), la
+    perturbation permise ne DÉCROÎT jamais (``None`` = ∞ = le solveur complet,
+    le plus fort) et le taux d'oubli ne CROÎT jamais. Autrement dit, un
+    niveau plus fort est TOUJOURS au moins aussi peu bridé que le niveau
+    juste en dessous."""
     def perturbation_cle(b):
         return math.inf if b.perturbation_max is None else b.perturbation_max
 
@@ -94,9 +95,43 @@ def test_bridages_monotones_du_plus_faible_au_plus_fort():
     assert perturbations == sorted(perturbations), perturbations
     # Taux d'oubli NON CROISSANT (le fort oublie au plus autant que le faible).
     assert oublis == sorted(oublis, reverse=True), oublis
-    # Avancé (et donc Expert, identiques sur ces deux paramètres) jouent le
-    # solveur complet.
-    assert niveaux.BRIDAGES["Avancé"].complet
+    # Depuis #267, Avancé n'est PLUS identique à Expert : Avancé est un
+    # solveur un-tour bridé (perturbation 6), seul Expert joue le solveur
+    # complet.
+    assert not niveaux.BRIDAGES["Avancé"].complet
+    assert niveaux.BRIDAGES["Expert"].complet
+
+
+def test_reglages_calibres_267():
+    """Épingle les cinq réglages retenus par la campagne de calibration par
+    duels (issue #267, méthode #240, résultats dans docs/contexte/
+    niveaux_ia_calibrage.md) et vérifie que chaque niveau est strictement plus
+    fort que le niveau juste en dessous sur AU MOINS un des deux leviers
+    (perturbation plus grande, ou oubli plus faible), Expert au sommet de
+    l'échelle (seul niveau au solveur complet)."""
+    attendus = {
+        "Débutant":      niveaux.Bridage(perturbation_max=1, taux_oubli=0.80),
+        "Facile":        niveaux.Bridage(perturbation_max=1, taux_oubli=0.40),
+        "Intermédiaire": niveaux.Bridage(perturbation_max=3, taux_oubli=0.15,
+                                         eviter_don_joker=True),
+        "Avancé":        niveaux.Bridage(perturbation_max=6, taux_oubli=0.04,
+                                         eviter_don_joker=True),
+        "Expert":        niveaux.Bridage(perturbation_max=None, taux_oubli=0.0,
+                                         eviter_don_joker=True),
+    }
+    assert niveaux.BRIDAGES == attendus
+
+    def perturbation_cle(b):
+        return math.inf if b.perturbation_max is None else b.perturbation_max
+
+    du_faible_au_fort = [niveaux.BRIDAGES[n] for n in NIVEAUX]
+    for faible, fort in zip(du_faible_au_fort, du_faible_au_fort[1:]):
+        plus_fort_en_perturbation = perturbation_cle(fort) > perturbation_cle(faible)
+        plus_fort_en_oubli = fort.taux_oubli < faible.taux_oubli
+        assert plus_fort_en_perturbation or plus_fort_en_oubli
+
+    assert niveaux.BRIDAGES["Expert"].complet
+    assert all(not niveaux.BRIDAGES[n].complet for n in NIVEAUX if n != "Expert")
 
 
 def test_niveau_champion_du_monde_retombe_sur_expert():

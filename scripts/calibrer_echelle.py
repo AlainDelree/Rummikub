@@ -4,11 +4,12 @@ DUELS entre niveaux voisins, avec des réglages (perturbation/oubli) donnés en
 LIGNE DE COMMANDE — sans jamais toucher à `moteur/niveaux.BRIDAGES` (issue
 #240).
 
-Depuis le retrait de « Champion du Monde » (#235/#236), Avancé et Expert
-jouent EXACTEMENT pareil (égalité statistique) et Facile n'est pas plus fort
-que Débutant avec les réglages actuels : cet outil sert à chercher, PAR LA
-MESURE, des réglages où chaque niveau bat nettement le niveau juste en
-dessous (cible : 60 à 70 % de victoires, réglable).
+Cet outil a servi à chercher, PAR LA MESURE, des réglages où chaque niveau bat
+nettement le niveau juste en dessous (cible : 60 à 70 % de victoires,
+réglable) — campagne de #267 appliquée dans `moteur/niveaux.BRIDAGES` (détail
+et résultats : docs/contexte/niveaux_ia_calibrage.md, section « Échelle
+calibrée »). Il reste disponible pour une recalibration future sans jamais
+toucher `niveaux.py` lui-même.
 
 Méthode décidée par Alain (DESCENDANTE, à documenter dans CONTEXTE.md) :
 Expert reste à fond, on règle Avancé contre Expert (fixe), puis Intermédiaire

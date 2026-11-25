@@ -17,14 +17,15 @@ Paires jouées :
     Facile–Avancé, Intermédiaire–Expert), qui doivent montrer un écart encore
     plus net.
 
-AVERTISSEMENT IMPORTANT (issue #213 §2) : Avancé et Expert sont STRICTEMENT
-IDENTIQUES en force (même solveur exact complet, sans aucune étape
-supplémentaire). Expert avait porté une vérification de finition en fin de
-partie (#221, retirée par #236, jamais un coup changé), puis un sixième
-niveau, « Champion du Monde », d'autres stratégies multi-tours (retiré par
-#235, aucun effet mesurable sur le taux de victoire face à Expert). La paire
-Avancé–Expert est donc ATTENDUE à ~50 % / égalité statistique : ce n'est PAS
-un échec de l'échelle. Le script le signale explicitement pour cette paire.
+Depuis la calibration par duels de #267 (méthode #240), **Avancé n'est plus
+identique à Expert** : Avancé est un solveur un-tour bridé (perturbation 6),
+Expert seul joue le solveur complet — la paire Avancé–Expert est donc une
+paire adjacente DISTINCTE comme les autres, avec le même écart net visé
+(60-75 %). Les deux fonctions ci-dessous (``_niveaux_identiques``,
+``_afficher_verdicts``) détectent par la MESURE (``Bridage.complet`` des deux
+niveaux) une éventuelle paire réellement identique plutôt que de la supposer
+d'après les noms — utile si un réglage candidat personnalisé recrée
+l'identité, mais ce n'est plus le cas par défaut.
 
 **#220 retire le relevé des tuiles restantes en défaite** (miroir d'un niveau
 contre lui-même, option ``--donnes-profil``) : voir
@@ -123,7 +124,9 @@ def _paires_tournoi() -> list[tuple[str, str]]:
 
 def _niveaux_identiques(niveau_a: str, niveau_b: str) -> bool:
     """Vrai si les deux niveaux jouent EXACTEMENT le même moteur : tous deux le
-    solveur un-tour complet sans bridage (Avancé/Expert, issue #213 §2)."""
+    solveur un-tour complet sans bridage (``Bridage.complet``). Depuis #267,
+    seul Expert est dans ce cas par défaut — cette fonction reste un contrôle
+    par la MESURE, pas une supposition sur les noms de niveaux."""
     ba = _niveaux.bridage_pour(niveau_a)
     bb = _niveaux.bridage_pour(niveau_b)
     return ba.complet and bb.complet
@@ -357,8 +360,10 @@ def afficher_rapport(rapport: dict) -> None:
 def _afficher_verdicts(res: dict) -> None:
     """Deux vérifications demandées par l'issue : (a) l'échelle est-elle
     strictement croissante sur les paires adjacentes ? (b) chaque écart
-    adjacent est-il « net » (60–75 %) ? — en excluant explicitement la paire
-    identique Avancé/Expert (égalité ATTENDUE)."""
+    adjacent est-il « net » (60–75 %) ? — en excluant toute paire détectée
+    IDENTIQUE par la mesure (``Bridage.complet`` des deux côtés, égalité
+    ATTENDUE dans ce cas). Depuis #267, aucune paire adjacente par défaut
+    n'est dans ce cas (Avancé n'est plus identique à Expert)."""
     adjacentes = res["adjacentes"]
     distinctes = [r for r in adjacentes
                   if not r["identiques"] and r["matchs_decides"] > 0]
@@ -389,12 +394,12 @@ def _afficher_verdicts(res: dict) -> None:
               f"{sum(nets)}/{len(distinctes)} paire(s) distincte(s) dans la "
               f"cible visée par l'issue.")
 
-    # Rappel sur la paire identique.
+    # Rappel sur une éventuelle paire identique (détectée par la mesure).
     if identiques:
         libelles = ", ".join(f"{r['niveau_faible']}–{r['niveau_fort']}"
                              for r in identiques)
         print(f"  (!) Paires ATTENDUES à ~50 % car solveur IDENTIQUE "
-              f"(Avancé/Expert, #213 §2) : {libelles}.")
+              f"(Bridage.complet des deux côtés) : {libelles}.")
         print("      → Une égalité statistique sur ces paires est NORMALE, "
               "pas un échec de l'échelle.")
 

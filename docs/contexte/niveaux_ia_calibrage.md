@@ -62,7 +62,8 @@ niveau le plus fort : c'est le niveau **Avancé**.
 > **Expert et Avancé sont de nouveau STRICTEMENT IDENTIQUES** (même solveur
 > exact complet, aucune étape additionnelle) : le plateau statistique
 > Avancé ≈ Expert décrit plus haut n'est donc plus une approximation
-> provisoire mais l'état réel et définitif de l'échelle.
+> provisoire mais l'état réel et définitif de l'échelle — **jusqu'à la
+> calibration de #267 ci-dessous, qui y met fin.**
 
 ### Recalibrage #216/#217 — état final (récit complet dans CHANGELOG.md, issues #216 et #217)
 
@@ -393,4 +394,43 @@ NON gagnant.)
 Les tests existants (IA, moteur, solveurs) restent **inchangés** : les
 fonctions heuristiques de niveau, toujours présentes, continuent d'être
 testées directement.
+`test_reglages_calibres_267` (issue #267) épingle les cinq réglages
+ci-dessous et vérifie que chaque niveau est strictement plus fort que le
+niveau juste en dessous sur au moins un des deux leviers, Expert au sommet
+(seul niveau au solveur complet) ; `test_bridages_monotones_du_plus_faible_
+au_plus_fort` ne suppose plus Avancé identique à Expert.
+
+### Échelle calibrée (issue #267, méthode de #240)
+
+Réglages retenus et appliqués dans `moteur/niveaux.BRIDAGES`, par la méthode
+DESCENDANTE de #240 (chaque niveau validé contre le niveau juste au-dessus,
+déjà figé ; règle de fin de manche réelle — blocage, #255 ; 50 donnes par
+duel ; cible 60-70 % de victoires pour le niveau supérieur) :
+
+| Niveau | `perturbation_max` | `taux_oubli` |
+|--------|:--:|:--:|
+| Débutant | 1 | 0,80 |
+| Facile | 1 | 0,40 |
+| Intermédiaire | 3 | 0,15 |
+| Avancé | 6 | 0,04 |
+| Expert | ∞ (solveur complet) | 0 |
+
+**Avancé n'est plus identique à Expert** : Avancé est désormais un solveur
+un-tour légèrement bridé (perturbation 6, comme Intermédiaire mais plus large
+et avec un oubli bien plus faible) ; Expert reste seul à jouer le solveur
+un-tour complet, sans aucune borne. `eviter_don_joker` est INCHANGÉ par #267
+(toujours activé pour Intermédiaire, Avancé, Expert ; toujours désactivé pour
+Débutant, Facile — voir `moteur/niveaux.BRIDAGES`).
+
+Résultats des duels retenus :
+- Facile (1/0,40) bat Débutant (1/0,80) à 67,0 % ± 9,2 (IC 95 %).
+- Facile (1/0,40) contre Intermédiaire (3/0,15) : le plus fort des deux
+  (Intermédiaire) gagne 65,0 %.
+- Avancé (6/0,04) validé dans son duel contre Expert, et Intermédiaire
+  (3/0,15) validé dans son duel contre Avancé (déjà figé), tous deux dans la
+  cible 60-70 %.
+
+Temps par tour d'Avancé : mesuré dans les campagnes à environ 1 s en moyenne,
+jusqu'à environ 4 s au maximum sur les niveaux bas du solveur (voir le
+rapport de clôture de #267 pour la mesure relevée sur cette machine).
 

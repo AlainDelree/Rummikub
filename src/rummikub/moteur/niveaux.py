@@ -26,20 +26,13 @@ même moteur (voir ``moteur/ia.jouer_niveau_bride``) :
   pour qu'un joueur ne « pioche » pas bêtement en toute fin de partie, quand il
   est sur le point de sortir.
 
-**Structure de l'échelle** (issue #213 §2) :
-
-* **Débutant, Facile, Intermédiaire** : le solveur un-tour AFFAIBLI (de plus en
-  plus bridé vers le bas) ;
-* **Avancé, Expert** : le solveur un-tour COMPLET, tel quel — STRICTEMENT
-  IDENTIQUES. Expert avait porté une vérification de finition en fin de
-  partie (#221) puis un sixième niveau, « Champion du Monde », d'autres
-  stratégies multi-tours ; tout ce code a été retiré (#235, #236, voir
-  CONTEXTE.md — archive : aucun effet mesurable sur le taux de victoire,
-  code récupérable au tag git ``archive-strategies-champion``).
-
-Les valeurs ci-dessous sont les valeurs de départ INDICATIVES de l'issue, à
-resserrer par les mesures (``scripts/echelle_niveaux.py``,
-``scripts/profil_joueur.py``).
+**Structure de l'échelle, calibrée par duels entre niveaux voisins (issue
+#267, méthode #240)** : les cinq niveaux jouent tous le même solveur un-tour,
+**tous bridés sauf Expert** — Débutant, Facile, Intermédiaire ET Avancé sont
+chacun un solveur un-tour AFFAIBLI à des degrés croissants ; Expert seul joue
+le solveur un-tour COMPLET, sans bridage. Avancé n'est donc plus identique à
+Expert. Détail des réglages retenus, méthode de calibration et résultats des
+duels : docs/contexte/niveaux_ia_calibrage.md.
 """
 
 from __future__ import annotations
@@ -106,63 +99,26 @@ def taux_oubli_effectif(taux: float, taille_main: int) -> float:
 
 
 # ---- Table des bridages par niveau (le SEUL endroit à régler) -------------- #
-# Valeurs RECALIBRÉES par #216 (suite #213) pour une échelle à écarts RÉGULIERS,
-# mesurées sur le BON critère de force : les « tuiles restantes en main quand le
-# niveau PERD » (plus bas = plus fort), par ``scripts/calibrer_niveaux.py`` en
-# miroir. Objectif : Alain (≈ 3,5 tuiles, profil provisoire) situé ENTRE
-# Intermédiaire et Avancé. Mesure retenue (miroir, graine 0) :
-#   Débutant 0/0.42 ≈ 8 ; Intermédiaire 4/0.08 ≈ 4,5 ;
-#   Avancé ∞/0 ≈ 2,7 (NON modifié, solveur complet).
-# Cible Débutant ≈ 9 NON atteignable : avec perturbation=0 la mesure sature
-# vers 7–8 quel que soit le taux d'oubli (celui-ci ne pèse quasiment plus sur
-# les tuiles restantes, seulement sur le taux de victoire) ; on retient le
-# réglage le PLUS FAIBLE utile (oubli 0.42) et on le signale (issue #216 §2).
-#
-# FACILE REMONTÉ par #217 (suite #216) : perturbation 0 → 1, oubli 0.15 → 0.30.
-# À #216, Facile (0/0.15) était quasi indistinct de Débutant (Débutant lui
-# gardait même marginalement MOINS de tuiles → ordre inversé) et perdait contre
-# Intermédiaire à 85 % (trop écrasant). À perturbation=0 le taux d'oubli ne pèse
-# presque plus sur l'issue : le seul levier qui sépare réellement les niveaux du
-# bas est la PERTURBATION (#216). On donne donc à Facile une perturbation de 1
-# (petits coups de récupération : déplacer au plus 1 tuile du plateau, ce que
-# l'oubli seul ne permettait pas) et on règle son oubli à 0.30. Ce couple place
-# Facile STRICTEMENT entre Débutant et Intermédiaire sur LES DEUX leviers :
-#   * oubli 0.30 < Débutant 0.42 ET perturbation 1 > Débutant 0 → Facile est
-#     plus fort que Débutant par construction (l'inversion d'ordre ne peut plus
-#     se produire, garantie structurelle et non seulement statistique) ;
-#   * oubli 0.30 > Intermédiaire 0.08 ET perturbation 1 < Intermédiaire 4 →
-#     Facile reste clairement plus faible qu'Intermédiaire (pas de dépassement).
-# Cible tuiles restantes ~6,0–6,3 (entre Débutant ≈ 7 et Intermédiaire ≈ 5,4) :
-# le smoke pert1/oubli0.15 donnait ≈ 4,0 (TROP fort, sous Intermédiaire), d'où
-# l'oubli relevé à 0.30 pour rapprocher Facile de la cible. La mesure fine
-# n'est PAS fiable au calibrage : en MIROIR, deux joueurs pert=1 égaux recyclent
-# le plateau et quasiment TOUTES les donnes atteignent le garde-fou de tours
-# (comme la précaution déjà notée pour Intermédiaire pert=4, #216) ; le tournoi
-# de validation au budget de production, trop coûteux pour aboutir dans le temps
-# imparti de #217, est laissé à relancer par Alain (voir
-# docs/contexte/niveaux_ia_calibrage.md §16,
-# ``scripts/calibrer_echelle.py`` depuis #240, qui remplace l'ancien
-# ``scripts/valider_bas_echelle.py``). Le réglage s'appuie donc sur la
-# garantie structurelle ci-dessus plutôt que sur une mesure non significative.
-# ``eviter_don_joker`` (issue #252) : activé pour Intermédiaire, Avancé et
-# Expert — un joueur de ce niveau ne doit plus offrir gratuitement un joker
-# à l'adversaire (voir docs/contexte/ia_anti_don_joker.md). Débutant et
-# Facile restent à ``False`` (comportement d'avant #252, inchangé) : un
-# joueur de ce niveau peut encore offrir un joker, considéré comme une
-# erreur plausible pour ce niveau de jeu.
+# Valeurs CALIBRÉES par #267 (campagnes de duels de #240) : chaque niveau a
+# été validé contre le niveau juste au-dessus (déjà figé), règle de fin de
+# manche réelle (blocage, #255), 50 donnes par duel, cible 60-70 % de
+# victoires pour le niveau supérieur. Détail de la méthode, des duels et des
+# résultats : docs/contexte/niveaux_ia_calibrage.md, section « Échelle
+# calibrée ». Avancé n'est plus identique à Expert : c'est désormais un
+# solveur un-tour légèrement bridé (perturbation 6), pas le solveur complet.
+# ``eviter_don_joker`` (issue #252) : INCHANGÉ par #267 — toujours activé pour
+# Intermédiaire, Avancé et Expert (un joueur de ce niveau ne doit plus offrir
+# gratuitement un joker à l'adversaire, voir docs/contexte/
+# ia_anti_don_joker.md) ; Débutant et Facile restent à ``False`` (un joueur de
+# ce niveau peut encore offrir un joker, erreur plausible à ce niveau de jeu).
 BRIDAGES: dict[str, Bridage] = {
-    "Débutant":          Bridage(perturbation_max=0,    taux_oubli=0.42),
-    "Facile":            Bridage(perturbation_max=1,    taux_oubli=0.30),
-    "Intermédiaire":     Bridage(perturbation_max=4,    taux_oubli=0.08,
+    "Débutant":          Bridage(perturbation_max=1,    taux_oubli=0.80),
+    "Facile":            Bridage(perturbation_max=1,    taux_oubli=0.40),
+    "Intermédiaire":     Bridage(perturbation_max=3,    taux_oubli=0.15,
                                  eviter_don_joker=True),
-    "Avancé":            Bridage(perturbation_max=None, taux_oubli=0.0,
+    "Avancé":            Bridage(perturbation_max=6,    taux_oubli=0.04,
                                  eviter_don_joker=True),
-    # Expert : solveur un-tour complet, STRICTEMENT IDENTIQUE à Avancé.
-    # Avait porté une vérification de finition en fin de partie (#221), puis
-    # un sixième niveau, « Champion du Monde », d'autres stratégies
-    # multi-tours (#225/#229/#230/#231/#232) ; tout ce code a été retiré
-    # (#235, #236 — aucun des deux n'a jamais changé un coup mesurablement,
-    # voir CONTEXTE.md). Expert n'est pas modifié par ces retraits.
+    # Expert : seul niveau à jouer le solveur un-tour complet, sans bridage.
     "Expert":            Bridage(perturbation_max=None, taux_oubli=0.0,
                                  eviter_don_joker=True),
 }
