@@ -1007,7 +1007,8 @@ def _coup_selon_perturbation(etat, idx, perturbation_max, budget_temps, on_repli
                              on_aucun=None):
     """Meilleur coup « vu » compte tenu de la perturbation autorisée.
 
-    ``perturbation_max is None`` → solveur complet (Avancé/Expert).
+    ``perturbation_max is None`` → solveur complet (Expert, seul niveau à
+    ``perturbation_max=None`` depuis la calibration de #267).
     ``perturbation_max == 0`` → coup sans réarrangement (jamais de déplacement).
     ``perturbation_max > 0`` → coup complet s'il ne déplace pas plus de
     ``perturbation_max`` tuiles du plateau, sinon on retombe sur le coup sans
