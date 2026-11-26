@@ -59,11 +59,9 @@ niveau le plus fort : c'est le niveau **Avancé**.
 > **Mise à jour #236** : la vérification de finition elle-même (#221),
 > restée active pour Expert après #235, est à son tour retirée — jamais un
 > coup changé (4 534 déclenchements sans effet, voir l'archive §13, point g).
-> **Expert et Avancé sont de nouveau STRICTEMENT IDENTIQUES** (même solveur
-> exact complet, aucune étape additionnelle) : le plateau statistique
-> Avancé ≈ Expert décrit plus haut n'est donc plus une approximation
-> provisoire mais l'état réel et définitif de l'échelle — **jusqu'à la
-> calibration de #267 ci-dessous, qui y met fin.**
+> De #236 à #267, Avancé et Expert étaient de nouveau strictement
+> identiques (même solveur exact complet) ; **ce n'est plus vrai depuis
+> #267**, voir « Échelle calibrée » ci-dessous.
 
 ### Recalibrage #216/#217 — état final (récit complet dans CHANGELOG.md, issues #216 et #217)
 
@@ -394,6 +392,7 @@ NON gagnant.)
 Les tests existants (IA, moteur, solveurs) restent **inchangés** : les
 fonctions heuristiques de niveau, toujours présentes, continuent d'être
 testées directement.
+
 `test_reglages_calibres_267` (issue #267) épingle les cinq réglages
 ci-dessous et vérifie que chaque niveau est strictement plus fort que le
 niveau juste en dessous sur au moins un des deux leviers, Expert au sommet
@@ -426,13 +425,25 @@ Résultats des duels retenus :
 - Facile (1/0,40) bat Débutant (1/0,80) à 67,0 % ± 9,2 (IC 95 %).
 - Facile (1/0,40) contre Intermédiaire (3/0,15) : le plus fort des deux
   (Intermédiaire) gagne 65,0 %.
-- Avancé (6/0,04) validé dans son duel contre Expert, et Intermédiaire
-  (3/0,15) validé dans son duel contre Avancé (déjà figé), tous deux dans la
-  cible 60-70 %.
+- Intermédiaire (3/0,15) validé dans son duel contre Avancé (déjà figé),
+  dans la cible 60-70 %.
+- Avancé (6/0,04) contre Expert : Expert gagne 127 manches sur 200 (100
+  donnes, graine 31, miroir, règle de fin de manche réelle — blocage,
+  #255) = **63,5 % ± 6,7 (+96 Elo)**, dans la cible 60-70 %. Résultat
+  **identique** aux deux budgets de solveur mesurés : 4,0 s (campagne de
+  calibration d'origine) et 1,5 s (budget de production, mesure de
+  contrôle #269) — le budget entre 1,5 s et 4,0 s n'a changé aucune issue
+  de manche sur ces donnes.
 
-Temps par tour d'Avancé : mesuré dans les campagnes à environ 1 s en moyenne,
-jusqu'à environ 4 s au maximum sur les niveaux bas du solveur (voir le
-rapport de clôture de #267 pour la mesure relevée sur cette machine).
+Temps par tour d'Avancé : mesuré lors du contrôle à 1,5 s (#269, mêmes 100
+donnes miroir que ci-dessus) à 160 ms en moyenne, jusqu'à 4 594 ms au
+maximum (Expert : 151 ms en moyenne, 1 953 ms au maximum) — manches de
+64,4 tours en moyenne, toutes terminées par chevalet vide, aucune bloquée.
+Le maximum d'Avancé dépasse nettement le budget de 1,5 s : explication
+probable, **non vérifiée**, le niveau bridé appelle le solveur plusieurs
+fois par tour (recherche limitée par la perturbation, règles du joker),
+chaque appel étant borné par le budget plutôt que le tour dans son
+ensemble.
 
 ### Règle de travail (issue #268) : les tests ne dépendent jamais des réglages calibrés
 
