@@ -292,6 +292,129 @@ def test_jouer_tour_accepte_ajout_d_une_tuile_du_chevalet_apres_ouverture():
 
 
 # --------------------------------------------------------------------------- #
+# Règle de l'ouverture : aucune combinaison préexistante modifiée avant la
+# mise initiale (issue #273, étude #270, décision d'Alain). ``jouer_tour``
+# refuse tout coup qui, avant l'ouverture, modifie/prolonge/démantèle une
+# combinaison déjà présente sur la table en début de tour — y compris pour y
+# récupérer un joker. Après l'ouverture, le jeu normal (test ci-dessus,
+# ``test_jouer_tour_accepte_ajout_d_une_tuile_du_chevalet_apres_ouverture``)
+# reste inchangé.
+# --------------------------------------------------------------------------- #
+
+def test_jouer_tour_refuse_ouverture_qui_prolonge_une_combinaison_preexistante():
+    """Scénario de l'étude #270 : le joueur ouvre avec un groupe de 13 (39
+    points, ≥ 30) mais le plateau proposé prolonge aussi la suite noire
+    5-6-7 déjà posée par un autre joueur en 5-6-7-8 — refusé, même si le
+    groupe de 13 seul suffirait à l'ouverture."""
+    etat = creer_partie(
+        [{"nom": "A", "est_ia": False}, {"nom": "B", "est_ia": True, "niveau": "Facile"}],
+        {"nb_manches": 1, "valeur_joker_penalite": 30, "mise_initiale_min": 30})
+    combo_existante = [t(5, "noir"), t(6, "noir"), t(7, "noir")]
+    etat["plateau"] = [[x.as_dict() for x in combo_existante]]
+    etat["index_joueur_actuel"] = 0
+    etat["joueurs"][0]["mise_initiale_faite"] = False
+    groupe_13 = [t(13, "rouge"), t(13, "bleu"), t(13, "noir")]
+    etat["joueurs"][0]["chevalet"] = ([x.as_dict() for x in groupe_13]
+                                      + [t(8, "noir").as_dict()])
+
+    nouveau_plateau = [[x.as_dict() for x in combo_existante]
+                       + [t(8, "noir").as_dict()],
+                       [x.as_dict() for x in groupe_13]]
+    res = jouer_tour(etat,
+                     ["rouge_13_a", "bleu_13_a", "noir_13_a", "noir_8_a"],
+                     nouveau_plateau)
+
+    assert res["ok"] is False
+    assert "ouverture" in res["erreur"]
+    # Le coup refusé ne doit avoir rien modifié.
+    assert etat["joueurs"][0]["mise_initiale_faite"] is False
+    assert len(etat["joueurs"][0]["chevalet"]) == 4
+    assert etat["plateau"] == [[x.as_dict() for x in combo_existante]]
+
+
+def test_jouer_tour_accepte_ouverture_qui_laisse_intacte_une_combinaison_preexistante():
+    """Même scénario, mais le groupe de 13 est posé seul (sans toucher la
+    suite noire) : accepté, le 8 noir reste au chevalet pour un tour
+    suivant."""
+    etat = creer_partie(
+        [{"nom": "A", "est_ia": False}, {"nom": "B", "est_ia": True, "niveau": "Facile"}],
+        {"nb_manches": 1, "valeur_joker_penalite": 30, "mise_initiale_min": 30})
+    combo_existante = [t(5, "noir"), t(6, "noir"), t(7, "noir")]
+    etat["plateau"] = [[x.as_dict() for x in combo_existante]]
+    etat["index_joueur_actuel"] = 0
+    etat["joueurs"][0]["mise_initiale_faite"] = False
+    groupe_13 = [t(13, "rouge"), t(13, "bleu"), t(13, "noir")]
+    etat["joueurs"][0]["chevalet"] = ([x.as_dict() for x in groupe_13]
+                                      + [t(8, "noir").as_dict()])
+
+    nouveau_plateau = [[x.as_dict() for x in combo_existante],
+                       [x.as_dict() for x in groupe_13]]
+    res = jouer_tour(etat, ["rouge_13_a", "bleu_13_a", "noir_13_a"],
+                     nouveau_plateau)
+
+    assert res["ok"] is True
+    assert etat["joueurs"][0]["mise_initiale_faite"] is True
+    assert etat["joueurs"][0]["chevalet"] == [t(8, "noir").as_dict()]
+    assert etat["plateau"] == [[x.as_dict() for x in combo_existante],
+                               [x.as_dict() for x in groupe_13]]
+
+
+def test_jouer_tour_refuse_recuperation_de_joker_avant_ouverture():
+    """La même interdiction couvre la récupération d'un joker de la table
+    avant l'ouverture (échange direct) : le joker de la suite rouge
+    4-5-(joker=6) ne peut pas être repris avant que la mise initiale ne soit
+    faite, même si le coup atteindrait 30 points par ailleurs."""
+    etat = creer_partie(
+        [{"nom": "A", "est_ia": False}, {"nom": "B", "est_ia": True, "niveau": "Facile"}],
+        {"nb_manches": 1, "valeur_joker_penalite": 30, "mise_initiale_min": 30})
+    combo_existante = [t(4, "rouge"), t(5, "rouge"), j()]
+    etat["plateau"] = [[x.as_dict() for x in combo_existante]]
+    etat["index_joueur_actuel"] = 0
+    etat["joueurs"][0]["mise_initiale_faite"] = False
+    chevalet = [t(6, "rouge"), t(9, "noir"), t(9, "bleu"), t(9, "jaune")]
+    etat["joueurs"][0]["chevalet"] = [x.as_dict() for x in chevalet]
+
+    # Le joker est repris (échange direct) et rejoué dans un groupe de 9.
+    nouveau_plateau = [
+        [t(4, "rouge").as_dict(), t(5, "rouge").as_dict(),
+         t(6, "rouge").as_dict()],
+        [t(9, "noir").as_dict(), t(9, "bleu").as_dict(), t(9, "jaune").as_dict(),
+         j().as_dict()],
+    ]
+    res = jouer_tour(etat,
+                     ["rouge_6_a", "noir_9_a", "bleu_9_a", "jaune_9_a"],
+                     nouveau_plateau)
+
+    assert res["ok"] is False
+    assert "ouverture" in res["erreur"]
+    assert etat["joueurs"][0]["mise_initiale_faite"] is False
+    assert etat["plateau"] == [[x.as_dict() for x in combo_existante]]
+
+
+def test_jouer_tour_accepte_extension_d_une_combinaison_au_tour_suivant():
+    """Issue #273 : une fois la mise initiale faite (tour suivant), le même
+    joueur peut de nouveau prolonger une combinaison déjà posée — la
+    restriction ne vaut que pour le tour de l'ouverture elle-même."""
+    etat = creer_partie(
+        [{"nom": "A", "est_ia": False}, {"nom": "B", "est_ia": True, "niveau": "Facile"}],
+        {"nb_manches": 1, "valeur_joker_penalite": 30, "mise_initiale_min": 30})
+    combo_existante = [t(5, "noir"), t(6, "noir"), t(7, "noir")]
+    etat["plateau"] = [[x.as_dict() for x in combo_existante]]
+    etat["index_joueur_actuel"] = 0
+    etat["joueurs"][0]["mise_initiale_faite"] = True
+    etat["joueurs"][0]["chevalet"] = [t(8, "noir").as_dict()]
+
+    nouveau_plateau = [[x.as_dict() for x in combo_existante]
+                       + [t(8, "noir").as_dict()]]
+    res = jouer_tour(etat, ["noir_8_a"], nouveau_plateau)
+
+    assert res["ok"] is True
+    assert etat["joueurs"][0]["chevalet"] == []
+    assert etat["plateau"] == [[x.as_dict() for x in combo_existante]
+                               + [t(8, "noir").as_dict()]]
+
+
+# --------------------------------------------------------------------------- #
 # Manches multiples (issue #203, suite de #192)
 # --------------------------------------------------------------------------- #
 

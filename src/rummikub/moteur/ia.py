@@ -219,7 +219,16 @@ def _appliquer_extensions(plateau, restantes, ids):
 
 
 def _coup_maximal(etat, idx, ordre_points=False):
-    """Construit le coup posant le plus de tuiles (combinaisons + extensions)."""
+    """Construit le coup posant le plus de tuiles (combinaisons + extensions).
+
+    Règle de l'ouverture (#273, décision d'Alain) : tant que la mise
+    initiale n'est pas faite, aucune combinaison déjà présente sur le
+    plateau AVANT ce tour ne peut être étendue — seules les combinaisons
+    formées ce tour-ci depuis le chevalet peuvent l'être (ex. prolonger sa
+    propre ouverture avec une tuile supplémentaire de la main reste permis,
+    le même tour). Les tuiles qui auraient prolongé une combinaison
+    préexistante restent au chevalet pour un tour suivant.
+    """
     joueur = etat["joueurs"][idx]
     deja = joueur["mise_initiale_faite"]
     resultats = trouver_combinaisons_depuis_chevalet(
@@ -231,6 +240,7 @@ def _coup_maximal(etat, idx, ordre_points=False):
     choisis = _selection_disjointe(resultats)
 
     plateau = plateau_depuis_dict(etat.get("plateau", []))
+    nb_combos_avant = len(plateau)
     ids = []
     utilises = set()
     for r in choisis:
@@ -247,7 +257,15 @@ def _coup_maximal(etat, idx, ordre_points=False):
     if mise_ok:
         restantes = [t for t in _to_tuiles(joueur["chevalet"])
                      if t.id not in utilises]
-        _appliquer_extensions(plateau, restantes, ids)
+        if deja:
+            _appliquer_extensions(plateau, restantes, ids)
+        else:
+            # Avant l'ouverture : seules les combinaisons posées CE tour
+            # (depuis l'index nb_combos_avant) peuvent être étendues, jamais
+            # celles déjà présentes sur la table.
+            nouvelles = plateau[nb_combos_avant:]
+            _appliquer_extensions(nouvelles, restantes, ids)
+            plateau[nb_combos_avant:] = nouvelles
 
     if not ids:
         return None

@@ -251,6 +251,25 @@ def jouer_tour(etat: dict,
                     "le chevalet avant ce coup ("
                     + ", ".join(sorted(ids_hors_chevalet)) + ")",
                     "tuiles_hors_chevalet": sorted(ids_hors_chevalet)}
+
+        # 3bis. Règle de l'ouverture (issue #273, décision d'Alain) : tant
+        #       que la mise initiale n'est pas faite, aucune combinaison
+        #       déjà présente sur la table AVANT ce tour ne peut être
+        #       modifiée, prolongée ni démantelée — y compris pour y
+        #       récupérer un joker. Chaque combinaison d'avant-tour doit se
+        #       retrouver à l'identique (même ensemble de tuiles) dans le
+        #       plateau proposé ; seules de nouvelles combinaisons, posées
+        #       ce tour depuis le chevalet, sont admises à côté.
+        combos_avant = [frozenset(t["id"] for t in combo)
+                        for combo in etat.get("plateau", [])]
+        combos_apres = [frozenset(t.id for t in combo) for combo in plateau]
+        combos_modifiees = [c for c in combos_avant if c not in combos_apres]
+        if combos_modifiees:
+            return {"ok": False, "erreur":
+                    "Coup refusé : avant l'ouverture, aucune combinaison "
+                    "déjà présente sur la table ne peut être modifiée ou "
+                    "prolongée (règle de l'ouverture)"}
+
         points_poses = _points_tuiles_posees(plateau, ids_posees,
                                              ids_chevalet_avant)
         mini = etat["config"]["mise_initiale_min"]

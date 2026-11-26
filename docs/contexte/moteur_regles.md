@@ -195,6 +195,20 @@ de manche intermédiaire, classement final, affichage de l'égalité).
   un coup. Voir `test_jouer_tour_refuse_si_des_tuiles_du_plateau_
   disparaissent` (`tests/test_moteur.py`) et §8bis (bug d'origine côté
   solveur Expert).
+- **Règle de l'ouverture : aucune combinaison préexistante modifiée** (issue
+  #273, étude #270, décision d'Alain) : tant que `mise_initiale_faite` est
+  faux en début de tour, aucune combinaison déjà présente sur la table avant
+  ce tour ne peut être modifiée, prolongée ni démantelée — ni par l'IA
+  (`moteur/ia.py`, voir `docs/contexte/joker_tactiques.md` §8 et
+  `niveaux_ia_calibrage.md`), ni côté moteur. `jouer_tour` refuse directement
+  un tel coup (`{"ok": False, "erreur": "Coup refusé : avant l'ouverture,
+  aucune combinaison déjà présente sur la table ne peut être modifiée ou
+  prolongée (...)"}`), y compris pour y récupérer un joker — même si le coup
+  atteint par ailleurs la mise initiale. Seules de nouvelles combinaisons
+  posées ce tour depuis le chevalet sont admises ; une fois la mise initiale
+  faite (tour suivant), le jeu normal (extensions comprises) reprend sans
+  restriction. Voir `test_jouer_tour_refuse_ouverture_qui_prolonge_une_
+  combinaison_preexistante` et les tests voisins (`tests/test_moteur.py`).
 - **`backup_debut_tour` est appelé dans `api.py`** après chaque coup
   (jouer/piocher/passer/reprendre/IA) — **pas** dans le moteur lui-même.
 - Après chaque coup, `api.py` appelle `sauvegarder_partie` (SQLite).

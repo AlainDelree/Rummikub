@@ -1436,3 +1436,98 @@ def test_solveur_cascade_joker_61_trouve_attendu_avec_gros_budget(
     assert coup["action"] == "jouer"
     assert len(coup["ids_tuiles"]) >= attendu
     _verifier_coup_valide_sans_perte(etat, idx, coup)
+
+
+# --------------------------------------------------------------------------- #
+# Règle de l'ouverture : aucune combinaison préexistante modifiée (issue #273,
+# étude #270, décision d'Alain). Scénario reproduit : le bot ouvre avec un
+# groupe de 13 (3 tuiles, 39 points), et son chevalet contient aussi un 8 noir
+# qui permettrait de prolonger la suite 5-6-7 noir déjà posée par un autre
+# joueur en 5-6-7-8 noir — interdit avant l'ouverture, désormais refusé.
+# --------------------------------------------------------------------------- #
+
+def _etat_ouverture_ne_doit_pas_toucher_la_table(niveau):
+    etat = _partie_2j(niveau)
+    etat["index_joueur_actuel"] = 1
+    bot = etat["joueurs"][1]
+    bot["mise_initiale_faite"] = False
+    etat["plateau"] = [[
+        {"id": "noir_5_a", "valeur": 5, "couleur": "noir", "est_joker": False},
+        {"id": "noir_6_a", "valeur": 6, "couleur": "noir", "est_joker": False},
+        {"id": "noir_7_a", "valeur": 7, "couleur": "noir", "est_joker": False},
+    ]]
+    bot["chevalet"] = [
+        {"id": "rouge_13_a", "valeur": 13, "couleur": "rouge", "est_joker": False},
+        {"id": "bleu_13_a", "valeur": 13, "couleur": "bleu", "est_joker": False},
+        {"id": "noir_13_a", "valeur": 13, "couleur": "noir", "est_joker": False},
+        {"id": "noir_8_a", "valeur": 8, "couleur": "noir", "est_joker": False},
+    ]
+    return etat
+
+
+def _suite_noir_intacte(nouveau_plateau):
+    combos = [frozenset(t["id"] for t in c) for c in nouveau_plateau]
+    return frozenset({"noir_5_a", "noir_6_a", "noir_7_a"}) in combos
+
+
+def test_facile_n_ouvre_pas_en_prolongeant_une_combinaison_preexistante():
+    """Issue #273 (étude #270) : Facile ouvre avec le groupe de 13 (39
+    points) sans toucher à la suite noire déjà posée — le 8 noir qui
+    l'aurait prolongée reste au chevalet."""
+    etat = _etat_ouverture_ne_doit_pas_toucher_la_table("Facile")
+    coup = jouer_niveau_facile(etat, 1)
+    assert coup["action"] == "jouer"
+    assert "noir_8_a" not in coup["ids_tuiles"]
+    assert set(coup["ids_tuiles"]) == {"rouge_13_a", "bleu_13_a", "noir_13_a"}
+    assert _suite_noir_intacte(coup["nouveau_plateau"])
+    plateau = [[tuile_depuis_dict(d) for d in c]
+               for c in coup["nouveau_plateau"]]
+    assert valider_plateau(plateau)["valide"]
+
+
+def test_intermediaire_n_ouvre_pas_en_prolongeant_une_combinaison_preexistante():
+    """Même scénario qu'au-dessus, pour Intermédiaire (ordre par points) —
+    c'est le cas exact reproduit par l'étude #270 avec le vrai moteur."""
+    etat = _etat_ouverture_ne_doit_pas_toucher_la_table("Intermédiaire")
+    coup = jouer_niveau_intermediaire(etat, 1)
+    assert coup["action"] == "jouer"
+    assert "noir_8_a" not in coup["ids_tuiles"]
+    assert set(coup["ids_tuiles"]) == {"rouge_13_a", "bleu_13_a", "noir_13_a"}
+    assert _suite_noir_intacte(coup["nouveau_plateau"])
+    plateau = [[tuile_depuis_dict(d) for d in c]
+               for c in coup["nouveau_plateau"]]
+    assert valider_plateau(plateau)["valide"]
+
+
+def test_avance_en_repli_n_ouvre_pas_en_prolongeant_une_combinaison_preexistante():
+    """Même scénario, pour le repli heuristique d'Avancé (``jouer_niveau_
+    avance``, utilisé quand le solveur exact est indisponible ou en budget
+    dépassé) : ni ``_coup_maximal`` ni les tactiques de joker (déjà gelées
+    sans mise initiale) ne doivent toucher à la suite noire."""
+    etat = _etat_ouverture_ne_doit_pas_toucher_la_table("Avancé")
+    coup = jouer_niveau_avance(etat, 1)
+    assert coup["action"] == "jouer"
+    assert "noir_8_a" not in coup["ids_tuiles"]
+    assert set(coup["ids_tuiles"]) == {"rouge_13_a", "bleu_13_a", "noir_13_a"}
+    assert _suite_noir_intacte(coup["nouveau_plateau"])
+    plateau = [[tuile_depuis_dict(d) for d in c]
+               for c in coup["nouveau_plateau"]]
+    assert valider_plateau(plateau)["valide"]
+
+
+def test_intermediaire_peut_prolonger_la_meme_combinaison_au_tour_suivant():
+    """Non-régression : une fois la mise initiale faite (tour suivant), le
+    même mécanisme (``_coup_maximal``/extensions) peut de nouveau prolonger
+    une combinaison déjà posée — seul le tour de l'ouverture est concerné
+    par la restriction de l'issue #273."""
+    etat = _etat_ouverture_ne_doit_pas_toucher_la_table("Intermédiaire")
+    bot = etat["joueurs"][1]
+    bot["mise_initiale_faite"] = True
+    bot["chevalet"] = [
+        {"id": "noir_8_a", "valeur": 8, "couleur": "noir", "est_joker": False},
+    ]
+    coup = jouer_niveau_intermediaire(etat, 1)
+    assert coup["action"] == "jouer"
+    assert coup["ids_tuiles"] == ["noir_8_a"]
+    combos = [frozenset(t["id"] for t in c) for c in coup["nouveau_plateau"]]
+    assert frozenset({"noir_5_a", "noir_6_a", "noir_7_a", "noir_8_a"}) in combos

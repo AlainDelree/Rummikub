@@ -98,3 +98,13 @@ milieu de suite, #181) ; elle n'est plus limitée aux seuls bouts de suite,
 mais reste étrangère aux jokers (dont la libération, bout ou milieu, passe
 par `_liberations_possibles`).
 
+**Règle de l'ouverture (#273)** : toutes les tactiques de ce paragraphe
+(`_liberations_possibles`, `_coup_scission`) sont déjà gardées par
+`mise_initiale_faite` (retournent `None`/rien tant que la mise initiale
+n'est pas faite) — aucune ne pouvait déjà toucher le plateau avant
+l'ouverture. Le seul chemin fautif identifié par #273 était `_coup_maximal`
+(extensions du plateau après une ouverture réussie, via `_appliquer_
+extensions`), désormais restreint aux seules combinaisons posées CE
+tour-ci avant que la mise initiale ne soit faite — voir
+`docs/contexte/moteur_regles.md`.
+

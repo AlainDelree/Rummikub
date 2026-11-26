@@ -445,6 +445,22 @@ fois par tour (recherche limitée par la perturbation, règles du joker),
 chaque appel étant borné par le budget plutôt que le tour dans son
 ensemble.
 
+### Règle de l'ouverture appliquée à l'IA (issue #273, étude #270)
+
+`_coup_maximal` (`moteur/ia.py`, chemin de Facile/Intermédiaire/Avancé en
+repli) prolongeait à tort, pendant le tour de l'ouverture, des combinaisons
+déjà posées par d'AUTRES joueurs aux tours précédents — interdit par les
+règles du jeu (décision d'Alain : aucune combinaison préexistante modifiée
+avant la mise initiale, voir `docs/contexte/moteur_regles.md`). Corrigé :
+avant la mise initiale, les extensions ne portent plus que sur les
+combinaisons posées CE tour depuis le chevalet. **Conséquence attendue** :
+légère baisse de force de Facile, Intermédiaire et Avancé (une option
+d'ouverture leur est désormais fermée) — **l'échelle calibrée de #267
+ci-dessus doit être REVÉRIFIÉE** (duels entre niveaux voisins,
+`scripts/echelle_niveaux.py`) après cette issue ; non refait par #273
+(mesure d'impact seulement indicative, sur un petit échantillon), à faire
+par Alain sur le PC fixe.
+
 ### Règle de travail (issue #268) : les tests ne dépendent jamais des réglages calibrés
 
 Depuis #267, Débutant vaut `perturbation_max=1` (plus `0`) : il appelle donc
