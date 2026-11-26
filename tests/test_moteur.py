@@ -160,6 +160,138 @@ def test_jouer_tour_refuse_si_des_tuiles_du_plateau_disparaissent():
 
 
 # --------------------------------------------------------------------------- #
+# Origine des tuiles de la mise initiale (issue #272, suite de #201/11quinquies)
+# --------------------------------------------------------------------------- #
+
+def test_jouer_tour_refuse_mise_initiale_avec_tuile_du_plateau_declaree_a_tort():
+    """Issue #272 (étude #270) : une tuile déjà présente sur le plateau avant
+    le coup, à tort déclarée comme venant du chevalet, ne doit jamais compter
+    dans les points de la mise initiale — le coup est refusé directement.
+    Chevalet réel : rouge 7+8+9 = 24 points (< 30). En y ajoutant à tort
+    bleu_12 (déjà posé par un autre joueur), le bug donnait 24+12 = 36 ≥ 30,
+    acceptant à tort l'ouverture."""
+    etat = creer_partie(
+        [{"nom": "A", "est_ia": False}, {"nom": "B", "est_ia": True, "niveau": "Facile"}],
+        {"nb_manches": 1, "valeur_joker_penalite": 30, "mise_initiale_min": 30})
+    combo_existante = [t(10, "bleu"), t(11, "bleu"), t(12, "bleu")]
+    etat["plateau"] = [[x.as_dict() for x in combo_existante]]
+    etat["index_joueur_actuel"] = 0
+    etat["joueurs"][0]["mise_initiale_faite"] = False
+    etat["joueurs"][0]["chevalet"] = [t(7, "rouge").as_dict(),
+                                      t(8, "rouge").as_dict(),
+                                      t(9, "rouge").as_dict()]
+
+    # La combinaison déjà posée n'est pas modifiée, une nouvelle combinaison
+    # (depuis le chevalet) s'ajoute — mais ``bleu_12_a`` (déjà sur le
+    # plateau) est déclaré à tort comme posé ce tour.
+    nouveau_plateau = [[x.as_dict() for x in combo_existante],
+                       [t(7, "rouge").as_dict(), t(8, "rouge").as_dict(),
+                        t(9, "rouge").as_dict()]]
+    res = jouer_tour(etat,
+                     ["rouge_7_a", "rouge_8_a", "rouge_9_a", "bleu_12_a"],
+                     nouveau_plateau)
+
+    assert res["ok"] is False
+    assert "chevalet" in res["erreur"]
+    assert res["tuiles_hors_chevalet"] == ["bleu_12_a"]
+    # Le coup refusé ne doit avoir rien modifié.
+    assert etat["joueurs"][0]["mise_initiale_faite"] is False
+    assert len(etat["joueurs"][0]["chevalet"]) == 3
+    assert etat["plateau"] == [[x.as_dict() for x in combo_existante]]
+
+
+def test_jouer_tour_accepte_ouverture_legitime_depuis_le_chevalet_seul():
+    """Scénario de contrôle de l'étude #270 : la même ouverture, avec des
+    identifiants correctement limités au chevalet et totalisant bien ≥ 30
+    points (rouge 7+8+9+10+11 = 45), est acceptée normalement."""
+    etat = creer_partie(
+        [{"nom": "A", "est_ia": False}, {"nom": "B", "est_ia": True, "niveau": "Facile"}],
+        {"nb_manches": 1, "valeur_joker_penalite": 30, "mise_initiale_min": 30})
+    combo_existante = [t(10, "bleu"), t(11, "bleu"), t(12, "bleu")]
+    etat["plateau"] = [[x.as_dict() for x in combo_existante]]
+    etat["index_joueur_actuel"] = 0
+    etat["joueurs"][0]["mise_initiale_faite"] = False
+    chevalet = [t(7, "rouge"), t(8, "rouge"), t(9, "rouge"),
+               t(10, "rouge"), t(11, "rouge")]
+    etat["joueurs"][0]["chevalet"] = [x.as_dict() for x in chevalet]
+
+    nouveau_plateau = [[x.as_dict() for x in combo_existante],
+                       [x.as_dict() for x in chevalet]]
+    res = jouer_tour(etat,
+                     ["rouge_7_a", "rouge_8_a", "rouge_9_a", "rouge_10_a",
+                      "rouge_11_a"],
+                     nouveau_plateau)
+
+    assert res["ok"] is True
+    assert etat["joueurs"][0]["mise_initiale_faite"] is True
+    assert etat["joueurs"][0]["chevalet"] == []
+
+
+def test_jouer_tour_accepte_ouverture_a_exactement_30_points():
+    """Ouverture à exactement 30 points (le minimum) depuis le chevalet :
+    rouge 9+10+11 = 30, acceptée."""
+    etat = creer_partie(
+        [{"nom": "A", "est_ia": False}, {"nom": "B", "est_ia": True, "niveau": "Facile"}],
+        {"nb_manches": 1, "valeur_joker_penalite": 30, "mise_initiale_min": 30})
+    etat["index_joueur_actuel"] = 0
+    etat["joueurs"][0]["mise_initiale_faite"] = False
+    chevalet = [t(9, "rouge"), t(10, "rouge"), t(11, "rouge")]
+    etat["joueurs"][0]["chevalet"] = [x.as_dict() for x in chevalet]
+
+    nouveau_plateau = [[x.as_dict() for x in chevalet]]
+    res = jouer_tour(etat,
+                     ["rouge_9_a", "rouge_10_a", "rouge_11_a"],
+                     nouveau_plateau)
+
+    assert res["ok"] is True
+    assert etat["joueurs"][0]["mise_initiale_faite"] is True
+
+
+def test_jouer_tour_refuse_coup_sans_aucune_tuile_posee():
+    """Issue #272 : un coup qui ne pose aucune tuile du chevalet (liste
+    vide) est refusé, quel que soit le plateau proposé."""
+    etat = creer_partie(
+        [{"nom": "A", "est_ia": False}, {"nom": "B", "est_ia": True, "niveau": "Facile"}],
+        {"nb_manches": 1, "valeur_joker_penalite": 30, "mise_initiale_min": 30})
+    combo_existante = [t(5, "rouge"), t(6, "rouge"), t(7, "rouge")]
+    etat["plateau"] = [[x.as_dict() for x in combo_existante]]
+    etat["index_joueur_actuel"] = 0
+    etat["joueurs"][0]["mise_initiale_faite"] = True
+    etat["joueurs"][0]["chevalet"] = [t(1, "noir").as_dict()]
+
+    # Plateau proposé identique (rien ne change), aucune tuile déclarée posée.
+    nouveau_plateau = [[x.as_dict() for x in combo_existante]]
+    res = jouer_tour(etat, [], nouveau_plateau)
+
+    assert res["ok"] is False
+    assert "aucune tuile du chevalet" in res["erreur"]
+    assert etat["joueurs"][0]["chevalet"] == [t(1, "noir").as_dict()]
+
+
+def test_jouer_tour_accepte_ajout_d_une_tuile_du_chevalet_apres_ouverture():
+    """Jeu normal après l'ouverture : ajouter une tuile du chevalet à une
+    combinaison déjà posée sur la table reste accepté (non régression)."""
+    etat = creer_partie(
+        [{"nom": "A", "est_ia": False}, {"nom": "B", "est_ia": True, "niveau": "Facile"}],
+        {"nb_manches": 1, "valeur_joker_penalite": 30, "mise_initiale_min": 30})
+    combo_existante = [t(5, "rouge"), t(6, "rouge"), t(7, "rouge")]
+    etat["plateau"] = [[x.as_dict() for x in combo_existante]]
+    etat["index_joueur_actuel"] = 0
+    etat["joueurs"][0]["mise_initiale_faite"] = True
+    etat["joueurs"][0]["chevalet"] = [t(8, "rouge").as_dict(),
+                                      t(1, "noir").as_dict()]
+
+    nouveau_plateau = [[x.as_dict() for x in combo_existante]
+                       + [t(8, "rouge").as_dict()]]
+    res = jouer_tour(etat, ["rouge_8_a"], nouveau_plateau)
+
+    assert res["ok"] is True
+    assert etat["joueurs"][0]["chevalet"] == [t(1, "noir").as_dict()]
+    assert etat["plateau"] == [[x.as_dict() for x in combo_existante]
+                               + [t(8, "rouge").as_dict()]]
+
+
+# --------------------------------------------------------------------------- #
 # Manches multiples (issue #203, suite de #192)
 # --------------------------------------------------------------------------- #
 

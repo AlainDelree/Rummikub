@@ -79,7 +79,10 @@ class Api:
         # tuiles venues de la main ET celles du plateau déplacées ce tour
         # (voir jeu.js:prendreTuileTapis) : capturer la main AVANT le coup
         # (jouer_tour la mute en place) permet de les distinguer dans le
-        # journal (issue #201) sans changer le comportement du jeu.
+        # journal (issue #201) sans changer le comportement du jeu. Avant
+        # la mise initiale, ``jouer_tour`` refuse lui-même tout identifiant
+        # qui ne serait pas réellement dans ce chevalet (issue #272) ; après,
+        # ce mélange reste normal (réarrangement du plateau autorisé).
         ids_main_avant = {t["id"] for t in etat["joueurs"][idx]["chevalet"]}
         res = jouer_tour(etat, data["ids_tuiles"], data["nouveau_plateau"])
         if res["ok"]:

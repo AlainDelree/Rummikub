@@ -160,8 +160,20 @@ def _valeurs_par_tuile(combo: list[Tuile]) -> dict:
     return valeurs
 
 
-def _points_tuiles_posees(plateau: list[list[Tuile]], ids_posees: set) -> int:
-    """Somme des valeurs effectives des tuiles posées ce tour (issues du chevalet)."""
+def _points_tuiles_posees(plateau: list[list[Tuile]], ids_posees: set,
+                          ids_chevalet_avant: set | None = None) -> int:
+    """Somme des valeurs effectives des tuiles posées ce tour (issues du
+    chevalet).
+
+    Si ``ids_chevalet_avant`` est fourni (issue #272, suite de
+    #201/11quinquies), un identifiant déclaré posé mais absent de cet
+    ensemble (ex. une tuile déjà présente sur le plateau avant ce coup, à
+    tort déclarée venir de la main) ne compte jamais dans le total — il ne
+    peut s'agir d'une vraie tuile de mise initiale, même si l'identifiant
+    apparaît dans une combinaison valide du plateau proposé.
+    """
+    if ids_chevalet_avant is not None:
+        ids_posees = ids_posees & ids_chevalet_avant
     total = 0
     for combo in plateau:
         valeurs = _valeurs_par_tuile(combo)
@@ -211,15 +223,42 @@ def jouer_tour(etat: dict,
 
     joueur = etat["joueurs"][etat["index_joueur_actuel"]]
     ids_posees = set(ids_tuiles_posees)
+    # État du chevalet AVANT ce coup (pas encore muté à ce stade — la
+    # mutation n'a lieu qu'à l'étape 4 ci-dessous), dans le même esprit que
+    # l'état d'avant coup déjà calculé pour le garde-fou #187 ci-dessus.
+    ids_chevalet_avant = {t["id"] for t in joueur["chevalet"]}
+
+    # 2ter. Un coup doit poser au moins une tuile réellement venue du
+    #       chevalet (issue #272) : une liste de tuiles posées vide, ou ne
+    #       contenant aucun identifiant réellement présent dans le chevalet
+    #       avant ce coup, est refusée. La pioche et le passage de tour
+    #       n'appellent pas ``jouer_tour`` et ne sont donc pas concernés.
+    if not (ids_posees & ids_chevalet_avant):
+        return {"ok": False, "erreur":
+                "Coup refusé : aucune tuile du chevalet n'est posée"}
 
     # 3. Mise initiale : les tuiles posées issues du chevalet doivent
-    #    totaliser >= mise_initiale_min.
-    points_poses = _points_tuiles_posees(plateau, ids_posees)
+    #    totaliser >= mise_initiale_min. Avant que la mise initiale ne soit
+    #    faite, un identifiant déclaré posé mais absent du chevalet avant ce
+    #    coup (ex. une tuile déjà sur le plateau, à tort déclarée venir de
+    #    la main) ne peut jamais compter dans ces points — le coup est alors
+    #    refusé directement (issue #272, suite de #201/11quinquies).
     if not joueur["mise_initiale_faite"]:
+        ids_hors_chevalet = ids_posees - ids_chevalet_avant
+        if ids_hors_chevalet:
+            return {"ok": False, "erreur":
+                    "Coup refusé : tuile(s) posée(s) non présente(s) dans "
+                    "le chevalet avant ce coup ("
+                    + ", ".join(sorted(ids_hors_chevalet)) + ")",
+                    "tuiles_hors_chevalet": sorted(ids_hors_chevalet)}
+        points_poses = _points_tuiles_posees(plateau, ids_posees,
+                                             ids_chevalet_avant)
         mini = etat["config"]["mise_initiale_min"]
         if points_poses < mini:
             return {"ok": False, "erreur":
                     f"Mise initiale insuffisante ({points_poses} < {mini})"}
+    else:
+        points_poses = _points_tuiles_posees(plateau, ids_posees)
 
     # 4. Retirer les tuiles posées du chevalet.
     joueur["chevalet"] = [t for t in joueur["chevalet"]

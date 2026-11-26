@@ -138,15 +138,12 @@ tuiles déjà posées sur le plateau (sans venir de la main). `--ecraser`
 lève le garde-fou qui empêche normalement d'écraser un fichier de cas de
 référence existant.
 
-**Limite connue, non corrigée (bug potentiel distinct, hors périmètre de
-#201)** : le moteur (`moteur/partie.py`, calcul des points de la mise
-initiale) additionne lui aussi la valeur de CHAQUE tuile de `ids_tuiles`
-trouvée dans une combinaison valide du nouveau plateau — y compris une
-tuile DÉPLACÉE, pas posée depuis la main. Un joueur n'ayant pas encore
-fait sa mise initiale qui réarrange des combinaisons déjà présentes sur le
-plateau (posées par d'autres joueurs) peut donc voir les points de ces
-tuiles déplacées compter à tort vers son minimum requis. Voir CHANGELOG.md,
-issue #201.
+**Corrigé par l'issue #272 (étude #270) :** le moteur (`moteur/partie.py`)
+contrôle désormais lui-même l'origine des tuiles de la mise initiale — un
+identifiant déclaré posé mais absent du chevalet du joueur avant le coup
+(ex. une tuile déjà présente sur le plateau) ne compte plus dans les points
+et fait refuser le coup directement ; `jouer_tour` exige en plus qu'au moins
+une tuile du chevalet soit réellement posée. Voir CHANGELOG-272.md.
 
 ### 11sexies. Relier les fichiers d'une partie reprise et enregistrer la mise initiale (issue #202, suite de #201)
 

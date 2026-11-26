@@ -25,7 +25,14 @@
 - `jouer_tour(etat, ids_tuiles_posees, nouveau_plateau)` → `{ok, etat}` ou
   `{ok:False, erreur}`. Valide le plateau, contrôle la mise initiale (≥30 pts
   au premier coup), retire les tuiles du chevalet, remplace le plateau,
-  termine le tour.
+  termine le tour. **Issue #272** (défense en profondeur, aucun changement
+  de comportement de jeu) : refuse un coup qui ne pose aucune tuile
+  réellement présente dans le chevalet avant ce coup (liste vide ou sans
+  tuile du chevalet) ; avant la mise initiale, refuse aussi tout coup dont
+  un identifiant déclaré posé n'était pas dans le chevalet avant le coup
+  (ex. une tuile du plateau à tort déclarée venir de la main) — un tel
+  identifiant ne compte jamais dans les points de la mise initiale. Voir
+  §11quinquies de `coups_rates_bilan.md`.
 - `piocher(etat, nb=1)` → `{ok, tuiles_piochees, etat}`.
 - `passer_tour(etat)` → `{ok, etat}`.
 - `backup_debut_tour(etat)` : deep-copy plateau + chevalet + index + tour_numero.
