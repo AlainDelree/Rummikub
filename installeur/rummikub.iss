@@ -130,8 +130,7 @@ begin
     '  "build_installe": {#RummikubBuildInstalle},' + #13#10 +
     '  "repertoire_installation": "' + EchapperJSON(RepertoireInstallation) + '",' + #13#10 +
     '  "executable": "Rummikub.exe",' + #13#10 +
-    '  "icone": "' + EchapperJSON(ExpandConstant('{app}') + '\rummikub.ico') + '",' + #13#10 +
-    '  "topic_ntfy": "hyppocampe-rummikub-QMJ7oH"' + #13#10 +
+    '  "icone": "' + EchapperJSON(ExpandConstant('{app}') + '\rummikub.ico') + '"' + #13#10 +
     '}' + #13#10;
 
   SaveStringToFile(DossierActualise + 'config_rummikub.json', Contenu, False);
