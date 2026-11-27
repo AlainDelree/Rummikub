@@ -825,6 +825,57 @@ def jouer_niveau_avance(etat, idx):
 
 BUDGET_TEMPS_EXPERT = 1.5  # secondes ; voir solveur_exact / solveur (#206/#186).
 
+# Plafond de temps pour un TOUR ENTIER (issue #279, étude #277) : chaque appel
+# au solveur est borné par BUDGET_TEMPS_EXPERT, mais un même tour peut
+# enchaîner plusieurs appels (étape principale, joker utile, échange différé,
+# joker libre) qui recevaient CHACUN une échéance neuve — jusqu'à 2,6x le
+# budget mesuré en jeu réel (#277). ``jouer_niveau_bride`` fixe désormais UNE
+# échéance commune au tout début du tour (``_plafond_tour``, horloge
+# monotone), propagée à toutes ces étapes via ``deadline_tour`` : chacune
+# calcule son budget local comme le plus petit entre son budget habituel et le
+# temps restant avant cette échéance (``_budget_selon_echeance``), au lieu
+# d'une échéance neuve à chaque appel. Par défaut deux fois le budget d'un
+# appel (3 s avec ``BUDGET_TEMPS_EXPERT`` = 1,5 s) ; suit le budget effectif
+# (donc une réduction par les tests/scripts/simulations) et ne peut jamais
+# être inférieur à ce budget, pour que la PREMIÈRE étape du tour dispose
+# toujours d'un temps utile.
+FACTEUR_PLAFOND_TOUR = 2
+
+
+def _plafond_tour(budget_temps):
+    """Plafond de temps du TOUR entier (#279) — voir ``FACTEUR_PLAFOND_TOUR``
+    ci-dessus. ``budget_temps is None`` suit ``BUDGET_TEMPS_EXPERT``, comme le
+    reste de ce module."""
+    budget_effectif = BUDGET_TEMPS_EXPERT if budget_temps is None else budget_temps
+    return max(FACTEUR_PLAFOND_TOUR * budget_effectif, budget_effectif)
+
+
+def _budget_selon_echeance(budget_temps, deadline_tour):
+    """Budget local d'un appel au solveur, borné par l'échéance commune du
+    tour (#279) : ``budget_temps`` (déjà résolu, jamais ``None`` ici) si
+    ``deadline_tour`` vaut ``None`` (compatibilité directe, hors
+    ``jouer_niveau_bride``), sinon le plus petit entre ``budget_temps`` et le
+    temps restant avant ``deadline_tour`` (horloge monotone). Retourne
+    ``None`` si cette échéance est déjà dépassée : aucun nouvel appel au
+    solveur ne doit alors être lancé."""
+    if deadline_tour is None:
+        return budget_temps
+    restant = deadline_tour - time.monotonic()
+    if restant <= 0:
+        return None
+    return min(budget_temps, restant)
+
+
+def _deadline_effective(budget_temps, deadline_tour):
+    """Échéance à transmettre à :func:`_coup_sans_tuile_main` (#279) :
+    l'échéance commune du tour si elle est fournie, sinon une échéance
+    fraîche d'un budget (compatibilité directe, hors ``jouer_niveau_bride`` —
+    comportement identique à avant #279 dans ce cas)."""
+    if deadline_tour is not None:
+        return deadline_tour
+    return time.monotonic() + (budget_temps or BUDGET_TEMPS_EXPERT)
+
+
 # Réglage #206 : Expert joue avec le MODÈLE EXACT (programmation linéaire en
 # nombres entiers, ``moteur/solveur_exact.py``), qui pose toujours le plus
 # grand nombre de tuiles (y compris les victoires immédiates). ``False`` fige
@@ -914,7 +965,7 @@ def _marquer_solveur(coup, code):
 
 def jouer_niveau_expert(etat, idx, budget_temps=None, on_repli=None,
                         preferer_simple=None, utiliser_exact=None,
-                        eval_config=None, on_aucun=None):
+                        eval_config=None, on_aucun=None, deadline_tour=None):
     """Niveau Expert : joue le coup qui pose le plus grand nombre de tuiles du
     chevalet, en conservant toutes les tuiles du plateau (#206).
 
@@ -943,7 +994,17 @@ def jouer_niveau_expert(etat, idx, budget_temps=None, on_repli=None,
     ``utiliser_exact`` (``None`` → lit ``UTILISER_SOLVEUR_EXACT``) à ``False``
     rejoue l'ancien comportement (recherche seule) pour la comparaison
     « avant / après ». ``preferer_simple`` et ``budget_temps`` sont transmis
-    aux deux moteurs (lus à l'appel pour rester ajustables en simulation)."""
+    aux deux moteurs (lus à l'appel pour rester ajustables en simulation).
+
+    ``deadline_tour`` (#279, ``None`` par défaut → comportement inchangé,
+    budget local = ``budget_temps``) : échéance commune du TOUR entier
+    (horloge monotone), fixée une seule fois par ``jouer_niveau_bride`` et
+    transmise ici. Le budget réellement utilisé pour CHAQUE appel (modèle
+    exact, puis repli recherche) est alors le plus petit entre
+    ``budget_temps`` et le temps restant avant cette échéance
+    (``_budget_selon_echeance``) ; si elle est déjà dépassée, AUCUN nouvel
+    appel au solveur n'est lancé — repli direct sur Avancé (qui n'appelle
+    jamais le solveur)."""
     if budget_temps is None:
         budget_temps = BUDGET_TEMPS_EXPERT
     if preferer_simple is None:
@@ -953,8 +1014,12 @@ def jouer_niveau_expert(etat, idx, budget_temps=None, on_repli=None,
     if eval_config is None:
         eval_config = EVAL_MAIN_DEFAUT
 
+    budget_local = _budget_selon_echeance(budget_temps, deadline_tour)
+    if budget_local is None:
+        return _marquer_solveur(jouer_niveau_avance(etat, idx), SOLVEUR_AVANCE)
+
     if utiliser_exact:
-        statut, charge = _coup_exact(etat, idx, budget_temps, preferer_simple,
+        statut, charge = _coup_exact(etat, idx, budget_local, preferer_simple,
                                      eval_config)
         if statut == "coup":
             return _marquer_solveur(charge, SOLVEUR_EXACT)
@@ -968,13 +1033,16 @@ def jouer_niveau_expert(etat, idx, budget_temps=None, on_repli=None,
         # statut == "echec" : repli sur la recherche arborescente, puis Avancé.
         if on_repli is not None:
             on_repli(charge)  # charge = cause_timeout
-        coup, _timeout = _coup_recherche(etat, idx, budget_temps, preferer_simple)
+        budget_repli = _budget_selon_echeance(budget_temps, deadline_tour)
+        if budget_repli is None:
+            return _marquer_solveur(jouer_niveau_avance(etat, idx), SOLVEUR_AVANCE)
+        coup, _timeout = _coup_recherche(etat, idx, budget_repli, preferer_simple)
         if coup:
             return _marquer_solveur(coup, SOLVEUR_RECHERCHE)
         return _marquer_solveur(jouer_niveau_avance(etat, idx), SOLVEUR_AVANCE)
 
     # Mode « avant » (sans modèle exact) : recherche seule, puis Avancé.
-    coup, timeout = _coup_recherche(etat, idx, budget_temps, preferer_simple)
+    coup, timeout = _coup_recherche(etat, idx, budget_local, preferer_simple)
     if coup:
         return _marquer_solveur(coup, SOLVEUR_RECHERCHE)
     if on_repli is not None:
@@ -1022,7 +1090,7 @@ def _coup_sans_rearrangement(etat, idx):
 
 def _coup_selon_perturbation(etat, idx, perturbation_max, budget_temps, on_repli,
                              preferer_simple=None, eval_config=None,
-                             on_aucun=None):
+                             on_aucun=None, deadline_tour=None):
     """Meilleur coup « vu » compte tenu de la perturbation autorisée.
 
     ``perturbation_max is None`` → solveur complet (Expert, seul niveau à
@@ -1037,13 +1105,17 @@ def _coup_selon_perturbation(etat, idx, perturbation_max, budget_temps, on_repli
     ``jouer_niveau_expert``, ajoutés par #223 pour que les scripts de mesure
     puissent faire jouer Expert par CE chemin (``jouer_niveau_bride``) plutôt
     que d'appeler ``jouer_niveau_expert`` directement en dupliquant la
-    logique de ce niveau."""
+    logique de ce niveau.
+
+    ``deadline_tour`` (#279, ``None`` → comportement inchangé) : simple relais
+    vers ``jouer_niveau_expert``, voir sa docstring."""
     if perturbation_max is None:
         return jouer_niveau_expert(etat, idx, budget_temps=budget_temps,
                                    on_repli=on_repli,
                                    preferer_simple=preferer_simple,
                                    eval_config=eval_config,
-                                   on_aucun=on_aucun)
+                                   on_aucun=on_aucun,
+                                   deadline_tour=deadline_tour)
 
     if perturbation_max <= 0:
         return _coup_sans_rearrangement(etat, idx)
@@ -1059,7 +1131,8 @@ def _coup_selon_perturbation(etat, idx, perturbation_max, budget_temps, on_repli
     complet = jouer_niveau_expert(etat, idx, budget_temps=budget_temps,
                                   on_repli=on_repli,
                                   preferer_simple=preferer_simple,
-                                  eval_config=eval_config)
+                                  eval_config=eval_config,
+                                  deadline_tour=deadline_tour)
     if not (isinstance(complet, dict) and complet.get("action") == "jouer"):
         sans_rearr = _coup_sans_rearrangement(etat, idx)
         return sans_rearr if sans_rearr is not None else complet
@@ -1201,10 +1274,12 @@ def jokers_rendus_libres_par_coup(etat, idx, coup):
 
 
 def _coup_avec_chevalet(etat, idx, chevalet, bridage, budget_temps,
-                        preferer_simple, eval_config):
+                        preferer_simple, eval_config, deadline_tour=None):
     """Meilleur coup VU par ``bridage`` (même ``perturbation_max``) avec un
     CHEVALET DE REMPLACEMENT (#253) — ne mute jamais ``etat`` (construit un
-    état temporaire, comme l'ancienne recherche d'alternative de #252)."""
+    état temporaire, comme l'ancienne recherche d'alternative de #252).
+    ``deadline_tour`` (#279, ``None`` → comportement inchangé) : simple relais
+    vers ``_coup_selon_perturbation``."""
     joueur = etat["joueurs"][idx]
     joueur2 = dict(joueur)
     joueur2["chevalet"] = chevalet
@@ -1214,7 +1289,8 @@ def _coup_avec_chevalet(etat, idx, chevalet, bridage, budget_temps,
     etat2["joueurs"] = joueurs2
     return _coup_selon_perturbation(
         etat2, idx, bridage.perturbation_max, budget_temps, None,
-        preferer_simple=preferer_simple, eval_config=eval_config)
+        preferer_simple=preferer_simple, eval_config=eval_config,
+        deadline_tour=deadline_tour)
 
 
 def _coup_sans_tuile_main(etat, idx, id_tuile, bridage, budget_temps,
@@ -1222,17 +1298,21 @@ def _coup_sans_tuile_main(etat, idx, id_tuile, bridage, budget_temps,
     """Meilleur coup du MÊME niveau en retirant ``id_tuile`` de la main
     (#253) — utilisé par la recherche d'alternative sans joker libre (point
     4) et par l'échange différé (point 6). Retourne ``None`` si ``deadline``
-    (instant monotone) est déjà dépassée, sinon le coup (``dict``, jamais
-    ``None`` au-delà — voir ``_coup_selon_perturbation``)."""
+    (instant monotone — depuis #279, l'échéance COMMUNE du tour quand elle
+    est fournie par l'appelant, voir ``jouer_niveau_bride``) est déjà
+    dépassée, sinon le coup (``dict``, jamais ``None`` au-delà — voir
+    ``_coup_selon_perturbation``). ``deadline`` est aussi transmise comme
+    ``deadline_tour`` à :func:`_coup_avec_chevalet` : un éventuel repli
+    interne (modèle exact puis recherche) reste ainsi borné par la MÊME
+    échéance, au lieu de recevoir un budget figé une fois pour toutes ici."""
     restant = deadline - time.monotonic()
     if restant <= 0:
         return None
     chevalet = etat["joueurs"][idx]["chevalet"]
     chevalet2 = [t for t in chevalet if t["id"] != id_tuile]
     return _coup_avec_chevalet(
-        etat, idx, chevalet2, bridage,
-        min(budget_temps or BUDGET_TEMPS_EXPERT, restant),
-        preferer_simple, eval_config)
+        etat, idx, chevalet2, bridage, budget_temps,
+        preferer_simple, eval_config, deadline_tour=deadline)
 
 
 # --------------------------------------------------------------------------- #
@@ -1269,7 +1349,7 @@ def _fin_de_match_proche_pour_debarras(etat, idx):
 
 
 def _appliquer_joker_utile(etat, idx, coup, bridage, budget_temps,
-                           preferer_simple, eval_config):
+                           preferer_simple, eval_config, deadline_tour=None):
     """Règle du joker en main UTILE (#253, point 3 ; #254, point 4 —
     ÉVALUATION PAR JOKER, remplace l'évaluation collective). Si ``coup`` ne
     joue aucun joker de la MAIN, rien à faire (``evalue=False`` — ne
@@ -1306,7 +1386,16 @@ def _appliquer_joker_utile(etat, idx, coup, bridage, budget_temps,
 
     Retourne ``(coup_final, info)`` — ``info`` :
     ``{"evalue": bool, "jokers_main_en_jeu": int, "jokers_gardes": int,
-    "jokers_debarrasses_fin_match": int}``."""
+    "jokers_debarrasses_fin_match": int}``.
+
+    ``deadline_tour`` (#279, ``None`` → comportement inchangé) : relayée à
+    chaque appel de :func:`_coup_avec_chevalet` ci-dessous ; au-delà de
+    l'échéance, celui-ci renvoie le repli Avancé (jamais ``None``) sans
+    lancer de nouvel appel au solveur — ``_reel`` compte alors ce coup pour
+    0 tuile réelle s'il ne joue pas, ce qui range PAR DÉFAUT le joker encore
+    non jugé dans les jokers UTILES (gardés, posés tels quels dans ``coup``)
+    plutôt que de risquer de retirer à tort un joker nécessaire sans l'avoir
+    vérifié : repli prudent, jamais un coup incohérent."""
     chevalet = etat["joueurs"][idx]["chevalet"]
     est_joker_par_id = {t["id"]: bool(t.get("est_joker")) for t in chevalet}
     jokers_main_ids = [t["id"] for t in chevalet if t.get("est_joker")]
@@ -1341,7 +1430,7 @@ def _appliquer_joker_utile(etat, idx, coup, bridage, budget_temps,
         chevalet_sans_j = [t for t in chevalet_disponible if t["id"] != j]
         coup_sans_j = _coup_avec_chevalet(
             etat, idx, chevalet_sans_j, bridage, budget_temps,
-            preferer_simple, eval_config)
+            preferer_simple, eval_config, deadline_tour=deadline_tour)
         reel_sans_j = _reel(coup_sans_j)
         if reel_avec > reel_sans_j:
             continue  # utile : reste disponible pour le test suivant
@@ -1367,10 +1456,15 @@ def _appliquer_joker_utile(etat, idx, coup, bridage, budget_temps,
 
     chevalet_filtre = [t for t in chevalet if t["id"] not in jokers_non_utiles]
     coup_final = _coup_avec_chevalet(etat, idx, chevalet_filtre, bridage,
-                                     budget_temps, preferer_simple, eval_config)
+                                     budget_temps, preferer_simple, eval_config,
+                                     deadline_tour=deadline_tour)
     if isinstance(coup_final, dict) and coup_final.get("action") == "jouer":
         return coup_final, info
-    return _piocher_ou_passer(etat), info
+    # Repli (#279) : ``coup`` (avec TOUS les jokers, y compris ceux jugés non
+    # utiles) reste un coup déjà trouvé et valide — préféré à une pioche, qui
+    # perdrait sans raison un coup pourtant jouable (cas rare : re-résolution
+    # finale sans solution, p. ex. échéance du tour dépassée pour cet appel).
+    return coup, info
 
 
 # --------------------------------------------------------------------------- #
@@ -1452,7 +1546,8 @@ def _adversaire_a_moins_de(etat, idx, seuil):
 
 
 def _appliquer_echange_differe(etat, idx, coup, bridage, budget_temps,
-                               preferer_simple, eval_config):
+                               preferer_simple, eval_config,
+                               deadline_tour=None):
     """Échange différé (#253, point 6). Pour le premier échange direct
     facultatif (``_jokers_recuperables`` sur le plateau et la main AVANT ce
     tour) effectivement joué par ``coup`` dont le joker récupéré N'EST PAS
@@ -1508,7 +1603,11 @@ def _appliquer_echange_differe(etat, idx, coup, bridage, budget_temps,
     décision multi-tours, jamais le plateau ni la main).
 
     Retourne ``(coup_final, info)`` — ``info`` :
-    ``{"differe": bool, "pioche": bool, "force": bool}``."""
+    ``{"differe": bool, "pioche": bool, "force": bool}``.
+
+    ``deadline_tour`` (#279, ``None`` → échéance fraîche, comportement
+    inchangé) : transmise à :func:`_coup_sans_tuile_main` via
+    ``_deadline_effective`` au lieu d'une échéance neuve à chaque appel."""
     joueur = etat["joueurs"][idx]
     plateau_avant = plateau_depuis_dict(etat.get("plateau", []))
     chevalet_avant = _to_tuiles(joueur["chevalet"])
@@ -1540,7 +1639,7 @@ def _appliquer_echange_differe(etat, idx, coup, bridage, budget_temps,
             compteurs.pop(rec["joker"].id, None)
             resultat = (coup, {"differe": False, "pioche": False, "force": True})
             break
-        deadline = time.monotonic() + (budget_temps or BUDGET_TEMPS_EXPERT)
+        deadline = _deadline_effective(budget_temps, deadline_tour)
         alternative = _coup_sans_tuile_main(
             etat, idx, rec["remplacement"].id, bridage, budget_temps,
             preferer_simple, eval_config, deadline)
@@ -1665,7 +1764,7 @@ def _meilleur_candidat_si_pioche_impossible(etat, idx, coup, bridage,
 
 
 def _appliquer_joker_libre(etat, idx, coup, bridage, budget_temps,
-                          preferer_simple, eval_config):
+                          preferer_simple, eval_config, deadline_tour=None):
     """Règle du joker LIBRE évité (#253, point 4 — remplace la pioche
     bornée de #252). Si ``coup`` ne rend libre aucun NOUVEAU joker
     (:func:`jokers_rendus_libres_par_coup`), rien à faire. Sinon, cherche
@@ -1682,13 +1781,22 @@ def _appliquer_joker_libre(etat, idx, coup, bridage, budget_temps,
 
     Retourne ``(coup_final, info)`` — ``info`` :
     ``{"declenchee": bool, "evite": bool, "pioche": bool,
-    "force_pioche_vide": bool}``."""
+    "force_pioche_vide": bool}``.
+
+    ``deadline_tour`` (#279, ``None`` → échéance fraîche, comportement
+    inchangé) : relayée via ``_deadline_effective``. Si l'échéance du tour
+    est déjà dépassée, la recherche d'alternative n'a matériellement pas le
+    temps de s'exécuter (:func:`_chercher_coup_sans_joker_libre` renvoie
+    ``None`` dès le premier appel à :func:`_coup_sans_tuile_main`) — l'IA
+    pioche alors exactement comme si aucune alternative n'existait (le
+    chemin le plus prudent, jamais un coup qui laisse un joker libre à un
+    adversaire)."""
     nouveaux = jokers_rendus_libres_par_coup(etat, idx, coup)
     if not nouveaux:
         return coup, {"declenchee": False, "evite": False, "pioche": False,
                       "force_pioche_vide": False}
 
-    deadline = time.monotonic() + (budget_temps or BUDGET_TEMPS_EXPERT)
+    deadline = _deadline_effective(budget_temps, deadline_tour)
     alternative = _chercher_coup_sans_joker_libre(
         etat, idx, coup, bridage, budget_temps, preferer_simple,
         eval_config, deadline)
@@ -1749,18 +1857,30 @@ def jouer_niveau_bride(etat, idx, nom_niveau, budget_temps=None, rng=None,
     désactivation ; nom du paramètre conservé de #252, gouverne maintenant
     l'ensemble de la gestion du joker de #253) : permet à ``scripts/
     comparer_niveaux_ia.py`` de comparer, pour un MÊME niveau, une campagne
-    avec et sans la règle."""
+    avec et sans la règle.
+
+    **Échéance commune du TOUR entier (issue #279, étude #277)** : fixée ICI,
+    une seule fois, au tout début du tour (horloge monotone,
+    ``_plafond_tour``), et propagée (``deadline_tour``) à toutes les étapes
+    ci-dessous qui peuvent rappeler le solveur — au lieu d'une échéance neuve
+    à chaque étape (voir ``FACTEUR_PLAFOND_TOUR`` pour le détail et la
+    justification). Le coup choisi est inchangé tant qu'aucune étape n'a
+    besoin de plus de temps que ce plafond ; au-delà, chaque étape se replie
+    sur le meilleur coup déjà trouvé (ou pioche pour la règle du joker libre,
+    jamais un coup qu'elle refuserait sinon) plutôt que de lancer un nouvel
+    appel au solveur."""
     bridage = _niveaux.bridage_pour(nom_niveau)
     applique_regle_joker = (bridage.eviter_don_joker
                             if eviter_don_joker is None else eviter_don_joker)
     if rng is None:
         rng = _rng_oubli(etat, idx)
     taille_main = len(etat["joueurs"][idx]["chevalet"])
+    deadline_tour = time.monotonic() + _plafond_tour(budget_temps)
 
     coup = _coup_selon_perturbation(
         etat, idx, bridage.perturbation_max, budget_temps, on_repli,
         preferer_simple=preferer_simple, eval_config=eval_config,
-        on_aucun=on_aucun)
+        on_aucun=on_aucun, deadline_tour=deadline_tour)
 
     if not (isinstance(coup, dict) and coup.get("action") == "jouer"):
         # Aucun coup posable : pioche/passe (déjà décidé par le moteur).
@@ -1776,7 +1896,7 @@ def jouer_niveau_bride(etat, idx, nom_niveau, budget_temps=None, rng=None,
     if applique_regle_joker:
         coup, info_utile = _appliquer_joker_utile(
             etat, idx, coup, bridage, budget_temps, preferer_simple,
-            eval_config)
+            eval_config, deadline_tour)
         joker_info = {
             "jokers_main_gardes": info_utile.get("jokers_gardes", 0),
             "jokers_debarrasses_fin_match": info_utile.get(
@@ -1794,7 +1914,7 @@ def jouer_niveau_bride(etat, idx, nom_niveau, budget_temps=None, rng=None,
 
         coup, info_differe = _appliquer_echange_differe(
             etat, idx, coup, bridage, budget_temps, preferer_simple,
-            eval_config)
+            eval_config, deadline_tour)
         joker_info["echange_differe"] = bool(info_differe.get("differe"))
         joker_info["echange_differe_pioche"] = bool(info_differe.get("pioche"))
         joker_info["echange_differe_force_pioche_vide"] = bool(
@@ -1828,7 +1948,7 @@ def jouer_niveau_bride(etat, idx, nom_niveau, budget_temps=None, rng=None,
             # ``_appliquer_echange_differe``).
             coup, info_libre = _appliquer_joker_libre(
                 etat, idx, coup, bridage, budget_temps, preferer_simple,
-                eval_config)
+                eval_config, deadline_tour)
             joker_info["joker_libre_declenche"] = bool(info_libre.get("declenchee"))
             joker_info["joker_libre_evite"] = bool(info_libre.get("evite"))
             joker_info["joker_libre_pioche"] = bool(info_libre.get("pioche"))

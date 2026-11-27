@@ -510,8 +510,15 @@ voir ci-dessus) n'en a montré AUCUN, avec un maximum de 4,7 s. Expert
 partage le même code de joker mais n'a jamais dépassé environ 2 s dans les
 campagnes lues ici — explication **non vérifiée**.
 
-Correction proposée (issue séparée, à venir) : une échéance COMMUNE pour
-tout le tour plutôt qu'une échéance neuve par appel.
+Correction faite par l'issue #279 : une échéance COMMUNE pour tout le tour
+(plafond par défaut 3 s, deux fois le budget d'un appel) remplace désormais
+l'échéance neuve par appel — voir `docs/contexte/solveur_expert.md` §18 et
+`docs/contexte/joker_tactiques.md` §8 pour le mécanisme. **L'échelle doit
+être revérifiée par Alain sur le PC fixe après cette issue** (duels entre
+niveaux voisins et tournoi à quatre avec `scripts/tournoi_niveaux.py`),
+comme après #272 et #273 — un affaiblissement faible est possible sur les
+tours déjà lents (le plafond peut désormais couper une recherche
+supplémentaire qu'un tour sans contrainte de temps aurait menée à bien).
 
 #### Tournoi à quatre IA (#276, 27/11/2026)
 

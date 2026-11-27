@@ -539,3 +539,59 @@ exclu du calcul ; le juge indépendant et l'enchaînement complet
 (`analyser_coup`/`rediger_exemple`) sur un état jouable. Tournent sans
 dépendance externe (le juge se replie sur la recherche arborescente).
 
+## 18. Échéance commune pour tout le tour (issue #279, étude #277)
+
+`BUDGET_TEMPS_EXPERT` (1,5 s par défaut, `moteur/ia.py`) borne CHAQUE appel au
+solveur, mais pas le TOUR entier : tous les niveaux passent par
+`jouer_niveau_bride`, et les étapes qui rappellent le solveur au cours d'un
+même tour (étape principale, `_appliquer_joker_utile`,
+`_appliquer_echange_differe`, `_appliquer_joker_libre` — voir
+`docs/contexte/joker_tactiques.md` §8 pour la chaîne du joker) recevaient
+chacune, avant #279, une échéance neuve de `BUDGET_TEMPS_EXPERT`. #277 a
+mesuré un tour réel (Intermédiaire) à 4 appels complets pour 3,92 s, environ
+2,6 fois le budget d'un appel.
+
+- **Échéance commune (`deadline_tour`)** : calculée UNE SEULE FOIS, au tout
+  début du tour, par `jouer_niveau_bride` (horloge monotone,
+  `time.monotonic()`), puis transmise en paramètre à `_coup_selon_
+  perturbation`, `jouer_niveau_expert`, `_coup_avec_chevalet`, `_coup_sans_
+  tuile_main`, `_appliquer_joker_utile`, `_appliquer_echange_differe` et
+  `_appliquer_joker_libre`. Chacune calcule son budget LOCAL comme le plus
+  petit entre son budget habituel (`budget_temps`) et le temps restant avant
+  `deadline_tour` (`_budget_selon_echeance`), au lieu d'une échéance neuve à
+  chaque appel — y compris le repli interne d'Expert (modèle exact →
+  recherche arborescente), qui ne reçoit plus un budget plein à chaque étage
+  mais le temps RÉELLEMENT restant.
+- **Plafond du tour (`FACTEUR_PLAFOND_TOUR`, `moteur/ia.py`)** : par défaut
+  deux fois le budget d'un appel (3 s avec `BUDGET_TEMPS_EXPERT` = 1,5 s),
+  calculé par `_plafond_tour(budget_temps)` — suit le budget effectivement
+  utilisé (réduit par les tests, les scripts de simulation ou
+  `--budget-solveur`), et ne descend jamais sous ce budget : la PREMIÈRE
+  étape du tour dispose donc toujours d'un temps utile complet.
+- **Comportement de repli à l'échéance** : dès que `deadline_tour` est
+  dépassée, AUCUNE étape ne lance de nouvel appel au solveur.
+  `jouer_niveau_expert` se replie directement sur Avancé (heuristique, ne
+  touche jamais le solveur) ; `_appliquer_joker_utile` garde par défaut le
+  joker non encore jugé (le coup déjà trouvé est renvoyé inchangé, jamais un
+  coup qui retirerait à tort un joker sans l'avoir vérifié) ;
+  `_appliquer_joker_libre` pioche (`_chercher_coup_sans_joker_libre` renvoie
+  `None` dès que `_coup_sans_tuile_main` constate l'échéance dépassée) —
+  jamais un coup qui laisserait un nouveau joker libre à un adversaire
+  (règle anti-don de joker, voir `docs/contexte/ia_anti_don_joker.md`).
+  Le coup choisi reste strictement identique à avant #279 tant qu'aucune
+  étape n'a besoin de plus de temps que le plafond.
+- **Portée** : mécanisme appliqué uniformément à tous les niveaux (passe par
+  `jouer_niveau_bride`) ; Débutant et Facile (sans la chaîne du joker) n'en
+  voient jamais d'effet visible, Expert non plus en pratique (un seul appel
+  principal dans l'immense majorité des tours).
+- **Tests** : `tests/test_echeance_tour.py` — plafond toujours ≥ budget d'un
+  appel ; budget local borné par l'échéance (horloge factice, voir
+  `_HorlogeIA`, même principe que `_HorlogeDeterministe` de
+  `tests/conftest.py` mais appliquée au module `ia` seul, sans toucher le
+  temps RÉEL utilisé par `solveur.py`/`solveur_exact.py`) ; coup inchangé à
+  budget confortable (plusieurs niveaux) ; nombre d'appels au solveur et
+  temps simulé du tour bornés sur le scénario du joker libre évité ; repli
+  qui pioche plutôt que de laisser un joker libre quand l'échéance est déjà
+  dépassée ; `_appliquer_joker_utile` sans appel au solveur si l'échéance est
+  déjà dépassée.
+

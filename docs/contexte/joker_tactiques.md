@@ -108,3 +108,17 @@ extensions`), désormais restreint aux seules combinaisons posées CE
 tour-ci avant que la mise initiale ne soit faite — voir
 `docs/contexte/moteur_regles.md`.
 
+**Échéance commune pour tout le tour (#279)** : la chaîne de ce paragraphe
+(jouée pour Intermédiaire/Avancé/Expert via `_appliquer_joker_utile`,
+`_appliquer_echange_differe`, `_appliquer_joker_libre` dans
+`jouer_niveau_bride`) peut enchaîner plusieurs appels au solveur dans le
+MÊME tour. Depuis #279, une échéance commune (`deadline_tour`, voir
+`docs/contexte/solveur_expert.md` pour le détail et le plafond) borne
+l'ensemble de ces appels au lieu de leur offrir chacun un budget neuf.
+Quand l'échéance est atteinte en cours de chaîne, aucune étape ne lance de
+nouvel appel : `_appliquer_joker_libre` pioche alors (jamais un coup qui
+laisserait un joker libre à un adversaire), et `_appliquer_joker_utile`
+garde par défaut le joker non encore jugé (coup déjà trouvé renvoyé
+inchangé) — repli toujours sûr, jamais un coup incohérent avec les règles
+de l'IA.
+
