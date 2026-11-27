@@ -485,14 +485,81 @@ après #272 et #273, aucun réglage de `niveaux.BRIDAGES` ne change.**
 L'écart total de Débutant à Expert reste d'environ 400 Elo, régulier à
 chaque marche. Durées des campagnes : 33 min, 61 min, 140 min et 121 min.
 
-Deux points de vigilance consignés sans cause affirmée (étude séparée
-prévue) :
-- les temps par tour **maximaux** relevés ici dépassent très largement
-  le budget de 1,5 s du solveur (Intermédiaire jusqu'à 116 s et 96 s,
-  Avancé jusqu'à 19 s) — cas rares, les moyennes restent sous la seconde ;
-- l'ancienne mesure d'Intermédiaire d'avant #267 avait montré un maximum
-  de 3 606 594 ms (environ une heure) pour un seul tour, probablement une
-  mise en veille du PC, non reproduit depuis.
+#### Tours longs (#277)
+
+Tous les niveaux passent par `jouer_niveau_bride` ; chaque APPEL au solveur
+est borné par le budget (1,5 s de production), mais rien ne borne le TOUR
+entier : les étapes qui rappellent le solveur au cours d'un même tour
+(étape principale, `_appliquer_joker_utile`, `_appliquer_echange_differe`,
+`_appliquer_joker_libre` et sa recherche sans joker libre) reçoivent
+CHACUNE une échéance neuve de 1,5 s. Cette chaîne n'existe qu'avec
+l'anti-don de joker (Intermédiaire, Avancé, Expert) ; Débutant et Facile en
+sont exempts, d'où leurs maxima plus bas.
+
+Un tour réel d'Intermédiaire (23 tuiles au chevalet, 73 sur la table, 2
+jokers) rejoué isolément a fait 4 appels complets au solveur exact pour
+3,92 s au total, soit environ 2,6 fois le budget — donc EXPLIQUÉ par cette
+chaîne d'appels. Les tours extrêmes relevés par ailleurs (95 à 116 s en
+campagne, 403 s dans la reproduction de l'étude #277, une heure une fois
+par le passé) ne sont PAS reproductibles : le même tour rejoué à
+l'identique a pris 3,92 s, ce qui désigne très probablement un
+ralentissement de la machine (charge, mise en veille) plutôt qu'une
+explosion de calcul — **non prouvé** pour les campagnes du PC fixe
+elles-mêmes. Le tournoi du 27/11/2026 (#276, PC fixe laissé au repos,
+voir ci-dessus) n'en a montré AUCUN, avec un maximum de 4,7 s. Expert
+partage le même code de joker mais n'a jamais dépassé environ 2 s dans les
+campagnes lues ici — explication **non vérifiée**.
+
+Correction proposée (issue séparée, à venir) : une échéance COMMUNE pour
+tout le tour plutôt qu'une échéance neuve par appel.
+
+#### Tournoi à quatre IA (#276, 27/11/2026)
+
+Premier tournoi à quatre niveaux à une même table (voir « Tournoi à
+plusieurs niveaux à une même table » plus bas, et `docs/contexte/
+scripts_simulation.md` §10) : joué sur le PC fixe le 27/11/2026 avec
+`scripts/tournoi_niveaux.py` (#276), code du commit `d11918b`. Niveaux
+Expert, Avancé, Intermédiaire, Facile (réglages réels de `niveaux.py` :
+Expert perturbation illimitée / oubli 0, Avancé 6 / 0,04, Intermédiaire
+3 / 0,15, Facile 1 / 0,40 sans anti-don de joker), graine 31, 100 donnes
+× 4 rotations des sièges = 400 manches, budget du solveur 1,5 s, 2
+processus, règle réelle de fin de manche. Durée totale : 1 649 s (environ
+27 minutes). Aucune anomalie.
+
+Fins de manche : 399 chevalet vide (99,8 %), 1 manche bloquée, 0 limite de
+tours ; 37,2 tours par manche en moyenne.
+
+Résultats par niveau (le hasard donnerait 25 % de victoires et une place
+moyenne de 2,5) :
+
+| Niveau | Victoires | Taux | IC 95 % (Wilson) | Place moyenne | Score moyen |
+|--------|:--:|:--:|:--:|:--:|:--:|
+| Expert | 265/400 | 66,2 % | 61,5-70,7 % | 1,50 | +70,2 ± 8,2 |
+| Avancé | 87/400 | 21,8 % | 18,0-26,1 % | 2,36 | +2,1 ± 7,7 |
+| Intermédiaire | 35/400 | 8,8 % | 6,4-11,9 % | 2,85 | -26,8 ± 5,4 |
+| Facile | 13/400 | 3,2 % | 1,9-5,5 % | 3,29 | -45,5 ± 3,8 |
+
+Matrice « qui bat qui » (part des manches où la ligne a un meilleur score
+que la colonne, égalité = 0,5) : Expert bat Avancé 74,8 %, Intermédiaire
+84,8 %, Facile 90,5 % ; Avancé bat Intermédiaire 63,7 % et Facile 74,8 % ;
+Intermédiaire bat Facile 63,4 %.
+
+Victoires par siège (contrôle de l'absence de biais de position) : siège 1
+24,5 %, siège 2 24,0 %, siège 3 26,5 %, siège 4 25,0 %.
+
+Temps par tour (moyenne, maximum) : Expert 194 ms / 3 078 ms ; Avancé
+191 ms / 4 593 ms ; Intermédiaire 242 ms / 4 703 ms ; Facile 234 ms /
+1 796 ms — aucun tour de plusieurs dizaines de secondes sur cette
+campagne, jouée sur un PC fixe laissé au repos (voir « Tours longs
+(#277) » ci-dessus).
+
+**Conclusion.** L'ordre Expert > Avancé > Intermédiaire > Facile est net à
+une même table, sans recoupement des intervalles de confiance ; les
+niveaux voisins se retrouvent à 63-64 %, en accord avec les duels
+(60-70 %). L'écart Expert-Avancé est plus grand à quatre (74,8 %, contre
+63,5 % en duel), ce qui n'est **pas** contradictoire (mesures
+différentes). Le tournoi est un COMPLÉMENT de vérification, pas une
+calibration : il n'a aucune cible et ne modifie aucun réglage.
 
 ### Règle de l'ouverture appliquée à l'IA (issue #273, étude #270)
 

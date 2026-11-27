@@ -166,5 +166,21 @@ python scripts/tournoi_niveaux.py --dossier /tmp/tournoi_276 --donnes 100
 # PC fixe Windows (venv dédié de calibration) :
 C:\Tournois\venv\Scripts\python.exe scripts\tournoi_niveaux.py --dossier C:\Tournois\tournoi_276 --donnes 10
 C:\Tournois\venv\Scripts\python.exe scripts\tournoi_niveaux.py --dossier C:\Tournois\tournoi_276 --donnes 100
+
+# Campagne réelle du premier tournoi à quatre IA (27/11/2026), même
+# interpréteur de calibration que calibrer_echelle.py, graine fixée,
+# budget de production, 2 processus :
+C:\Tournois\venv\Scripts\python.exe scripts\tournoi_niveaux.py --dossier C:\Tournois\tournoi_276 ^
+    --donnes 100 --seed 31 --budget-solveur 1.5 --processus 2
+
+# relire le rapport en cours de route sans rien jouer :
+C:\Tournois\venv\Scripts\python.exe scripts\tournoi_niveaux.py --dossier C:\Tournois\tournoi_276 --statut
 ```
+
+La campagne ci-dessus (100 donnes × 4 rotations = 400 manches) a duré
+1 649 s (environ 27 minutes) — bien moins que l'estimation initiale.
+Résultats détaillés (taux de victoire par niveau, matrice « qui bat qui »,
+temps par tour...) : voir le sous-paragraphe « Tournoi à quatre IA (#276,
+27/11/2026) » de `docs/contexte/niveaux_ia_calibrage.md`, section « Échelle
+calibrée ».
 
