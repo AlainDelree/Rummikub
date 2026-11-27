@@ -524,3 +524,11 @@ test seulement, l'ancien réglage rapide (perturbation 0, oubli 0,42,
 niveau (`tests/test_niveaux.py`, et ceux qui testent vraiment Débutant ou
 Avancé) gardent les réglages réels de `niveaux.py`, sans cette fixture.
 
+### Tournoi à plusieurs niveaux à une même table (issue #276)
+
+`scripts/tournoi_niveaux.py` fait jouer 2 à 4 niveaux ENSEMBLE, à une même
+table, avec rotation des sièges — en COMPLÉMENT des duels ci-dessus (qui
+restent la seule méthode de calibrage) : voir
+`docs/contexte/scripts_simulation.md` §10 pour le détail (usage, métriques,
+limites).
+

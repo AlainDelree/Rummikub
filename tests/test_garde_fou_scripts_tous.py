@@ -65,6 +65,7 @@ def test_inventaire_connu():
         "match_solveurs.py",
         "profil_joueur.py",
         "simulation_ia.py",
+        "tournoi_niveaux.py",
         "verifier_simplicite_expert.py",
     }
     assert set(_scripts_qui_font_jouer_ia()) == attendu

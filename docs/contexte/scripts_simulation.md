@@ -102,3 +102,69 @@ avec l'autre règle est refusé, comme pour la graine/max_tours/budget/cible.
 Détail (fonctionnement moteur, rapport, mesure chiffrée) :
 `docs/contexte/ia_anti_don_joker.md` §10.
 
+## 10. Tournoi à plusieurs niveaux à une même table (`scripts/tournoi_niveaux.py`, issue #276)
+
+**But.** Les duels (`comparer_niveaux_ia.py`/`calibrer_echelle.py`, §9
+ci-dessus) restent la SEULE méthode de calibrage de l'échelle (cible
+60-70 % entre niveaux voisins). `tournoi_niveaux.py` les COMPLÈTE : il fait
+jouer 2 à 4 niveaux ENSEMBLE, à une même table (Alain : Expert, Avancé,
+Intermédiaire, Facile, par défaut), pour vérifier l'ordre de force à
+plusieurs joueurs — jamais pour recalibrer `niveaux.py` (il ne le modifie
+jamais, ni le moteur, ni l'IA).
+
+**Rotations.** Pour chaque donne (distribution de tuiles), tous les
+niveaux jouent `len(niveaux)` manches — autant de ROTATIONS des sièges,
+chaque niveau occupant une fois chaque siège (rotation cyclique). La
+graine est fixée AVANT la création de chaque manche : seule l'affectation
+niveau → siège change entre les rotations d'une même donne, pour que la
+distribution des tuiles soit identique et que l'avantage du premier
+joueur s'annule — comme le miroir à deux joueurs de `comparer_niveaux_ia.py`.
+100 donnes à 4 niveaux = 400 manches.
+
+**Reprise.** Un enregistrement JSON Lines par MANCHE
+(`<dossier>/resultats_<worker>.jsonl`), une donne étant complète quand ses
+`len(niveaux)` rotations sont toutes présentes. Relancer EXACTEMENT la
+même commande sur le même `--dossier` reprend à la première donne
+manquante (aucune donne déjà complète n'est rejouée ni dupliquée) ;
+augmenter `--donnes` prolonge la campagne. `--processus` (1 ou 2, comme
+`calibrer_echelle.py`) partitionne les donnes entre processus — fait
+partie des réglages verrouillés du dossier (`reglages.json`), comme les
+niveaux/graine/max_tours/budget solveur.
+
+**Métriques du rapport** (`<dossier>/rapport.txt`, régénéré en continu,
+y compris pendant un calcul ou après une interruption — `--statut` pour le
+relire sans rien jouer) : par niveau, manches jouées, part de victoires
+avec intervalle de confiance de WILSON (pas l'approximation de Wald des
+autres scripts), place moyenne (1 à N, égalités partagées), score moyen
+avec son intervalle de confiance ; une matrice « qui bat qui » (part des
+manches où un niveau a un meilleur score qu'un autre, y compris des
+niveaux non voisins) ; les victoires par siège (biais de position) ; la
+répartition des fins de manche (chevalet vide / manche bloquée / limite de
+tours) ; le nombre moyen de tours par manche ; le temps par tour moyen et
+maximum par niveau ; le nombre d'anomalies ; la graine, le budget, le
+commit et les réglages réels des niveaux (lus dans `niveaux.py`, jamais
+modifiés).
+
+**Limites.** Un tournoi à plusieurs niveaux ne reproduit PAS un duel à
+deux : la dynamique de jeu change dès qu'il y a plus de deux joueurs
+(ordre de passage, compétition pour les combinaisons ouvertes...). Ce
+script ne vise donc AUCUNE cible de taux de victoire (contrairement aux
+duels) et ne doit jamais servir à recalibrer `niveaux.BRIDAGES` : un
+écart inattendu à plusieurs joueurs appelle une étude séparée, pas une
+modification directe des réglages depuis ce rapport.
+
+Usage (ThinkPad/Linux puis PC fixe Windows, même convention que
+`calibrer_echelle.py` ci-dessus) :
+
+```
+# petit lot d'essai (10 donnes = 40 manches à 4 niveaux)
+python scripts/tournoi_niveaux.py --dossier /tmp/tournoi_276 --donnes 10
+
+# campagne complète (100 donnes = 400 manches), reprenable après coupure
+python scripts/tournoi_niveaux.py --dossier /tmp/tournoi_276 --donnes 100
+
+# PC fixe Windows (venv dédié de calibration) :
+C:\Tournois\venv\Scripts\python.exe scripts\tournoi_niveaux.py --dossier C:\Tournois\tournoi_276 --donnes 10
+C:\Tournois\venv\Scripts\python.exe scripts\tournoi_niveaux.py --dossier C:\Tournois\tournoi_276 --donnes 100
+```
+
