@@ -445,6 +445,55 @@ fois par tour (recherche limitée par la perturbation, règles du joker),
 chaque appel étant borné par le budget plutôt que le tour dans son
 ensemble.
 
+#### Vérification après #272 et #273
+
+Après #272 (contrôles du moteur sur l'origine des tuiles d'ouverture) et
+#273 (plus aucune modification de la table pendant le tour d'ouverture,
+pour l'IA comme pour le moteur), Alain a rejoué sur le PC fixe les quatre
+duels de l'échelle, sans changer aucun réglage de `niveaux.BRIDAGES`
+(Débutant 1/0,80, Facile 1/0,40, Intermédiaire 3/0,15, Avancé 6/0,04,
+Expert inchangé). Conditions : commit `1136c8c` de master, `scripts/
+calibrer_echelle.py`, graine 31, budget du solveur **1,5 s** (budget de
+jeu réel, pas les 4,0 s des campagnes de calibration d'origine), règle de
+fin de manche réelle (#255), cible 60-70 %, parties jouées en miroir.
+
+- **Expert contre Avancé** : 100 donnes, Expert gagne 127 manches sur 200
+  = 63,5 % ± 6,7 (+96 Elo) ; manches de 64,4 tours en moyenne, 100 %
+  terminées par chevalet vide ; temps par tour Avancé 160 ms en moyenne
+  (maximum 4 578 ms), Expert 149 ms (maximum 2 000 ms). Résultat
+  **identique**, au match près, à la mesure d'avant #273 (déjà 127 sur
+  200 ci-dessus) : la correction de #273 n'a changé l'issue d'aucune
+  manche de ce duel.
+- **Avancé contre Intermédiaire** : 50 donnes, Avancé gagne 61 manches
+  sur 100 = 61,0 % ± 9,6 (+77 Elo) ; manches de 80,9 tours, 84 % finies
+  par chevalet vide et 16 % bloquées ; temps par tour Avancé 419 ms en
+  moyenne (maximum 18 765 ms), Intermédiaire 491 ms (maximum 116 156 ms).
+- **Intermédiaire contre Facile** : 50 donnes, Intermédiaire gagne 63
+  manches sur 100 = 63,0 % ± 9,5 (+91 Elo) ; manches de 109,7 tours, 23 %
+  finies par chevalet vide et 77 % bloquées ; temps par tour Facile
+  697 ms en moyenne (maximum 4 547 ms), Intermédiaire 837 ms (maximum
+  95 578 ms). Mesure d'avant #273 : 65,0 % — léger recul mais toujours
+  dans la cible.
+- **Facile contre Débutant** : 50 donnes, Facile gagne 68 manches sur
+  100 = 68,0 % ± 9,1 (+130 Elo) ; manches de 103,4 tours, 2 % finies par
+  chevalet vide et 98 % bloquées ; temps par tour Débutant 728 ms en
+  moyenne (maximum 7 625 ms), Facile 672 ms (maximum 4 610 ms). Mesure
+  d'avant #273 : 67,0 % — stable.
+
+Les quatre duels restent dans la cible 60-70 % : **l'échelle est validée
+après #272 et #273, aucun réglage de `niveaux.BRIDAGES` ne change.**
+L'écart total de Débutant à Expert reste d'environ 400 Elo, régulier à
+chaque marche. Durées des campagnes : 33 min, 61 min, 140 min et 121 min.
+
+Deux points de vigilance consignés sans cause affirmée (étude séparée
+prévue) :
+- les temps par tour **maximaux** relevés ici dépassent très largement
+  le budget de 1,5 s du solveur (Intermédiaire jusqu'à 116 s et 96 s,
+  Avancé jusqu'à 19 s) — cas rares, les moyennes restent sous la seconde ;
+- l'ancienne mesure d'Intermédiaire d'avant #267 avait montré un maximum
+  de 3 606 594 ms (environ une heure) pour un seul tour, probablement une
+  mise en veille du PC, non reproduit depuis.
+
 ### Règle de l'ouverture appliquée à l'IA (issue #273, étude #270)
 
 `_coup_maximal` (`moteur/ia.py`, chemin de Facile/Intermédiaire/Avancé en
@@ -455,11 +504,11 @@ avant la mise initiale, voir `docs/contexte/moteur_regles.md`). Corrigé :
 avant la mise initiale, les extensions ne portent plus que sur les
 combinaisons posées CE tour depuis le chevalet. **Conséquence attendue** :
 légère baisse de force de Facile, Intermédiaire et Avancé (une option
-d'ouverture leur est désormais fermée) — **l'échelle calibrée de #267
-ci-dessus doit être REVÉRIFIÉE** (duels entre niveaux voisins,
-`scripts/echelle_niveaux.py`) après cette issue ; non refait par #273
-(mesure d'impact seulement indicative, sur un petit échantillon), à faire
-par Alain sur le PC fixe.
+d'ouverture leur est désormais fermée) — non refait par #273 (mesure
+d'impact seulement indicative, sur un petit échantillon). **Vérification
+faite (issue #274)** : voir « Vérification après #272 et #273 »
+ci-dessus — les quatre duels restent dans la cible 60-70 %, aucun réglage
+de `niveaux.BRIDAGES` n'a changé.
 
 ### Règle de travail (issue #268) : les tests ne dépendent jamais des réglages calibrés
 
