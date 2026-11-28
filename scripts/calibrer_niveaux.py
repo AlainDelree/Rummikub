@@ -57,13 +57,13 @@ for _p in (SRC, SCRIPTS):
     if _p.is_dir() and str(_p) not in sys.path:
         sys.path.insert(0, str(_p))
 
-from rummikub.config import NIVEAUX  # noqa: E402
-from rummikub.moteur import ia as _ia  # noqa: E402
-from rummikub.moteur import niveaux as _niveaux  # noqa: E402
+from rummikub.config import NIVEAUX
+from rummikub.moteur import ia as _ia
+from rummikub.moteur import niveaux as _niveaux
 
 # Réutilisation directe de la logique de match miroir, reproductible (#213).
-from comparer_niveaux_ia import comparer, moyenne  # noqa: E402
-from _verif_solveur_exact import (  # noqa: E402
+from comparer_niveaux_ia import comparer, moyenne
+from _verif_solveur_exact import (
     entete_dependances, exiger_solveur_exact_ou_quitter,
 )
 

@@ -96,10 +96,10 @@ for _p in (SRC, SCRIPTS):
     if _p.is_dir() and str(_p) not in sys.path:
         sys.path.insert(0, str(_p))
 
-from rummikub.config import NIVEAUX  # noqa: E402
-from rummikub.moteur import niveaux as _niveaux  # noqa: E402
-from rummikub.moteur.ia import jouer_niveau_bride  # noqa: E402
-from rummikub.moteur.partie import (  # noqa: E402
+from rummikub.config import NIVEAUX
+from rummikub.moteur import niveaux as _niveaux
+from rummikub.moteur.ia import jouer_niveau_bride
+from rummikub.moteur.partie import (
     annuler_tour,
     backup_debut_tour,
     creer_partie,
@@ -107,12 +107,12 @@ from rummikub.moteur.partie import (  # noqa: E402
     passer_tour,
     piocher,
 )
-from comparer_niveaux_ia import moyenne  # noqa: E402
-from _limite_temps_ferme import (  # noqa: E402
+from comparer_niveaux_ia import moyenne
+from _limite_temps_ferme import (
     CODE_LIMITE_TEMPS, CODE_TERMINE, lancer_avec_limite_ferme,
 )
-from _rapport_duels import entete_machine  # noqa: E402
-from _verif_solveur_exact import exiger_solveur_exact_ou_quitter  # noqa: E402
+from _rapport_duels import entete_machine
+from _verif_solveur_exact import exiger_solveur_exact_ou_quitter
 
 logger = logging.getLogger("tournoi_niveaux")
 

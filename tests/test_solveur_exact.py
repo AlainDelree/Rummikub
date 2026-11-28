@@ -27,9 +27,9 @@ _SCRIPTS = Path(__file__).resolve().parents[1] / "scripts"
 if str(_SCRIPTS) not in sys.path:
     sys.path.insert(0, str(_SCRIPTS))
 
-import solveur_exact  # noqa: E402
-from rummikub.moteur.tuiles import Tuile  # noqa: E402
-from rummikub.moteur.validation import valider_combinaison  # noqa: E402
+import solveur_exact
+from rummikub.moteur.tuiles import Tuile
+from rummikub.moteur.validation import valider_combinaison
 
 _DONNEES = Path(__file__).resolve().parent / "donnees"
 

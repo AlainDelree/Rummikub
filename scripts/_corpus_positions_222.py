@@ -25,7 +25,7 @@ SRC = RACINE / "src"
 if SRC.is_dir() and str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
-from rummikub.config import COULEURS_JOKERS  # noqa: E402
+from rummikub.config import COULEURS_JOKERS
 
 
 # --------------------------------------------------------------------------- #

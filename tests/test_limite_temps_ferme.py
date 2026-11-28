@@ -17,7 +17,7 @@ _SCRIPTS = Path(__file__).resolve().parents[1] / "scripts"
 if str(_SCRIPTS) not in sys.path:
     sys.path.insert(0, str(_SCRIPTS))
 
-import _limite_temps_ferme as L  # noqa: E402
+import _limite_temps_ferme as L
 
 
 def _ecrire_script(tmp_path: Path, nom: str, code: str) -> Path:

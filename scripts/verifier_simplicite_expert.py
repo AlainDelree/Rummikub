@@ -88,17 +88,17 @@ for _p in (SRC, SCRIPTS):
     if _p.is_dir() and str(_p) not in sys.path:
         sys.path.insert(0, str(_p))
 
-from rummikub.config import NIVEAUX  # noqa: E402
-from rummikub.moteur import description_coup  # noqa: E402
-from rummikub.moteur import solveur as solveur_recherche  # noqa: E402
-from rummikub.moteur import solveur_exact  # noqa: E402
-from rummikub.moteur.solveur import mesurer_perturbation  # noqa: E402
-from rummikub.moteur.ia import jouer_ia  # noqa: E402
-from rummikub.moteur.partie import (  # noqa: E402
+from rummikub.config import NIVEAUX
+from rummikub.moteur import description_coup
+from rummikub.moteur import solveur as solveur_recherche
+from rummikub.moteur import solveur_exact
+from rummikub.moteur.solveur import mesurer_perturbation
+from rummikub.moteur.ia import jouer_ia
+from rummikub.moteur.partie import (
     annuler_tour, backup_debut_tour, creer_partie, jouer_tour, passer_tour,
     piocher,
 )
-from _verif_solveur_exact import (  # noqa: E402
+from _verif_solveur_exact import (
     entete_dependances, exiger_solveur_exact_ou_quitter,
 )
 

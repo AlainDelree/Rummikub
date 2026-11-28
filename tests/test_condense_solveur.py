@@ -39,8 +39,8 @@ _SCRIPTS = Path(__file__).resolve().parents[1] / "scripts"
 if str(_SCRIPTS) not in sys.path:
     sys.path.insert(0, str(_SCRIPTS))
 
-from rummikub.moteur import solveur_exact as solveur_maison  # noqa: E402
-from rummikub.moteur.description_coup import (  # noqa: E402
+from rummikub.moteur import solveur_exact as solveur_maison
+from rummikub.moteur.description_coup import (
     etapes_coup_ia, mesurer_coup_ia)
 
 _DONNEES = Path(__file__).resolve().parent / "donnees"
@@ -56,7 +56,7 @@ def _coup_externe(data):
     ``rummikub-solver`` — sert aux propriétés générales, insensibles à la
     source. Saute le test si la bibliothèque n'est pas installée."""
     pytest.importorskip("rummikub_solver")
-    import solveur_exact  # scripts/solveur_exact.py  # noqa: E402
+    import solveur_exact  # scripts/solveur_exact.py
     coup = solveur_exact.resoudre_coup_exact(
         data["etat"], data["idx"], budget_temps=12.0)
     if coup is None or coup["action"] != "jouer":

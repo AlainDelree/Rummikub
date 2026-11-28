@@ -19,8 +19,8 @@ _CORPUS = _RACINE / "tests" / "donnees" / "corpus_positions_222.json"
 if str(_SCRIPTS) not in sys.path:
     sys.path.insert(0, str(_SCRIPTS))
 
-import _corpus_positions_222 as corpus_mod  # noqa: E402
-import mesurer_volume_solveur_222 as mesure_mod  # noqa: E402
+import _corpus_positions_222 as corpus_mod
+import mesurer_volume_solveur_222 as mesure_mod
 
 besoin_exact = pytest.mark.skipif(
     not se.DISPONIBLE,

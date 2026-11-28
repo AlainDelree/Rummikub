@@ -19,8 +19,8 @@ _SCRIPTS = Path(__file__).resolve().parents[1] / "scripts"
 if str(_SCRIPTS) not in sys.path:
     sys.path.insert(0, str(_SCRIPTS))
 
-import tournoi_niveaux as M  # noqa: E402
-from rummikub.moteur import niveaux as _niveaux  # noqa: E402
+import tournoi_niveaux as M
+from rummikub.moteur import niveaux as _niveaux
 
 _MAX_TOURS_RAPIDE = 300
 _RAPIDE = _niveaux.Bridage(perturbation_max=0, taux_oubli=0.0,

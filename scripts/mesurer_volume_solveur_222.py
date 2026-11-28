@@ -52,12 +52,12 @@ for p in (SRC, SCRIPTS):
     if p.is_dir() and str(p) not in sys.path:
         sys.path.insert(0, str(p))
 
-from _corpus_positions_222 import etat_depuis_position  # noqa: E402
-from _limite_temps_ferme import (  # noqa: E402
+from _corpus_positions_222 import etat_depuis_position
+from _limite_temps_ferme import (
     CODE_LIMITE_TEMPS, CODE_TERMINE, lancer_avec_limite_ferme,
 )
-from _mesure_volume_222 import resoudre_avec_limite  # noqa: E402
-from _rapport_duels import entete_machine  # noqa: E402
+from _mesure_volume_222 import resoudre_avec_limite
+from _rapport_duels import entete_machine
 
 logger = logging.getLogger("mesurer_volume_solveur_222")
 

@@ -35,7 +35,7 @@ _SRC = _RACINE / "src"
 if _SRC.is_dir() and str(_SRC) not in sys.path:
     sys.path.insert(0, str(_SRC))
 
-from rummikub.persistance.bilan import calculer_bilan, charger_toutes_parties  # noqa: E402
+from rummikub.persistance.bilan import calculer_bilan, charger_toutes_parties
 
 
 def _dossier_defaut() -> Path:

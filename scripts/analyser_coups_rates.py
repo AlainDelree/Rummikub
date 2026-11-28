@@ -67,9 +67,9 @@ _SRC = _RACINE / "src"
 if _SRC.is_dir() and str(_SRC) not in sys.path:
     sys.path.insert(0, str(_SRC))
 
-from rummikub.moteur.ia import BUDGET_TEMPS_EXPERT  # noqa: E402
-from rummikub.persistance.bilan import charger_journal, lister_journaux  # noqa: E402
-from rummikub.persistance.coups_rates import (  # noqa: E402
+from rummikub.moteur.ia import BUDGET_TEMPS_EXPERT
+from rummikub.persistance.bilan import charger_journal, lister_journaux
+from rummikub.persistance.coups_rates import (
     BUDGETS_SERIE_DEFAUT,
     analyser_decision_complete, budget_necessaire, calculer_resume_complet,
     detecter_reserves_joueur, extraire_decisions_ia_toutes,

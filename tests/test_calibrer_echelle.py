@@ -14,8 +14,8 @@ _SCRIPTS = Path(__file__).resolve().parents[1] / "scripts"
 if str(_SCRIPTS) not in sys.path:
     sys.path.insert(0, str(_SCRIPTS))
 
-import calibrer_echelle as M  # noqa: E402
-from rummikub.moteur import niveaux as _niveaux  # noqa: E402
+import calibrer_echelle as M
+from rummikub.moteur import niveaux as _niveaux
 
 _BUDGET_RAPIDE = 0.02
 _MAX_TOURS_RAPIDE = 10

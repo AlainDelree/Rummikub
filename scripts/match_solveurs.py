@@ -87,17 +87,17 @@ for p in (SRC, SCRIPTS):
     if p.is_dir() and str(p) not in sys.path:
         sys.path.insert(0, str(p))
 
-from rummikub.moteur.partie import (  # noqa: E402
+from rummikub.moteur.partie import (
     annuler_tour, backup_debut_tour, creer_partie, jouer_tour, passer_tour,
     piocher,
 )
-from rummikub.moteur.ia import jouer_niveau_expert  # noqa: E402
-from rummikub.moteur import solveur_exact as solveur_maison  # noqa: E402
-from _verif_solveur_exact import (  # noqa: E402
+from rummikub.moteur.ia import jouer_niveau_expert
+from rummikub.moteur import solveur_exact as solveur_maison
+from _verif_solveur_exact import (
     entete_dependances, exiger_solveur_exact_ou_quitter,
 )
 
-import solveur_exact as solveur_biblio  # noqa: E402  (scripts/solveur_exact.py)
+import solveur_exact as solveur_biblio  # (scripts/solveur_exact.py)
 
 
 NB_TUILES_TOTAL = 106

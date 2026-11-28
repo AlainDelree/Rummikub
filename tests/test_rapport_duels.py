@@ -9,7 +9,7 @@ _SCRIPTS = Path(__file__).resolve().parents[1] / "scripts"
 if str(_SCRIPTS) not in sys.path:
     sys.path.insert(0, str(_SCRIPTS))
 
-import _rapport_duels as R  # noqa: E402
+import _rapport_duels as R
 
 
 def test_entete_machine_contient_nom_et_version_python():

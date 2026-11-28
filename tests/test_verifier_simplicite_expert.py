@@ -23,7 +23,7 @@ _SCRIPTS = Path(__file__).resolve().parents[1] / "scripts"
 if str(_SCRIPTS) not in sys.path:
     sys.path.insert(0, str(_SCRIPTS))
 
-import verifier_simplicite_expert as V  # noqa: E402
+import verifier_simplicite_expert as V
 
 
 # --------------------------------------------------------------------------- #

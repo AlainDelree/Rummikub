@@ -14,8 +14,8 @@ if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 sys.path.insert(0, str(RACINE / "scripts"))
 
-from rummikub.moteur import ia as ia_mod  # noqa: E402
-from _verif_solveur_exact import exiger_solveur_exact_ou_quitter  # noqa: E402
+from rummikub.moteur import ia as ia_mod
+from _verif_solveur_exact import exiger_solveur_exact_ou_quitter
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--donnes", type=int, default=60)
@@ -31,7 +31,7 @@ exiger_solveur_exact_ou_quitter()
 
 ia_mod.BUDGET_TEMPS_EXPERT = args.budget_expert
 
-import comparer_niveaux_ia as cmp  # noqa: E402
+import comparer_niveaux_ia as cmp
 
 print(f"Budget de temps Expert pour cette campagne : {args.budget_expert}s "
       f"(défaut production : 1.5s)")

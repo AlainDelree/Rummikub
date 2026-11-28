@@ -19,16 +19,16 @@ _SCRIPTS = _RACINE / "scripts"
 if str(_SCRIPTS) not in sys.path:
     sys.path.insert(0, str(_SCRIPTS))
 
-from rummikub.moteur import solveur_exact as se  # noqa: E402
+from rummikub.moteur import solveur_exact as se
 
-import _verif_solveur_exact as V  # noqa: E402
-import comparer_niveaux_ia as M  # noqa: E402
-import simulation_ia as M_simulation  # noqa: E402
-import profil_joueur as M_profil  # noqa: E402
-import calibrer_niveaux as M_calibrer  # noqa: E402
-import verifier_simplicite_expert as M_simplicite  # noqa: E402
-import generer_corpus_positions_222 as M_corpus  # noqa: E402
-import match_solveurs as M_match  # noqa: E402
+import _verif_solveur_exact as V
+import comparer_niveaux_ia as M
+import simulation_ia as M_simulation
+import profil_joueur as M_profil
+import calibrer_niveaux as M_calibrer
+import verifier_simplicite_expert as M_simplicite
+import generer_corpus_positions_222 as M_corpus
+import match_solveurs as M_match
 
 
 # --------------------------------------------------------------------------- #

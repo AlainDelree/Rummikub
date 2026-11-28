@@ -25,11 +25,11 @@ _SCRIPTS = Path(__file__).resolve().parents[1] / "scripts"
 if str(_SCRIPTS) not in sys.path:
     sys.path.insert(0, str(_SCRIPTS))
 
-import match_solveurs as M  # noqa: E402
-import solveur_exact as solveur_biblio  # noqa: E402
-from rummikub.moteur.partie import creer_partie  # noqa: E402
-from rummikub.moteur.tuiles import Tuile  # noqa: E402
-from rummikub.moteur.validation import valider_combinaison  # noqa: E402
+import match_solveurs as M
+import solveur_exact as solveur_biblio
+from rummikub.moteur.partie import creer_partie
+from rummikub.moteur.tuiles import Tuile
+from rummikub.moteur.validation import valider_combinaison
 
 
 # --------------------------------------------------------------------------- #

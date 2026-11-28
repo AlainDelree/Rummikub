@@ -69,18 +69,18 @@ for _p in (SRC, SCRIPTS):
     if _p.is_dir() and str(_p) not in sys.path:
         sys.path.insert(0, str(_p))
 
-from rummikub.config import NIVEAUX  # noqa: E402
-from rummikub.moteur.description_coup import mesurer_coup_ia  # noqa: E402
-from rummikub.moteur.ia import jouer_ia  # noqa: E402
-from rummikub.moteur.partie import (  # noqa: E402
+from rummikub.config import NIVEAUX
+from rummikub.moteur.description_coup import mesurer_coup_ia
+from rummikub.moteur.ia import jouer_ia
+from rummikub.moteur.partie import (
     annuler_tour, backup_debut_tour, creer_partie, jouer_tour, passer_tour,
     piocher,
 )
-from rummikub.moteur import solveur_exact  # noqa: E402
+from rummikub.moteur import solveur_exact
 
 # Réutilisation des helpers de formatage/CI (#213).
-from comparer_niveaux_ia import intervalle_confiance_95, moyenne  # noqa: E402
-from _verif_solveur_exact import (  # noqa: E402
+from comparer_niveaux_ia import intervalle_confiance_95, moyenne
+from _verif_solveur_exact import (
     entete_dependances, exiger_solveur_exact_ou_quitter,
 )
 

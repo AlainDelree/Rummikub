@@ -10,7 +10,7 @@ _SCRIPTS = Path(__file__).resolve().parents[1] / "scripts"
 if str(_SCRIPTS) not in sys.path:
     sys.path.insert(0, str(_SCRIPTS))
 
-import comparer_niveaux_ia as M  # noqa: E402
+import comparer_niveaux_ia as M
 
 
 def _resume_minimal(**overrides) -> dict:

@@ -29,7 +29,7 @@ SRC = RACINE / "src"
 if SRC.is_dir() and str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
-from rummikub.moteur import solveur_exact as se  # noqa: E402
+from rummikub.moteur import solveur_exact as se
 
 
 @contextlib.contextmanager

@@ -49,8 +49,8 @@ if _SRC.is_dir() and str(_SRC) not in sys.path:
 if str(Path(__file__).resolve().parent) not in sys.path:
     sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-import solveur_exact  # noqa: E402
-from rummikub.moteur.solveur import resoudre_coup, BudgetDepasse  # noqa: E402
+import solveur_exact
+from rummikub.moteur.solveur import resoudre_coup, BudgetDepasse
 
 
 def _dossier_donnees_test() -> Path:

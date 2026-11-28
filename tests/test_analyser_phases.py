@@ -11,7 +11,7 @@ _SCRIPTS = Path(__file__).resolve().parents[1] / "scripts"
 if str(_SCRIPTS) not in sys.path:
     sys.path.insert(0, str(_SCRIPTS))
 
-import analyser_phases as AP  # noqa: E402
+import analyser_phases as AP
 
 
 # --------------------------------------------------------------------------- #

@@ -14,9 +14,9 @@ _RACINE = Path(__file__).resolve().parent.parent
 if str(_RACINE) not in sys.path:
     sys.path.insert(0, str(_RACINE))
 
-import main as _main_module  # noqa: E402
-from rummikub import actualise as _actualise_mod  # noqa: E402
-from rummikub.ui import application as _application_module  # noqa: E402
+import main as _main_module
+from rummikub import actualise as _actualise_mod
+from rummikub.ui import application as _application_module
 
 
 class _PopenAppels:

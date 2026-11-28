@@ -14,7 +14,7 @@ _SCRIPTS = Path(__file__).resolve().parents[1] / "scripts"
 if str(_SCRIPTS) not in sys.path:
     sys.path.insert(0, str(_SCRIPTS))
 
-import echelle_niveaux as M  # noqa: E402
+import echelle_niveaux as M
 
 _BUDGET_RAPIDE = 0.02
 _MAX_TOURS_RAPIDE = 10

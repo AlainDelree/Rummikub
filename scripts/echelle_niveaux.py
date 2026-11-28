@@ -88,19 +88,19 @@ for _p in (SRC, SCRIPTS):
     if _p.is_dir() and str(_p) not in sys.path:
         sys.path.insert(0, str(_p))
 
-from rummikub.config import NIVEAUX  # noqa: E402
-from rummikub.moteur import niveaux as _niveaux  # noqa: E402
-from rummikub.moteur import ia as _ia  # noqa: E402
+from rummikub.config import NIVEAUX
+from rummikub.moteur import niveaux as _niveaux
+from rummikub.moteur import ia as _ia
 
 # Réutilisation directe de la logique de match miroir, reproductible, de #213.
-from comparer_niveaux_ia import comparer, intervalle_confiance_95  # noqa: E402
-from _limite_temps_ferme import (  # noqa: E402
+from comparer_niveaux_ia import comparer, intervalle_confiance_95
+from _limite_temps_ferme import (
     CODE_LIMITE_TEMPS, CODE_TERMINE, lancer_avec_limite_ferme,
 )
-from _rapport_duels import (  # noqa: E402
+from _rapport_duels import (
     SEUIL_NET_BAS, SEUIL_NET_HAUT, entete_machine, verdict_ecart,
 )
-from _verif_solveur_exact import exiger_solveur_exact_ou_quitter  # noqa: E402
+from _verif_solveur_exact import exiger_solveur_exact_ou_quitter
 
 logger = logging.getLogger("echelle_niveaux")
 

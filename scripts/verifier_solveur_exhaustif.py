@@ -31,9 +31,9 @@ _SRC = _RACINE / "src"
 if _SRC.is_dir() and str(_SRC) not in sys.path:
     sys.path.insert(0, str(_SRC))
 
-from rummikub.moteur.partie import _plateau_vers_dict  # noqa: E402
-from rummikub.moteur.solveur import resoudre_coup, BudgetDepasse  # noqa: E402
-from rummikub.moteur.verif_solveur import (  # noqa: E402
+from rummikub.moteur.partie import _plateau_vers_dict
+from rummikub.moteur.solveur import resoudre_coup, BudgetDepasse
+from rummikub.moteur.verif_solveur import (
     generer_position_aleatoire, max_tuiles_posables_exhaustif,
 )
 
