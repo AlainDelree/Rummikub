@@ -137,7 +137,7 @@ def _parser_niveau(texte: str) -> str:
     return niveau
 
 
-def parser_reglage(texte: str) -> tuple[str, "_niveaux.Bridage"]:
+def parser_reglage(texte: str) -> tuple[str, _niveaux.Bridage]:
     """``"Niveau=perturbation/oubli"`` → ``(niveau, Bridage)``. Perturbation :
     entier >= 0, ou ``inf``/``none``/``illimite`` pour le solveur complet.
     Oubli : nombre dans [0, 1]. Lève ``ValueError`` (message en français) sur
@@ -160,7 +160,7 @@ def parser_reglage(texte: str) -> tuple[str, "_niveaux.Bridage"]:
         eviter_don_joker=_niveaux.BRIDAGES[niveau].eviter_don_joker)
 
 
-def parser_candidats(texte: str) -> tuple[str, list["_niveaux.Bridage"]]:
+def parser_candidats(texte: str) -> tuple[str, list[_niveaux.Bridage]]:
     """``"Niveau=P1/O1,P2/O2,..."`` → ``(niveau, [Bridage, ...])``."""
     if "=" not in texte:
         raise ValueError(
@@ -197,8 +197,8 @@ def parser_paire(texte: str) -> tuple[str, str]:
     return _parser_niveau(faible_txt), _parser_niveau(fort_txt)
 
 
-def bridages_resolus(reglages: list[tuple[str, "_niveaux.Bridage"]]
-                     ) -> dict[str, "_niveaux.Bridage"]:
+def bridages_resolus(reglages: list[tuple[str, _niveaux.Bridage]]
+                     ) -> dict[str, _niveaux.Bridage]:
     """Réglage effectif de chaque niveau pour cette campagne : les valeurs du
     jeu (``niveaux.BRIDAGES``, jamais modifiées), sauf ceux explicitement
     donnés par ``--reglage``."""
@@ -220,9 +220,9 @@ def paires_adjacentes_defaut() -> list[tuple[str, str]]:
 class Tache:
     label: str
     niveau_a: str
-    bridage_a: "_niveaux.Bridage"
+    bridage_a: _niveaux.Bridage
     niveau_b: str                      # camp dont on mesure le taux de victoire
-    bridage_b: "_niveaux.Bridage"
+    bridage_b: _niveaux.Bridage
 
 
 def _slug(nom: str) -> str:
@@ -233,9 +233,9 @@ def _slug(nom: str) -> str:
 
 def construire_taches(mode: str, *, paires: list[tuple[str, str]] | None = None,
                       niveau_candidat: str | None = None,
-                      candidats: list["_niveaux.Bridage"] | None = None,
+                      candidats: list[_niveaux.Bridage] | None = None,
                       contre: str | None = None,
-                      resolus: dict[str, "_niveaux.Bridage"] | None = None,
+                      resolus: dict[str, _niveaux.Bridage] | None = None,
                       ) -> list[Tache]:
     if mode == "balayage":
         return [
@@ -633,7 +633,7 @@ def _distances_elo_a_expert(aretes: dict[tuple[str, str], float]) -> dict[str, f
 # Rapport lisible (continu, et via --statut)
 # --------------------------------------------------------------------------- #
 
-def _texte_bridage(bridage: "_niveaux.Bridage") -> str:
+def _texte_bridage(bridage: _niveaux.Bridage) -> str:
     p = "inf" if bridage.perturbation_max is None else str(bridage.perturbation_max)
     return f"{p}/{bridage.taux_oubli:.2f}"
 
@@ -675,7 +675,7 @@ def generer_rapport(dossier: Path, taches: list[Tache], donnes_visees: int, seed
     lignes.append("=" * 78)
     lignes.append("")
     lignes.append("Réglages joués dans ce dossier :")
-    vus: dict[tuple[str, "_niveaux.Bridage"], None] = {}
+    vus: dict[tuple[str, _niveaux.Bridage], None] = {}
     for t in taches:
         vus.setdefault((t.niveau_a, t.bridage_a), None)
         vus.setdefault((t.niveau_b, t.bridage_b), None)

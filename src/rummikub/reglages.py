@@ -1,4 +1,5 @@
 import json
+
 from rummikub import config
 from rummikub.config import FICHIER_CFG, RACINE_DATA
 

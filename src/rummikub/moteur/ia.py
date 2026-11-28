@@ -22,23 +22,31 @@ import random
 import time
 from itertools import combinations
 
-from rummikub.config import VALEUR_MIN, VALEUR_MAX, NB_SERIES
-from rummikub.moteur.validation import (
-    valider_combinaison, valider_suite, valider_plateau,
-)
-from rummikub.moteur.partie import (
-    tuile_depuis_dict, plateau_depuis_dict, _plateau_vers_dict,
-    _points_tuiles_posees,
-)
-from rummikub.moteur.solveur import (
-    resoudre_coup, BudgetDepasse, PREFERER_SIMPLICITE, mesurer_perturbation,
-)
-from rummikub.moteur.solveur_exact import (
-    resoudre_exact, SolveurExactIndisponible, BudgetExactDepasse,
-)
+from rummikub.config import NB_SERIES, VALEUR_MAX, VALEUR_MIN
 from rummikub.moteur import evaluation_main
 from rummikub.moteur import niveaux as _niveaux
-
+from rummikub.moteur.partie import (
+    _plateau_vers_dict,
+    _points_tuiles_posees,
+    plateau_depuis_dict,
+    tuile_depuis_dict,
+)
+from rummikub.moteur.solveur import (
+    PREFERER_SIMPLICITE,
+    BudgetDepasse,
+    mesurer_perturbation,
+    resoudre_coup,
+)
+from rummikub.moteur.solveur_exact import (
+    BudgetExactDepasse,
+    SolveurExactIndisponible,
+    resoudre_exact,
+)
+from rummikub.moteur.validation import (
+    valider_combinaison,
+    valider_plateau,
+    valider_suite,
+)
 
 # --------------------------------------------------------------------------- #
 # Conversions

@@ -464,9 +464,9 @@ def _message_degradation_humain(dossier: Path, nom_joueur: str | None) -> None:
                           else "."))
     print("Pour obtenir ce profil, Alain doit lancer, sur sa machine où sont "
           "ses journaux :")
-    print(f"    PYTHONPATH=src python3 scripts/profil_joueur.py \\")
+    print("    PYTHONPATH=src python3 scripts/profil_joueur.py \\")
     print(f"        --journaux data/logs_parties {cible}\\")
-    print(f"        --niveau \"Facile,Intermédiaire,Avancé\"")
+    print("        --niveau \"Facile,Intermédiaire,Avancé\"")
     print("(activez le journal des parties via la config, clé \"log_parties\".)")
     print("-" * 70)
 

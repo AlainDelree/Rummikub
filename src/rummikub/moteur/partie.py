@@ -4,16 +4,20 @@ import copy
 import uuid
 
 from rummikub import config
-from rummikub.moteur.tuiles import (
-    Tuile, creer_sac, distribuer, tuile_depuis_dict,
-)
-from rummikub.moteur.validation import valider_plateau, valider_combinaison
-from rummikub.moteur.score import (
-    calculer_scores_manche, trouver_gagnant_manche, trouver_gagnant_match,
-    egalite_sommet_match,
-)
 from rummikub.moteur import niveaux
-
+from rummikub.moteur.score import (
+    calculer_scores_manche,
+    egalite_sommet_match,
+    trouver_gagnant_manche,
+    trouver_gagnant_match,
+)
+from rummikub.moteur.tuiles import (
+    Tuile,
+    creer_sac,
+    distribuer,
+    tuile_depuis_dict,
+)
+from rummikub.moteur.validation import valider_combinaison, valider_plateau
 
 # --------------------------------------------------------------------------- #
 # Sérialisation Tuile <-> dict

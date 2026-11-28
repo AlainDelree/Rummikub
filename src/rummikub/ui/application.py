@@ -2,8 +2,10 @@ import contextlib
 import json
 import subprocess
 import sys
-import webview
 from pathlib import Path
+
+import webview
+
 from rummikub.ui.api import Api
 
 _WEB = Path(__file__).parent / "web"
@@ -63,8 +65,8 @@ class ApplicationRummikub:
         self._etat_jeu = val
 
     def naviguer_vers_jeu(self, config):
-        from rummikub.moteur.partie import creer_partie, backup_debut_tour
         from rummikub import reglages as Reglages
+        from rummikub.moteur.partie import backup_debut_tour, creer_partie
         self.etat_jeu = creer_partie(config["joueurs"], config["regles"])
         # Mémorise la vitesse IA (utile côté JS, non gérée par le moteur).
         self.etat_jeu["config"]["vitesse_ia"] = \
@@ -85,9 +87,8 @@ class ApplicationRummikub:
         self._window.load_url(str(_WEB / "jeu.html"))
 
     def reprendre_jeu(self, etat):
-        from rummikub.moteur.partie import (backup_debut_tour,
-                                            normaliser_etat_reprise)
         from rummikub import reglages as Reglages
+        from rummikub.moteur.partie import backup_debut_tour, normaliser_etat_reprise
         # Reprise d'une partie sauvegardée (issue #203) : une partie d'avant
         # les manches multiples (sans compteur ``manche_numero``) est reprise
         # en une seule manche ; une partie récente conserve son vrai nombre de

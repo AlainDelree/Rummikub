@@ -187,9 +187,12 @@ import time
 from collections import deque
 from itertools import combinations
 
-from rummikub.config import COULEURS, VALEUR_MIN, VALEUR_MAX
-from rummikub.moteur.partie import tuile_depuis_dict, plateau_depuis_dict, \
-    _plateau_vers_dict
+from rummikub.config import COULEURS, VALEUR_MAX, VALEUR_MIN
+from rummikub.moteur.partie import (
+    _plateau_vers_dict,
+    plateau_depuis_dict,
+    tuile_depuis_dict,
+)
 
 
 class BudgetDepasse(Exception):

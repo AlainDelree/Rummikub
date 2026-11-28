@@ -6,14 +6,18 @@ from pathlib import Path
 import pytest
 
 from rummikub.moteur.ia import (
-    jouer_ia, jouer_niveau_avance, jouer_niveau_expert,
-    jouer_niveau_facile, jouer_niveau_intermediaire, NIVEAUX_IA,
     BUDGET_TEMPS_EXPERT,
+    NIVEAUX_IA,
+    jouer_ia,
+    jouer_niveau_avance,
+    jouer_niveau_expert,
+    jouer_niveau_facile,
+    jouer_niveau_intermediaire,
 )
-from rummikub.moteur.partie import creer_partie, _plateau_vers_dict
+from rummikub.moteur.partie import _plateau_vers_dict, creer_partie
+from rummikub.moteur.solveur import BudgetDepasse, mesurer_perturbation, resoudre_coup
+from rummikub.moteur.tuiles import Tuile, tuile_depuis_dict
 from rummikub.moteur.validation import valider_plateau
-from rummikub.moteur.tuiles import tuile_depuis_dict, Tuile
-from rummikub.moteur.solveur import resoudre_coup, BudgetDepasse, mesurer_perturbation
 
 _DONNEES = Path(__file__).resolve().parent / "donnees"
 

@@ -29,7 +29,6 @@ import contextlib
 import sys
 from pathlib import Path
 
-
 # Position intégrée : un plateau vide + une main contenant une suite (rouge
 # 5-6-7) et un groupe (10 rouge/bleu/jaune). Mise initiale réputée faite : le
 # modèle doit pouvoir poser les 6 tuiles de la main (3 + 3). Entièrement

@@ -1,6 +1,6 @@
 """API pywebview : méthodes appelables depuis JS via window.pywebview.api.*"""
-import json
 import threading
+
 from rummikub import reglages as Reglages
 from rummikub.persistance import stockage as Stockage
 
@@ -70,7 +70,7 @@ class Api:
 
     def jeu_jouer_coup(self, data):
         # data = {"ids_tuiles": [...], "nouveau_plateau": [[dict_tuile,...], ...]}
-        from rummikub.moteur.partie import jouer_tour, backup_debut_tour
+        from rummikub.moteur.partie import backup_debut_tour, jouer_tour
         etat = self._app.etat_jeu
         if not self._tour_est_humain(etat):
             return {"ok": False, "erreur": "Pas votre tour"}
@@ -99,7 +99,7 @@ class Api:
         return res
 
     def jeu_piocher(self):
-        from rummikub.moteur.partie import piocher, backup_debut_tour
+        from rummikub.moteur.partie import backup_debut_tour, piocher
         etat = self._app.etat_jeu
         if not self._tour_est_humain(etat):
             return {"ok": False, "erreur": "Pas votre tour"}
@@ -114,7 +114,7 @@ class Api:
         return res
 
     def jeu_passer(self):
-        from rummikub.moteur.partie import passer_tour, backup_debut_tour
+        from rummikub.moteur.partie import backup_debut_tour, passer_tour
         etat = self._app.etat_jeu
         if not self._tour_est_humain(etat):
             return {"ok": False, "erreur": "Pas votre tour"}
@@ -146,7 +146,7 @@ class Api:
         # points des combinaisons nouvellement posées de ceux du reste du
         # plateau (tours précédents).
         from rummikub.moteur.partie import plateau_depuis_dict
-        from rummikub.moteur.validation import valider_plateau, valider_combinaison
+        from rummikub.moteur.validation import valider_combinaison, valider_plateau
         combos = plateau_depuis_dict(plateau or [])
         res = valider_plateau(combos)
         ids_ce_tour = set(ids_ce_tour or [])
@@ -171,7 +171,7 @@ class Api:
         return valider_combinaison(combo)
 
     def jeu_nouvelle_manche(self):
-        from rummikub.moteur.partie import nouvelle_manche, backup_debut_tour
+        from rummikub.moteur.partie import backup_debut_tour, nouvelle_manche
         self._app.etat_jeu = nouvelle_manche(self._app.etat_jeu)
         # Point de retour arrière du 1er tour de la nouvelle manche (convention
         # projet, comme jeu_jouer_coup / jeu_piocher / jeu_passer).
@@ -182,9 +182,15 @@ class Api:
 
     def jeu_ia_jouer(self):
         import copy
+
         from rummikub.moteur.ia import jouer_ia
-        from rummikub.moteur.partie import (jouer_tour, piocher, passer_tour,
-                                            backup_debut_tour, annuler_tour)
+        from rummikub.moteur.partie import (
+            annuler_tour,
+            backup_debut_tour,
+            jouer_tour,
+            passer_tour,
+            piocher,
+        )
         from rummikub.persistance.stockage import sauvegarder_partie
         etat = self._app.etat_jeu
         if not etat:
@@ -230,7 +236,10 @@ class Api:
             # avant/après déjà disponible, puis simplement affichés côté JS.
             try:
                 from rummikub.moteur.description_coup import (
-                    decrire_coup_ia, etapes_coup_ia, mesurer_coup_ia)
+                    decrire_coup_ia,
+                    etapes_coup_ia,
+                    mesurer_coup_ia,
+                )
                 resume = decrire_coup_ia(plateau_avant, plateau_apres,
                                           nom=etat["joueurs"][idx]["nom"])
                 etat["dernier_coup_ia"]["resume"] = resume["texte"]
@@ -249,7 +258,10 @@ class Api:
                 # La description du coup est un simple confort d'affichage :
                 # une erreur ici ne doit JAMAIS bloquer le tour de l'IA.
                 # On garde les deux plateaux pour pouvoir reproduire le cas.
-                import contextlib, json, time
+                import contextlib
+                import json
+                import time
+
                 from rummikub import config
                 # Le dump de diagnostic est lui-même best-effort : s'il
                 # échoue (dossier inaccessible, disque plein...), on ne

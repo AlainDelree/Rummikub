@@ -12,16 +12,20 @@ from pathlib import Path
 import pytest
 
 from rummikub.config import NIVEAUX
-from rummikub.moteur import niveaux
-from rummikub.moteur import ia
+from rummikub.moteur import ia, niveaux
 from rummikub.moteur.ia import (
-    jouer_ia, jouer_niveau_bride, _coup_selon_perturbation, NIVEAUX_IA,
-    SOLVEUR_EXACT, SOLVEUR_RECHERCHE, SOLVEUR_AVANCE,
+    NIVEAUX_IA,
+    SOLVEUR_AVANCE,
+    SOLVEUR_EXACT,
+    SOLVEUR_RECHERCHE,
+    _coup_selon_perturbation,
+    jouer_ia,
+    jouer_niveau_bride,
 )
 from rummikub.moteur.partie import creer_partie
 from rummikub.moteur.solveur import mesurer_perturbation
-from rummikub.moteur.validation import valider_plateau
 from rummikub.moteur.tuiles import tuile_depuis_dict
+from rummikub.moteur.validation import valider_plateau
 
 _DONNEES = Path(__file__).resolve().parent / "donnees"
 

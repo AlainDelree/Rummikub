@@ -249,7 +249,7 @@ def test_eval_depart_departage_exemple_alice():
 @besoin_exact
 def test_expert_marque_solveur_exact():
     """Un coup décidé par le modèle exact est annoté ``solveur="exact"``."""
-    from rummikub.moteur.ia import jouer_niveau_expert, SOLVEUR_EXACT
+    from rummikub.moteur.ia import SOLVEUR_EXACT, jouer_niveau_expert
     chevalet = [_t(1, "rouge"), _t(2, "rouge"), _t(3, "rouge")]
     etat = _etat(chevalet, mise_faite=True)
     etat["joueurs"][0]["niveau"] = "Expert"
@@ -261,7 +261,7 @@ def test_expert_marque_solveur_exact():
 def test_expert_marque_recherche_sans_exact():
     """Mode « sans modèle exact » : le coup vient de la recherche de repli et
     est annoté ``solveur="recherche"`` (ce test tourne même sans highspy)."""
-    from rummikub.moteur.ia import jouer_niveau_expert, SOLVEUR_RECHERCHE
+    from rummikub.moteur.ia import SOLVEUR_RECHERCHE, jouer_niveau_expert
     chevalet = [_t(1, "rouge"), _t(2, "rouge"), _t(3, "rouge")]
     etat = _etat(chevalet, mise_faite=True)
     etat["joueurs"][0]["niveau"] = "Expert"

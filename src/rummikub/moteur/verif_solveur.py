@@ -18,7 +18,7 @@ automatiquement.
 import random
 from itertools import combinations
 
-from rummikub.config import COULEURS, VALEUR_MIN, VALEUR_MAX
+from rummikub.config import COULEURS, VALEUR_MAX, VALEUR_MIN
 from rummikub.moteur.tuiles import Tuile
 from rummikub.moteur.validation import valider_combinaison
 

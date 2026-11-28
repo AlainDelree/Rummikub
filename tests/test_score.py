@@ -1,8 +1,8 @@
 """Tests directs de ``moteur/score.py`` (issue #255 : gagnant d'une manche
 BLOQUÉE — aucun chevalet vide, le moins pénalisé gagne, même barème)."""
 
-from rummikub.moteur.tuiles import Tuile
 from rummikub.moteur.score import calculer_scores_manche, trouver_gagnant_manche
+from rummikub.moteur.tuiles import Tuile
 
 
 def t(v, c): return Tuile(f"{c}_{v}_a", v, c).as_dict()

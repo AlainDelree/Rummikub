@@ -1,17 +1,17 @@
 """Modèle des tuiles Rummikub : dataclass Tuile, création/mélange/distribution."""
 
+import random
 from dataclasses import dataclass
 from typing import Optional
-import random
 
 from rummikub.config import (
     COULEURS,
     COULEURS_JOKERS,
-    NB_SERIES,
-    VALEUR_MIN,
-    VALEUR_MAX,
     NB_JOKERS,
+    NB_SERIES,
     NB_TUILES_DEPART,
+    VALEUR_MAX,
+    VALEUR_MIN,
 )
 
 

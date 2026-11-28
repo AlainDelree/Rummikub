@@ -606,8 +606,8 @@ def afficher_resume_joueur(nom_joueur: str, agrege: dict, flux=sys.stdout) -> No
         print(f"  Complexité des coups (a) ci-dessus : {simples} simple(s) "
               f"(<= 2 combinaisons, sans joker), {complexes} complexe(s) "
               f"(3+ combinaisons ou joker)  [mesure #196, conservée]", file=flux)
-        print(f"  Répartition par taille (point 1, issue #198) — dit si ces coups "
-              f"sont à la portée d'un humain :", file=flux)
+        print("  Répartition par taille (point 1, issue #198) — dit si ces coups "
+              "sont à la portée d'un humain :", file=flux)
         print(f"    {'Petit':>6} {'Moyen':>6} {'Grand':>6} {'Joker':>6} {'Sans joker':>11}",
               file=flux)
         print(f"    {agrege['complexite_petits']:>6} {agrege['complexite_moyens']:>6} "
@@ -615,7 +615,7 @@ def afficher_resume_joueur(nom_joueur: str, agrege: dict, flux=sys.stdout) -> No
               f"{agrege['complexite_sans_joker']:>11}", file=flux)
         print(file=flux)
 
-    print(f"  Technique de la « réserve » (jamais comptée ci-dessus) :", file=flux)
+    print("  Technique de la « réserve » (jamais comptée ci-dessus) :", file=flux)
     print(f"    Réussies : {len(agrege['reserves_reussies'])}  —  "
           f"Perdues : {len(agrege['reserves_perdues'])}", file=flux)
     print(file=flux)

@@ -1,6 +1,6 @@
-from pathlib import Path
 import os
 import sys
+from pathlib import Path
 
 
 def _calculer_racine_data_gelee(plateforme: str, environ: dict, home: Path) -> Path:

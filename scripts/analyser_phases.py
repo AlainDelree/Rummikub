@@ -315,7 +315,7 @@ def afficher_rapport(resume: dict) -> None:
     print(f"Manches analysées : {resume['nb_manches']} "
          f"(ignorées, arrêtées par le garde-fou avant résultat : "
          f"{resume['manches_ignorees']})")
-    print(f"Fins de manche : " + ", ".join(
+    print("Fins de manche : " + ", ".join(
         f"{v} {k}" for k, v in resume["fins_manche"].items()))
     print("-" * 70)
 

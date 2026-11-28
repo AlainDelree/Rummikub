@@ -54,8 +54,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, replace
 
-from rummikub.config import VALEUR_MIN, VALEUR_MAX
-
+from rummikub.config import VALEUR_MAX, VALEUR_MIN
 
 # --------------------------------------------------------------------------- #
 # POIDS RÉGLABLES — tout est ici (issue #211, point 4)
@@ -152,7 +151,7 @@ class ConfigEvaluation:
         return (POIDS_POINTS_N_MANCHES if self.nb_manches >= 2
                 else POIDS_POINTS_1_MANCHE)
 
-    def avec_manches(self, nb_manches: int) -> "ConfigEvaluation":
+    def avec_manches(self, nb_manches: int) -> ConfigEvaluation:
         """Copie du réglage ajustée au nombre de manches du match courant."""
         return replace(self, nb_manches=max(1, int(nb_manches)))
 

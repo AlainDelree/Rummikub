@@ -6,7 +6,6 @@ import pytest
 
 from rummikub.persistance import coups_rates as CR
 
-
 # --------------------------------------------------------------------------- #
 # Fixtures : journaux fabriqués à la main.
 # --------------------------------------------------------------------------- #

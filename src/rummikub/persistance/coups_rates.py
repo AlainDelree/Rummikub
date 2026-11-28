@@ -58,8 +58,8 @@ import re
 from rummikub import config
 from rummikub.moteur import description_coup
 from rummikub.moteur.ia import BUDGET_TEMPS_EXPERT
-from rummikub.moteur.partie import plateau_depuis_dict, _points_tuiles_posees
-from rummikub.moteur.solveur import resoudre_coup, BudgetDepasse
+from rummikub.moteur.partie import _points_tuiles_posees, plateau_depuis_dict
+from rummikub.moteur.solveur import BudgetDepasse, resoudre_coup
 from rummikub.persistance.bilan import _joueurs_normalises
 
 # Actions qui représentent une décision de piocher ou de passer (on exclut

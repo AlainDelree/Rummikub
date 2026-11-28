@@ -18,10 +18,14 @@ module ``time``, non affecté)."""
 
 import rummikub.moteur.ia as ia
 from rummikub.moteur.ia import (
-    jouer_niveau_bride, jokers_rendus_libres_par_coup,
-    _appliquer_joker_utile, _appliquer_joker_libre,
-    _plafond_tour, _budget_selon_echeance, FACTEUR_PLAFOND_TOUR,
     BUDGET_TEMPS_EXPERT,
+    FACTEUR_PLAFOND_TOUR,
+    _appliquer_joker_libre,
+    _appliquer_joker_utile,
+    _budget_selon_echeance,
+    _plafond_tour,
+    jokers_rendus_libres_par_coup,
+    jouer_niveau_bride,
 )
 from rummikub.moteur.partie import creer_partie
 

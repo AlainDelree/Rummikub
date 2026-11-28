@@ -1,11 +1,22 @@
-import pytest
+
+from rummikub.moteur.partie import (
+    annuler_tour,
+    backup_debut_tour,
+    creer_partie,
+    est_fin_partie,
+    jouer_tour,
+    normaliser_etat_reprise,
+    nouvelle_manche,
+    passer_tour,
+    piocher,
+)
 from rummikub.moteur.tuiles import Tuile, creer_sac, distribuer
-from rummikub.moteur.validation import (valider_suite, valider_groupe,
-                                         valider_combinaison, valider_plateau)
-from rummikub.moteur.partie import (creer_partie, jouer_tour, piocher,
-                                     backup_debut_tour, annuler_tour,
-                                     passer_tour, nouvelle_manche,
-                                     est_fin_partie, normaliser_etat_reprise)
+from rummikub.moteur.validation import (
+    valider_combinaison,
+    valider_groupe,
+    valider_plateau,
+    valider_suite,
+)
 
 
 def t(v, c): return Tuile(f"{c}_{v}_a", v, c)

@@ -41,7 +41,6 @@ from dataclasses import dataclass
 
 from rummikub.config import NIVEAUX
 
-
 # Ordre de l'échelle (du plus faible au plus fort) : la seule source de vérité
 # est ``config.NIVEAUX``, repris tel quel pour rester cohérent partout.
 ECHELLE = list(NIVEAUX)

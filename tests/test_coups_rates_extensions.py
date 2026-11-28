@@ -10,7 +10,6 @@ fonctions qu'il teste (``extraire_decisions_ia``, ``analyser_decision``,
 import json
 from pathlib import Path
 
-import pytest
 
 from rummikub.persistance import coups_rates as CR
 

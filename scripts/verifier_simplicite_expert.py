@@ -361,8 +361,8 @@ def collecter_depuis_simulation(nb_donnes: int, seed: int, max_tours: int,
         graine = rng_graines.randrange(2 ** 32)
         random.seed(graine)
         config_joueurs = [
-            {"nom": f"Expert#0", "est_ia": True, "niveau": NIVEAU_EXPERT},
-            {"nom": f"Expert#1", "est_ia": True, "niveau": NIVEAU_EXPERT},
+            {"nom": "Expert#0", "est_ia": True, "niveau": NIVEAU_EXPERT},
+            {"nom": "Expert#1", "est_ia": True, "niveau": NIVEAU_EXPERT},
         ]
         etat = creer_partie(config_joueurs,
                             {"nb_manches": 1, "graine_ia": graine})
@@ -552,8 +552,8 @@ def afficher_resume(resume: dict) -> None:
     if grand and grand["comparables"]:
         part_necessaires = _pct(grand["minimaux"], grand["comparables"])
         print("-" * 78)
-        print(f"RÉPONSE À LA QUESTION D'ALAIN : parmi les GROS coups d'Expert "
-              f"(3 combinaisons ou plus),")
+        print("RÉPONSE À LA QUESTION D'ALAIN : parmi les GROS coups d'Expert "
+              "(3 combinaisons ou plus),")
         print(f"{part_necessaires} sont des décompositions NÉCESSAIRES "
               f"(impossible de poser autant de tuiles plus simplement).")
         if grand["evitables"] == 0:
@@ -871,7 +871,7 @@ def main(argv: list) -> int:
     nb = ecrire_fichier_exemples(enregistrements, chemin, resume, commande,
                                  nb_max=args.max_exemples)
     print(f"\n{nb} exemple(s) lisible(s) écrit(s) dans : {chemin}")
-    print(f"(À ouvrir avec un simple éditeur de texte.)")
+    print("(À ouvrir avec un simple éditeur de texte.)")
     print(f"Temps total : {time.monotonic() - debut:.1f}s.")
     return 0
 

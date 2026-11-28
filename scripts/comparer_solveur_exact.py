@@ -135,7 +135,7 @@ def comparer_cas(budget_production: float, budget_genereux: float,
               f"{ecart:>+6} {res.duree * 1000:>9.1f} ms{marque}{caveat}", file=flux)
 
     print("-" * len(entete), file=flux)
-    print(f"\n=== Synthèse ===", file=flux)
+    print("\n=== Synthèse ===", file=flux)
     print(f"  Cas où notre solveur rate des tuiles à {budget_production} s : "
           f"{nb_rates_prod} / {len(cas)}", file=flux)
     if ecarts:

@@ -247,6 +247,7 @@ def test_decrire_coup_sur_cas_reference_bruno_ne_plante_pas():
     d'échange de deux tuiles bleu-2 indiscernables faisait planter
     ``etapes_coup_ia`` (cycle de dépendance, voir sa docstring)."""
     import json
+
     from rummikub.moteur.solveur import resoudre_coup
 
     cas = json.loads((_DONNEES / "cas_expert_bruno_tour57.json").read_text(encoding="utf-8"))

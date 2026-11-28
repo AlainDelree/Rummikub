@@ -6,10 +6,11 @@ de tuiles posables que le solveur de production (budget généreux)."""
 import random
 
 from rummikub.moteur.partie import _plateau_vers_dict
-from rummikub.moteur.solveur import resoudre_coup, BudgetDepasse
+from rummikub.moteur.solveur import BudgetDepasse, resoudre_coup
 from rummikub.moteur.tuiles import Tuile
 from rummikub.moteur.verif_solveur import (
-    generer_position_aleatoire, max_tuiles_posables_exhaustif,
+    generer_position_aleatoire,
+    max_tuiles_posables_exhaustif,
 )
 
 

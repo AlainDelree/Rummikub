@@ -1,10 +1,15 @@
 import json
 from pathlib import Path
 
-from rummikub.moteur.tuiles import Tuile
 from rummikub.moteur.description_coup import (
-    decrire_coup_ia, etapes_coup_ia, mesurer_coup_ia,
-    _contracter, _decrire_combo, _label_combo)
+    _contracter,
+    _decrire_combo,
+    _label_combo,
+    decrire_coup_ia,
+    etapes_coup_ia,
+    mesurer_coup_ia,
+)
+from rummikub.moteur.tuiles import Tuile
 
 _DONNEES = Path(__file__).resolve().parent / "donnees"
 

@@ -28,8 +28,7 @@ from pathlib import Path
 import pytest
 
 from rummikub.moteur import solveur_exact as se
-from rummikub.moteur.ia import jouer_niveau_expert, jouer_niveau_avance
-from rummikub.moteur.tuiles import Tuile
+from rummikub.moteur.ia import jouer_niveau_avance, jouer_niveau_expert
 from rummikub.moteur.validation import valider_combinaison
 
 _DONNEES = Path(__file__).resolve().parent / "donnees"
@@ -200,6 +199,7 @@ def test_accord_avec_recherche_exhaustive_positions_aleatoires(facteur_machine):
     sur-compte jamais ; combiné à « jamais sous l'exhaustive », cela borne le
     résultat des deux côtés."""
     import random
+
     from rummikub.moteur import verif_solveur
 
     # aléa de jeu (positions de test à graine fixe), sans enjeu de sécurité

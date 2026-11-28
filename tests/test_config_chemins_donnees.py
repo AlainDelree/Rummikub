@@ -4,7 +4,9 @@ simulé (nouveau, avec et sans ``XDG_DATA_HOME``)."""
 from pathlib import Path
 
 from rummikub.config import (
-    RACINE_DATA, RACINE_PROJET, FICHIER_CFG,
+    FICHIER_CFG,
+    RACINE_DATA,
+    RACINE_PROJET,
     _calculer_racine_data_gelee,
 )
 

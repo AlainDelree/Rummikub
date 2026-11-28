@@ -1,7 +1,7 @@
 """Validation des combinaisons Rummikub : suites, groupes, plateau."""
 
+from rummikub.config import VALEUR_MAX, VALEUR_MIN
 from rummikub.moteur.tuiles import Tuile
-from rummikub.config import VALEUR_MIN, VALEUR_MAX
 
 
 def valider_suite(tuiles: list[Tuile]) -> dict:

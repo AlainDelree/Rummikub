@@ -1,6 +1,10 @@
-import sqlite3, json, uuid
+import json
+import sqlite3
+import uuid
 from datetime import datetime
-from rummikub.config import RACINE_DATA, FICHIER_DB
+
+from rummikub.config import FICHIER_DB, RACINE_DATA
+
 
 def _conn():
     RACINE_DATA.mkdir(parents=True, exist_ok=True)

@@ -5,11 +5,15 @@ ia_anti_don_joker.md pour la définition complète et l'arbre de décision."""
 
 from rummikub.moteur import niveaux as _niveaux
 from rummikub.moteur.ia import (
-    jouer_niveau_bride, jokers_libres_sur_plateau, jokers_rendus_libres_par_coup,
     _joker_en_reserve,
+    jokers_libres_sur_plateau,
+    jokers_rendus_libres_par_coup,
+    jouer_niveau_bride,
 )
 from rummikub.moteur.partie import (
-    creer_partie, plateau_depuis_dict, tuile_depuis_dict,
+    creer_partie,
+    plateau_depuis_dict,
+    tuile_depuis_dict,
 )
 
 

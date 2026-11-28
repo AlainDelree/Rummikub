@@ -10,10 +10,12 @@ from rummikub import config
 from rummikub.moteur.partie import creer_partie, piocher
 from rummikub.persistance import journal as Journal
 from rummikub.persistance.bilan import (
-    calculer_bilan, charger_journal, charger_toutes_parties,
-    extraire_partie, lister_journaux,
+    calculer_bilan,
+    charger_journal,
+    charger_toutes_parties,
+    extraire_partie,
+    lister_journaux,
 )
-
 
 # --------------------------------------------------------------------------- #
 # Fixtures : journaux d'exemple construits à la main.

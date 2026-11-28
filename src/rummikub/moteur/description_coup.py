@@ -24,7 +24,6 @@ import copy
 from rummikub.moteur.tuiles import tuile_depuis_dict
 from rummikub.moteur.validation import valider_combinaison
 
-
 # ------------------------------------------ normalisation des tuiles identiques
 
 def _signature_tuile(t: dict) -> tuple:
