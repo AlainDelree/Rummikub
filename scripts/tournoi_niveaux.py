@@ -589,7 +589,7 @@ def temps_par_niveau_agrege(enregistrements: list[dict]) -> dict[str, list[float
 def commit_git() -> str | None:
     try:
         # commande fixe, aucune saisie utilisateur — identifie seulement le commit courant
-        res = subprocess.run(["git", "rev-parse", "--short", "HEAD"],  # noqa: S603,S607  # nosec B603,B607
+        res = subprocess.run(["git", "rev-parse", "--short", "HEAD"],  # noqa: S607  # nosec B603,B607
                              cwd=RACINE, capture_output=True, text=True,
                              timeout=5, check=False)
     except OSError:

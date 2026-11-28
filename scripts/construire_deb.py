@@ -56,7 +56,8 @@ def construire_pyinstaller(forcer: bool) -> None:
         return
     print("[construire_deb] Construction avec PyInstaller (rummikub.spec)...")
     cmd = [sys.executable, "-m", "PyInstaller", "--noconfirm", "--clean", "rummikub.spec"]
-    subprocess.run(cmd, cwd=RACINE, check=True)
+    # aucun shell ; arguments fixes du script, aucune saisie utilisateur
+    subprocess.run(cmd, cwd=RACINE, check=True)  # noqa: S603  # nosec B603
     if not (dist_dir / "Rummikub").exists():
         raise SystemExit(f"[construire_deb] ERREUR : {dist_dir}/Rummikub introuvable après le build.")
 
@@ -157,7 +158,8 @@ exit 0
 def construire_deb(staging: Path, version: str) -> Path:
     sortie = RACINE / "dist" / f"rummikub_{version}_amd64.deb"
     cmd = ["dpkg-deb", "--build", "--root-owner-group", str(staging), str(sortie)]
-    subprocess.run(cmd, check=True)
+    # aucun shell ; arguments fournis par le script lui-même, aucune saisie utilisateur
+    subprocess.run(cmd, check=True)  # noqa: S603  # nosec B603
     return sortie
 
 

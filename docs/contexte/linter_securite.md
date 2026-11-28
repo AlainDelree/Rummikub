@@ -35,31 +35,45 @@ cas jugé, pas laissé signalé. La validation des chemins est la mesure qui
 justifie l'appel ; SEC-003 est la règle d'audit qui exige cette justification
 en ligne.
 
-`S101` (assert) et `S108` (chemin `/tmp` en dur) dans `tests/` : convention
-pytest standard, hors périmètre de ce nettoyage (laissés tels quels).
+`S101` (assert) dans `tests/` : convention pytest standard, ignoré par
+configuration (voir ci-dessous) — pas une suppression en ligne au cas par
+cas.
 
-## État actuel de la configuration ruff (issue #280)
+## État actuel de la configuration ruff (issue #281)
 
-Le dépôt **n'a aucun fichier de configuration ruff** (pas de `pyproject.toml`,
-`ruff.toml` ni `setup.cfg` avec section ruff). `ruff check` (sans option)
-tourne donc avec la sélection par défaut de l'installation locale, qui
-n'inclut PAS les règles `S` (sécurité) — c'est pourquoi les 17 `noqa`
-`S311`/`S603`/`S607` ci-dessus sont signalés `RUF100` (noqa inutile) sous
-cette sélection par défaut, alors qu'ils restent nécessaires au crochet
-pre-push (`ruff --select S main.py src`, qui écrase la sélection par défaut).
+Le dépôt a désormais un `ruff.toml` à la racine :
 
-Testé en copie jetable (issue #280) : activer `S` par défaut (`extend-select
-= ["S"]`) avec un unique `per-file-ignores` sur `tests/* = ["S101"]` (seule
-exception de config autorisée) ferait passer les 17 `noqa` de `RUF100` à
-0, SAUF un : `scripts/tournoi_niveaux.py` ligne 592 porte un `# noqa: S603`
-réellement inutile (S603 ne s'y déclenche pas) — non retiré ici, décision
-laissée à Alain. Coût mesuré sur le reste du dépôt : seulement 3 nouvelles
-remarques S (2 `S603` à `scripts/construire_deb.py` lignes 59/160, 1 `S108`
-à `tests/test_coups_rates_filtre_date.py` ligne 16), le `per-file-ignores`
-éliminant la grosse masse de `S101` dans les tests. Le crochet pre-push
-reste valide dans les deux cas ; son périmètre (`main.py src`) ne couvre
-de toute façon que 7 des 17 emplacements (les 10 autres sont dans
-`scripts/`/`tests/`, hors périmètre du crochet, indépendamment de ce test).
-Aucune configuration ruff n'a été créée dans le dépôt (il n'en existait
-aucune avant) : la décision de créer un `pyproject.toml`/`ruff.toml` avec ce
-contenu reste à prendre par Alain.
+```toml
+[lint]
+extend-select = ["S"]
+
+[lint.per-file-ignores]
+"tests/*" = ["S101"]
+```
+
+`ruff check` (sans option) tourne donc avec les règles `S` (sécurité)
+activées en plus de la sélection par défaut, et ignore `S101` (assert) dans
+`tests/`. Le crochet pre-push (`ruff --select S main.py src`) reste valide
+avec cette configuration (il écrasait déjà la sélection par défaut, donc le
+comportement ne change pas pour lui).
+
+Avec cette configuration, les 17 anciens `noqa` `S311`/`S603`/`S607` ne sont
+plus signalés `RUF100` : les deux restés nécessaires (`S311`, `S607`) sont
+désormais réellement couverts par la sélection par défaut, et le `noqa:
+S603` mort de `scripts/tournoi_niveaux.py` ligne 592 a été retiré (le
+`S607` du même appel, lui, reste utile et est conservé).
+
+Les 3 remarques `S` qui apparaissaient sous cette configuration ont été
+traitées :
+- `scripts/construire_deb.py` lignes 59/160 (deux appels `subprocess`,
+  `S603`) : même traitement que les cas déjà jugés ci-dessus (arguments
+  fixes du script ou fournis par lui-même, aucune saisie utilisateur) —
+  raison en clair en commentaire + `noqa: S603  # nosec B603`.
+- `tests/test_coups_rates_filtre_date.py` ligne 16 (`S108`, chemin `/tmp`
+  en dur) : corrigé plutôt que supprimé — remplacé par la fixture pytest
+  `tmp_path`, sans changer les vérifications ni ce que les tests testent
+  (ils ne lisent que les noms de fichiers).
+
+`ruff check .` : 0 `RUF100`, 0 remarque `S`. Les autres familles
+(`BLE001`, `PLW1510`, `F841`, `RUF013`, `EXE001`, etc., inventaire #280)
+sont hors périmètre de cette issue et inchangées.
