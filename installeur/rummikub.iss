@@ -53,13 +53,19 @@ AppPublisher={#MyAppPublisher}
 DefaultDirName={autopf}\{#MyAppName}
 DefaultGroupName={#MyAppName}
 ; Droits administrateur requis : l'installation dépose l'instance Actualise
-; partagée dans C:\Actualise, à la racine du disque système,
-; protégée en écriture pour les utilisateurs standards. PrivilegesRequired=lowest
-; échouait donc à créer ce dossier (Actualise non déployé, raccourci pointant
-; vers une installation incorrecte). Avec PrivilegesRequired=admin,
+; partagée dans C:\Actualise, à la racine du disque système, et pose les
+; droits d'écriture (voir [Dirs] ci-dessous) sur ce dossier et sur {app}.
+; Créer un dossier à la racine du disque système et y appliquer des
+; permissions NTFS exige l'élévation. PrivilegesRequired=lowest échouait
+; donc à créer ce dossier (Actualise non déployé, raccourci pointant vers
+; une installation incorrecte). Avec PrivilegesRequired=admin,
 ; {autopf}/{autodesktop}/{autoprograms} résolvent respectivement vers
 ; C:\Program Files, le Bureau commun et le menu Démarrer "tous les utilisateurs",
-; et l'écriture dans C:\Actualise devient possible.
+; et l'écriture dans C:\Actualise devient possible. Une fois l'installation
+; faite en administrateur, un compte standard peut ensuite écrire dans {app}
+; et C:\Actualise (droit posé une fois pour toutes à l'installation, voir
+; [Dirs]) : c'est ce qui permet à Actualise de mettre le jeu à jour depuis un
+; compte standard.
 PrivilegesRequired=admin
 DisableProgramGroupPage=yes
 SetupIconFile=..\assets\rummikub.ico
@@ -92,7 +98,20 @@ Source: "{#MyDistDir}\*"; DestDir: "{app}"; Flags: recursesubdirs createallsubdi
 Source: "..\assets\rummikub.ico"; DestDir: "{app}"; DestName: "{#MyAppIcoName}"; Flags: ignoreversion
 
 [Dirs]
-Name: "{#MyActualiseDir}"
+; Un compte Windows standard doit pouvoir mettre le jeu à jour par Actualise,
+; comme pour Scrabble (son issue #471, installeur/scrabble.iss) : les deux
+; dossiers reçoivent le droit Permissions: users-modify, qui AJOUTE le droit
+; d'écriture/remplacement pour le groupe Users SANS retirer ni réinitialiser
+; les droits déjà posés par Windows (administrateurs, système) sur ces
+; dossiers. Ces dossiers sont créés ICI, en [Dirs], donc AVANT la copie des
+; fichiers en [Files] ci-dessus : les fichiers copiés ensuite dans {app}
+; héritent de ce droit via leur dossier parent. C:\Actualise est PARTAGÉ avec
+; Scrabble (et d'autres applications) : ce droit ne doit jamais être retiré à
+; la désinstallation de Rummikub (voir CurUninstallStepChanged en [Code], qui
+; ne touche déjà qu'à la configuration propre à Rummikub, jamais au dossier
+; lui-même tant que d'autres applications l'utilisent).
+Name: "{app}"; Permissions: users-modify
+Name: "{#MyActualiseDir}"; Permissions: users-modify
 
 [Icons]
 ; Les raccourcis pointent directement vers Rummikub.exe dans {app}.
